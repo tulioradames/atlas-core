@@ -1,0 +1,7 @@
+<svg width="640" height="160" viewBox="0 0 640 160" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Atlas">
+  <g stroke="#0073EA" stroke-width="11" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M46 112L86 34L126 112"/>
+    <path d="M65 78H107"/>
+  </g>
+  <text x="164" y="101" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="58" font-weight="760" letter-spacing="7" fill="#0073EA">ATLAS</text>
+</svg>
