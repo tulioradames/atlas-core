@@ -1,0 +1,18 @@
+# Operating systems
+.DS_Store
+Thumbs.db
+
+# Editors
+.idea/
+.vscode/
+
+# Local configuration and environment files
+.env
+.env.*
+config/config.local.js
+
+# Packages and temporary files
+*.zip
+*.log
+tmp/
+temp/

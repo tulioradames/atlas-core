@@ -3,10 +3,17 @@
  * no Google Drive, devolver os links/IDs para serem salvos no Supabase. O módulo Expansões aceita rootFolderId próprio e organiza por Grupo/Projeto/Subelemento/Tipo de arquivo,
  * excluir arquivos individuais, mover pastas de obra/ativo/subelemento e também pastas de projeto/subelemento de Expansões
  * para a lixeira quando o item correspondente for apagado no dashboard.
+ *
+ * Hotfix V 1.3.2: separa oficialmente o Drive de Documentação do Drive de Expansões. Sem fallback cruzado entre módulos.
  */
 
-const ROOT_FOLDER_ID = ''; // Preencha com o ID da pasta raiz do Google Drive no seu ambiente.
-const ROOT_FOLDER_NAME = 'ATNX';
+// Pastas raiz oficiais. Cada módulo deve gravar somente na sua própria pasta.
+const DOCUMENTACAO_ROOT_FOLDER_ID = '';
+const EXPANSOES_ROOT_FOLDER_ID = '';
+
+// Legado: mantido apenas para compatibilidade, sempre apontando para Documentação.
+const ROOT_FOLDER_ID = DOCUMENTACAO_ROOT_FOLDER_ID;
+const ROOT_FOLDER_NAME = 'ATLAS';
 
 // Para o dashboard exibir miniaturas sem exigir login no Google,
 // deixe true. Se quiser manter privado, coloque false, mas as imagens
@@ -269,7 +276,7 @@ function excluirPastaDoDrive(body) {
   }
 
   if (!pasta && body.path) {
-    pasta = obterPastaPorCaminho(body.path, targetType);
+    pasta = obterPastaPorCaminho(body.path, targetType, body);
     origem = 'path';
   }
 
@@ -925,16 +932,42 @@ function obterNomePastaMidiaExpansoes(body) {
 }
 
 function obterPastaRaiz(body) {
+  const modulo = String(body && body.modulo ? body.modulo : '').toLowerCase().trim();
   const rootFolderId = body && body.rootFolderId ? String(body.rootFolderId).trim() : '';
+
+  // 1) O dashboard pode enviar explicitamente a pasta correta do módulo.
   if (rootFolderId) {
-    return DriveApp.getFolderById(rootFolderId);
+    return obterPastaRaizObrigatoria(rootFolderId, 'pasta raiz informada pelo dashboard');
   }
 
-  if (ROOT_FOLDER_ID && ROOT_FOLDER_ID !== 'COLE_AQUI_O_ID_DA_PASTA_RAIZ_DO_DRIVE') {
-    return DriveApp.getFolderById(ROOT_FOLDER_ID);
+  // 2) Separação oficial por módulo.
+  if (modulo === 'expansoes' || modulo === 'expansões') {
+    if (!EXPANSOES_ROOT_FOLDER_ID) {
+      throw new Error('Pasta raiz de Expansões não configurada no Apps Script. Configure EXPANSOES_ROOT_FOLDER_ID.');
+    }
+    return obterPastaRaizObrigatoria(EXPANSOES_ROOT_FOLDER_ID, 'pasta raiz de Expansões');
   }
 
-  return obterOuCriarPasta(DriveApp.getRootFolder(), ROOT_FOLDER_NAME);
+  if (modulo === 'documentacao' || modulo === 'documentação' || modulo === 'obras' || !modulo) {
+    if (!DOCUMENTACAO_ROOT_FOLDER_ID) {
+      throw new Error('Pasta raiz de Documentação não configurada no Apps Script. Configure DOCUMENTACAO_ROOT_FOLDER_ID.');
+    }
+    return obterPastaRaizObrigatoria(DOCUMENTACAO_ROOT_FOLDER_ID, 'pasta raiz de Documentação');
+  }
+
+  throw new Error('Módulo de Drive não reconhecido: ' + modulo + '. Use documentacao ou expansoes.');
+}
+
+function obterPastaRaizObrigatoria(folderId, descricao) {
+  try {
+    return DriveApp.getFolderById(String(folderId || '').trim());
+  } catch (err) {
+    throw new Error(
+      'Não consegui acessar a ' + descricao + '. ' +
+      'Confira se o ID está correto e se o usuário que implantou o Apps Script tem permissão de edição nessa pasta. ' +
+      'ID: ' + folderId + '. Detalhe: ' + (err.message || String(err))
+    );
+  }
 }
 
 function obterOuCriarPasta(pastaPai, nome) {
@@ -956,10 +989,10 @@ function obterPastaFilhaSeExistir(pastaPai, nome) {
   return encontradas.hasNext() ? encontradas.next() : null;
 }
 
-function obterPastaPorCaminho(path, targetType) {
+function obterPastaPorCaminho(path, targetType, body) {
   if (!path || !path.obraNome) return null;
 
-  let pasta = obterPastaFilhaSeExistir(obterPastaRaiz(), path.obraNome);
+  let pasta = obterPastaFilhaSeExistir(obterPastaRaiz(body), path.obraNome);
   if (!pasta || targetType === 'obra') return pasta;
 
   pasta = obterPastaFilhaSeExistir(pasta, path.elementoTipo);
