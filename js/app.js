@@ -10171,6 +10171,16 @@ Imagens afetadas: ${totalImagens}.`,
         // Shift + roda continua reservado para rolagem horizontal da tabela.
         if (event.shiftKey) return;
 
+        // Dentro dos subelementos, deixa a lista consumir a roda enquanto
+        // ainda houver conteúdo acima ou abaixo. A página assume apenas nas bordas.
+        const subWrap = alvo.closest('#painel-expansoes .atlas-exp-obras-shell .atlas-exp-sub-table-wrap');
+        if (subWrap) {
+            const maxTop = Math.max(0, Number(subWrap.scrollHeight || 0) - Number(subWrap.clientHeight || 0));
+            const atual = Number(subWrap.scrollTop || 0);
+            const podeRolarInterno = maxTop > 2 && ((deltaY < 0 && atual > 0) || (deltaY > 0 && atual < maxTop - 1));
+            if (podeRolarInterno) return;
+        }
+
         const scroller = encontrarScrollPrincipal();
         if (!scroller) return;
 
