@@ -11869,6 +11869,38 @@ body:not(.atnx-theme-light) .atlas-logout-btn {
     .atlas-auth-feature { min-height: 0; }
     .atlas-operation-root { right: 12px; bottom: 54px; }
 }
+/* V1.4.0 - Obras: subelementos alinhados com a grade do elemento. */
+#painel-expansoes .atlas-exp-obras-shell .atlas-exp-obra-sub-table-row > td {
+    padding: 0 !important;
+    overflow: hidden !important;
+}
+
+#painel-expansoes .atlas-exp-obras-shell .atlas-exp-sub-table-wrap {
+    box-sizing: border-box !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+}
+
+#painel-expansoes .atlas-exp-obras-shell .atlas-exp-obra-sub-table {
+    width: max-content !important;
+    min-width: 2600px !important;
+    margin: 0 !important;
+}
+
+#painel-expansoes .atlas-exp-obras-shell .atlas-exp-obra-sub-table th:nth-child(2),
+#painel-expansoes .atlas-exp-obras-shell .atlas-exp-obra-sub-table td.atlas-exp-sub-name-cell {
+    width: 360px !important;
+    min-width: 360px !important;
+    max-width: 360px !important;
+}
+
+#painel-expansoes .atlas-exp-obras-shell .atlas-exp-obra-sub-table th:nth-child(n+4),
+#painel-expansoes .atlas-exp-obras-shell .atlas-exp-obra-sub-table td:nth-child(n+4) {
+    min-width: 148px !important;
+}
+
 @media (prefers-reduced-motion: reduce) {
     .atlas-operation-root,
     .atlas-operation-icon,
