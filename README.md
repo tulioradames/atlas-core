@@ -1,8 +1,21 @@
-# Atlas Core V1.4.0 Oficial - Edicao publica
+# Atlas Core V1.4.1 Oficial - Edicao publica
 
 Sistema web para gestao de documentacao de rede, expansoes, PMO, manutencoes e arquivos operacionais.
 
 Esta edicao foi preparada para publicacao no GitHub. Ela nao contem registros empresariais, credenciais, IDs de pastas, URLs privadas, contas operacionais ou endpoints de producao.
+
+## Novidades da V1.4.1
+
+- Status de CTO, CEO e POP pode permanecer vazio quando a estrutura nao existe na cidade.
+- Interface responsiva para celulares, tablets, notebooks e desktops.
+- Navegacao horizontal de elementos e subelementos corrigida em Expansoes.
+- Elementos podem ser movidos entre grupos em Projetos e entre fases da propria obra.
+- Fases e elementos de Obras preservam o estado aberto ou fechado.
+- Seletor de movimentacao com contraste correto no modo escuro.
+- Imagens abrem inteiras e centralizadas, sem ampliacao inicial ou corte.
+- Versao exibida somente no login e no rodape.
+
+Para atualizar uma instalacao V1.4.0, execute `supabase/ATLAS_V1_4_1_STATUS_CATEGORIA_VAZIO.sql`. Em uma instalacao nova, utilize o schema unificado.
 
 ## Recursos
 

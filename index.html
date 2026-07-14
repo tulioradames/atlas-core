@@ -2,7 +2,7 @@
 <html lang="pt-BR">
  <head>
   <meta charset="utf-8"/>
-  <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+  <meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" name="viewport"/>
   <title>
    Atlas | Smart Field Management
   </title>
@@ -14,12 +14,12 @@
   <meta content="Atlas | Smart Field Management" property="og:title"/>
   <meta content="Plataforma inteligente para documenta&ccedil;&atilde;o e gest&atilde;o de opera&ccedil;&otilde;es em campo." property="og:description"/>
   <meta content="website" property="og:type"/>
-  <link href="assets/icons/favicon.ico?v=1.4.0-oficial" rel="icon" sizes="any"/>
-  <link href="assets/icons/icon-32.png?v=1.4.0-oficial" rel="icon" sizes="32x32" type="image/png"/>
-  <link href="assets/icons/icon-192.png?v=1.4.0-oficial" rel="apple-touch-icon"/>
-  <meta content="assets/icons/icon-192.png?v=1.4.0-oficial" property="og:image"/>
+  <link href="assets/icons/favicon.ico?v=1.4.1.5" rel="icon" sizes="any"/>
+  <link href="assets/icons/icon-32.png?v=1.4.1.5" rel="icon" sizes="32x32" type="image/png"/>
+  <link href="assets/icons/icon-192.png?v=1.4.1.5" rel="apple-touch-icon"/>
+  <meta content="assets/icons/icon-192.png?v=1.4.1.5" property="og:image"/>
   <link href="manifest.webmanifest" rel="manifest"/>
-  <link href="css/main.css?v=1.4.0-oficial" rel="stylesheet"/>
+  <link href="css/main.css?v=1.4.1.5" rel="stylesheet"/>
  </head>
  <body class="bg-[#1c1d30] m-0 p-0 overflow-hidden text-gray-200 font-sans text-xs flex flex-col h-screen">
   <div id="atlas-auth-root" class="atlas-auth-root"></div>
@@ -29,7 +29,7 @@
    🔄 Sincronizando com a nuvem Supabase...
   </div>
   <!-- CORPO PRINCIPAL -->
-  <div class="flex flex-1 overflow-hidden select-none relative">
+  <div class="flex flex-1 overflow-hidden select-none relative" id="atlas-app-shell">
    <!-- BARRA LATERAL RETRÁTIL (CIDADES / OBRAS) -->
    <div class="w-72 bg-[#20223b] border-r border-[#2f314e] flex flex-col shrink-0 sidebar-transition relative overflow-hidden" id="sidebar-container">
     <!-- CABEÇALHO DA SIDEBAR -->
@@ -101,12 +101,13 @@
      </div>
     </div>
    </div>
+   <button class="atlas-sidebar-backdrop" id="atlas-sidebar-backdrop" type="button" onclick="fecharSidebarResponsiva()" aria-label="Fechar menu" aria-hidden="true"></button>
    <!-- BOTÃO FLUTUANTE PARA ABRIR SIDEBAR (QUANDO FECHADA) -->
-   <button class="hidden absolute left-3 top-4 z-40 bg-[#20223b] hover:bg-[#2f314e] border border-[#2f314e] text-white w-8 h-8 rounded flex items-center justify-center text-sm shadow-md transition-all font-bold" id="btn-abrir-sidebar" onclick="toggleSidebar()">
+   <button class="hidden absolute left-3 top-4 z-40 bg-[#20223b] hover:bg-[#2f314e] border border-[#2f314e] text-white w-8 h-8 rounded flex items-center justify-center text-sm shadow-md transition-all font-bold" id="btn-abrir-sidebar" onclick="toggleSidebar()" aria-label="Abrir menu" aria-expanded="false">
     ☰
    </button>
    <!-- CONTEÚDO PRINCIPAL -->
-   <div class="flex-1 flex flex-col overflow-hidden bg-[#18192b]">
+   <div class="flex-1 flex flex-col overflow-hidden bg-[#18192b]" id="atlas-main-content">
     <div class="p-6 bg-[#1c1d30] border-b border-[#2f314e] shrink-0 transition-all" id="header-conteudo">
      <div class="flex justify-between items-start mb-4">
       <h1 class="text-2xl font-semibold text-white tracking-wide" id="txt-nome-obra">
@@ -203,7 +204,10 @@
     <span class="atnx-footer-brand">
      Atlas
     </span>
-    &mdash; Smart Field Management. Edição pública
+    &mdash; Smart Field Management. Criado por
+    <span class="text-gray-400 font-medium">
+     T&uacute;lio Radam&eacute;s
+    </span>
    </div>
    <div class="flex items-center gap-3">
    <span class="px-2 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20" id="badge-status">
@@ -213,13 +217,13 @@
     <button class="atlas-logout-btn hidden" id="btn-logout-atlas" onclick="sairAtlas()" title="Sair do Atlas">Sair</button>
     <button class="atnx-theme-toggle" id="btn-theme-atnx" onclick="alternarTemaAtnx()" title="Alternar tema">Escuro</button>
     <span class="atnx-version-badge">
-     V 1.4.0 Oficial
+     V 1.4.1 Oficial
     </span>
    </div>
   </div>
   <script src="config/config.js">
   </script>
-  <script src="js/app.js?v=1.4.0-oficial">
+  <script src="js/app.js?v=1.4.1.5">
   </script>
  </body>
 </html>

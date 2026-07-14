@@ -139,16 +139,16 @@ ALTER TABLE public.admin_documentacoes ADD COLUMN IF NOT EXISTS updated_at times
 
 UPDATE public.admin_documentacoes
 SET status = COALESCE(NULLIF(status, ''), 'a_realizar'),
-    ctos_status = COALESCE(NULLIF(ctos_status, ''), status, 'a_realizar'),
-    caixas_status = COALESCE(NULLIF(caixas_status, ''), status, 'a_realizar'),
-    pops_status = COALESCE(NULLIF(pops_status, ''), status, 'a_realizar'),
+    ctos_status = COALESCE(ctos_status, status, 'a_realizar'),
+    caixas_status = COALESCE(caixas_status, status, 'a_realizar'),
+    pops_status = COALESCE(pops_status, status, 'a_realizar'),
     observacao_categoria = COALESCE(NULLIF(observacao_categoria, ''), 'Sem categoria'),
     observacoes = COALESCE(observacoes, ''),
     updated_at = COALESCE(updated_at, now())
 WHERE status IS NULL OR status = ''
-   OR ctos_status IS NULL OR ctos_status = ''
-   OR caixas_status IS NULL OR caixas_status = ''
-   OR pops_status IS NULL OR pops_status = ''
+   OR ctos_status IS NULL
+   OR caixas_status IS NULL
+   OR pops_status IS NULL
    OR observacao_categoria IS NULL OR observacao_categoria = ''
    OR observacoes IS NULL
    OR updated_at IS NULL;
@@ -157,9 +157,9 @@ ALTER TABLE public.admin_documentacoes DROP CONSTRAINT IF EXISTS admin_documenta
 ALTER TABLE public.admin_documentacoes
 ADD CONSTRAINT admin_documentacoes_status_check CHECK (
   status IN ('a_realizar', 'em_andamento', 'concluida', 'parada') AND
-  ctos_status IN ('a_realizar', 'em_andamento', 'concluida', 'parada') AND
-  caixas_status IN ('a_realizar', 'em_andamento', 'concluida', 'parada') AND
-  pops_status IN ('a_realizar', 'em_andamento', 'concluida', 'parada')
+  ctos_status IN ('', 'a_realizar', 'em_andamento', 'concluida', 'parada') AND
+  caixas_status IN ('', 'a_realizar', 'em_andamento', 'concluida', 'parada') AND
+  pops_status IN ('', 'a_realizar', 'em_andamento', 'concluida', 'parada')
 );
 
 -- =========================================================
@@ -1359,8 +1359,8 @@ END $$;
 INSERT INTO public.atlas_system_settings (chave, valor, descricao)
 VALUES
   ('auth_roles', '{"admin":"Acesso total","supervisor":"Gestao operacional","operador":"Operacao diaria","visualizador":"Somente consulta"}'::jsonb, 'Perfis padrao do Atlas V1.4'),
-  ('auth_version', '{"version":"1.4.0","login_required":true}'::jsonb, 'Controle de versao do login'),
-  ('schema_version', '{"version":"1.4.0","revision":"2026-07-13","file":"ATLAS_V1_4_SCHEMA_OFICIAL.sql"}'::jsonb, 'Schema oficial unificado')
+  ('auth_version', '{"version":"1.4.1","login_required":true}'::jsonb, 'Controle de versao do login'),
+  ('schema_version', '{"version":"1.4.1","revision":"2026-07-14","file":"ATLAS_V1_4_SCHEMA_OFICIAL.sql"}'::jsonb, 'Schema oficial unificado')
 ON CONFLICT (chave) DO UPDATE
 SET valor = EXCLUDED.valor,
     descricao = EXCLUDED.descricao,

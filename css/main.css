@@ -11230,15 +11230,32 @@ body.atnx-theme-light .atnx-gantt-wrap:not(.atnx-gantt-fullscreen) .atnx-gantt-s
 }
 .atlas-attachment-viewer-body {
     position: relative;
-    display: grid;
-    place-items: center;
     min-height: 0;
+    overflow: hidden;
+    padding: 0;
+    box-sizing: border-box;
     background: #020617;
 }
+.atlas-attachment-viewer-image-stage {
+    position: absolute;
+    inset: 12px;
+    display: grid;
+    place-items: center;
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+}
 .atlas-attachment-viewer-image {
-    max-width: 100%;
-    max-height: 100%;
-    object-fit: contain;
+    position: absolute;
+    inset: 0;
+    display: block;
+    width: 100% !important;
+    height: 100% !important;
+    max-width: 100% !important;
+    max-height: 100% !important;
+    object-fit: scale-down !important;
+    object-position: center !important;
+    transform: none !important;
 }
 .atlas-attachment-viewer-image.is-broken {
     min-width: 260px;
@@ -11920,4 +11937,864 @@ body:not(.atnx-theme-light) .atlas-logout-btn {
         animation-iteration-count: 1 !important;
         transition-duration: .001ms !important;
     }
+}
+
+/* Atlas V1.4.1 - status opcional e responsividade global. */
+.atnx-status-control-admin_vazio {
+    --status-dot: transparent !important;
+    --status-text: transparent !important;
+}
+.atnx-status-control-admin_vazio::before,
+.atnx-status-control-admin_vazio .atnx-status-dot {
+    display: none !important;
+}
+.atnx-status-control-admin_vazio .atnx-status-label,
+.atnx-status-control-admin_vazio select.atnx-status-native {
+    color: transparent !important;
+}
+.atnx-status-control-admin_vazio select.atnx-status-native option {
+    color: #0f172a !important;
+}
+body:not(.atnx-theme-light) .atnx-status-control-admin_vazio select.atnx-status-native option {
+    color: #e5edf8 !important;
+    background: #111827 !important;
+}
+
+.atlas-sidebar-backdrop {
+    display: none;
+}
+
+img,
+video,
+iframe,
+canvas {
+    max-width: 100%;
+}
+
+input,
+select,
+textarea,
+button {
+    max-width: 100%;
+}
+
+#atlas-main-content,
+#header-conteudo,
+#main-scroll-container,
+#painel-documentacao,
+#painel-admin-obras,
+#painel-expansoes,
+#painel-pmo,
+#painel-manutencao-redes,
+#painel-admin-central,
+#painel-auditoria {
+    box-sizing: border-box;
+}
+
+@media (max-width: 1500px) {
+    #painel-documentacao,
+    #painel-admin-obras,
+    #painel-expansoes,
+    #painel-pmo,
+    #painel-manutencao-redes,
+    #painel-admin-central,
+    #painel-auditoria {
+        width: 100% !important;
+        min-width: 0 !important;
+        max-width: 100% !important;
+    }
+
+    #painel-documentacao {
+        overflow-x: auto !important;
+        overscroll-behavior-x: contain;
+    }
+    #painel-documentacao > table {
+        min-width: 860px;
+    }
+
+    .atlas-module-titlebar,
+    .atlas-module-toolbar,
+    .atnx-admin-toolbar,
+    .atlas-exp-toolbar,
+    .atlas-pmo-form-head,
+    .atlas-exp-inline-form-head {
+        flex-wrap: wrap !important;
+    }
+
+    .atlas-module-actions,
+    .atlas-module-kpis,
+    .atnx-admin-summary,
+    .atlas-exp-summary {
+        max-width: 100%;
+    }
+
+    .atlas-module-table-wrap,
+    .atlas-admin-table-wrap,
+    .atlas-pmo-table-wrap,
+    .atlas-exp-table-wrap,
+    .atlas-exp-sub-table-wrap,
+    .atlas-exp-obra-table-wrap,
+    .atnx-gantt-scroll,
+    .atlas-exp-gantt-scroll {
+        max-width: 100% !important;
+        overflow-x: auto !important;
+        overscroll-behavior-x: contain !important;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .atlas-maint-filters {
+        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    }
+    .atlas-admin-role-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    }
+}
+
+@media (max-width: 900px) {
+    body {
+        min-width: 0 !important;
+        width: 100% !important;
+    }
+
+    #atlas-app-shell,
+    #atlas-main-content {
+        width: 100% !important;
+        min-width: 0 !important;
+    }
+
+    #sidebar-container {
+        position: fixed !important;
+        inset: 0 auto 0 0 !important;
+        z-index: 1200 !important;
+        width: min(320px, 88vw) !important;
+        min-width: 0 !important;
+        max-width: 88vw !important;
+        height: 100dvh !important;
+        transform: translateX(0);
+        transition: transform .22s ease, box-shadow .22s ease !important;
+        box-shadow: 18px 0 44px rgba(2, 6, 23, .30);
+    }
+
+    #sidebar-container.w-0 {
+        width: min(320px, 88vw) !important;
+        transform: translateX(-105%);
+        pointer-events: none;
+        box-shadow: none;
+    }
+
+    #sidebar-container > *,
+    #sidebar-obras-section,
+    #sidebar-container [class*="min-w-"] {
+        min-width: 0 !important;
+        max-width: 100% !important;
+    }
+
+    .atlas-sidebar-backdrop {
+        position: fixed;
+        inset: 0;
+        z-index: 1150;
+        width: 100%;
+        height: 100%;
+        border: 0;
+        background: rgba(2, 6, 23, .48);
+        backdrop-filter: blur(2px);
+    }
+
+    body.atlas-sidebar-open .atlas-sidebar-backdrop {
+        display: block;
+    }
+
+    #btn-abrir-sidebar {
+        position: fixed !important;
+        left: 12px !important;
+        top: 12px !important;
+        z-index: 1100 !important;
+        width: 38px !important;
+        height: 38px !important;
+    }
+
+    #header-conteudo {
+        padding: 12px 12px 10px !important;
+    }
+    body.atlas-sidebar-closed #header-conteudo {
+        padding-left: 60px !important;
+    }
+    #header-conteudo > div:first-child {
+        display: flex !important;
+        flex-wrap: wrap !important;
+        align-items: center !important;
+        gap: 10px !important;
+        margin-bottom: 8px !important;
+    }
+    #header-conteudo > div:first-child > div:last-child {
+        display: flex !important;
+        flex: 1 1 auto;
+        flex-wrap: wrap !important;
+        justify-content: flex-end;
+        min-width: 0;
+    }
+    #txt-nome-obra {
+        flex: 1 1 220px;
+        min-width: 0;
+        font-size: 18px !important;
+        line-height: 1.25 !important;
+        overflow-wrap: anywhere;
+    }
+
+    #tabs-container,
+    .atlas-admin-tabs {
+        width: 100%;
+        max-width: 100%;
+        overflow-x: auto;
+        overflow-y: hidden;
+        flex-wrap: nowrap !important;
+        scrollbar-width: thin;
+        -webkit-overflow-scrolling: touch;
+    }
+    #tabs-container > *,
+    .atlas-admin-tabs > * {
+        flex: 0 0 auto;
+    }
+
+    #main-scroll-container {
+        padding: 12px !important;
+        padding-bottom: max(64px, calc(var(--atlas-footer-h, 40px) + 32px)) !important;
+        overflow-x: hidden !important;
+    }
+
+    .atnx-admin-board-vertical,
+    .atnx-admin-column,
+    .atnx-admin-column-body,
+    .atnx-admin-card,
+    .atlas-admin-card,
+    .atlas-admin-card-head,
+    .atlas-admin-shell > *,
+    .atlas-admin-table-wrap,
+    .atlas-module-shell,
+    .atlas-admin-shell,
+    .atlas-maint-shell,
+    .atlas-exp-board,
+    .atlas-pmo-shell {
+        min-width: 0 !important;
+        max-width: 100% !important;
+    }
+
+    .atlas-admin-table-wrap {
+        width: 100% !important;
+        overflow-x: auto !important;
+        overflow-y: hidden !important;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .atnx-admin-toolbar,
+    .atlas-module-titlebar,
+    .atlas-module-toolbar,
+    .atlas-exp-toolbar {
+        padding: 12px !important;
+        align-items: stretch !important;
+    }
+    .atnx-admin-toolbar > *,
+    .atlas-module-titlebar > *,
+    .atlas-module-toolbar > *,
+    .atlas-exp-toolbar > * {
+        min-width: 0;
+        max-width: 100%;
+    }
+
+    .atlas-module-search,
+    .atlas-exp-gantt-filter-box,
+    .atnx-gantt-filter-box {
+        width: 100% !important;
+        min-width: 0 !important;
+        max-width: 100% !important;
+        flex-basis: 100% !important;
+    }
+    .atlas-module-search input,
+    .atlas-exp-gantt-filter-box input,
+    .atnx-gantt-filter-box input {
+        min-width: 0 !important;
+    }
+
+    .atlas-pmo-form-grid,
+    .atlas-pmo-form-grid.compact,
+    .atlas-exp-inline-form-grid,
+    .atlas-field-form {
+        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    }
+
+    .atlas-maint-kpis {
+        grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    }
+    .atlas-maint-regional-board,
+    .atlas-maint-grid,
+    .atlas-maint-flow {
+        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    }
+
+    .atlas-auditoria-drawer,
+    .atnx-modal-card,
+    .atnx-modal-card-wide {
+        max-width: calc(100vw - 20px) !important;
+    }
+
+    .atlas-page-hscroll {
+        left: 10px !important;
+        right: 10px !important;
+        width: auto !important;
+    }
+
+    #atlas-footer {
+        gap: 8px;
+        padding: 7px 10px !important;
+    }
+    #atlas-footer > div:last-child {
+        min-width: 0;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+        gap: 6px !important;
+    }
+
+    .atlas-exp-sub-vscroll-fixed {
+        right: 6px !important;
+    }
+}
+
+@media (max-width: 600px) {
+    #status-banco-alerta {
+        padding: 6px 8px !important;
+        font-size: 10px !important;
+        line-height: 1.25;
+    }
+
+    #header-conteudo > div:first-child > div:last-child {
+        justify-content: flex-start;
+    }
+    #header-conteudo button {
+        min-height: 38px;
+    }
+    #btn-adicionar-ativo,
+    #btn-adicionar-cidade-admin,
+    #btn-adicionar-expansao,
+    #btn-snapshot-semanal {
+        flex: 1 1 140px;
+        justify-content: center;
+        white-space: normal;
+    }
+
+    #main-scroll-container {
+        padding: 8px !important;
+    }
+
+    .atnx-admin-card,
+    .atlas-module-card,
+    .atlas-admin-card,
+    .atlas-maint-card {
+        padding: 10px !important;
+    }
+    .atnx-admin-card-title {
+        align-items: flex-start !important;
+        flex-wrap: wrap;
+    }
+    .atnx-admin-card-summary,
+    .atnx-admin-dates,
+    .atnx-admin-progress-label {
+        flex-wrap: wrap !important;
+        overflow-wrap: anywhere;
+    }
+    .atnx-admin-item-status-row {
+        align-items: stretch !important;
+    }
+    .atnx-admin-status-control.atnx-status-control-sm,
+    .atnx-admin-status-control.atnx-status-control-md {
+        width: 100% !important;
+        min-width: 0 !important;
+        max-width: 100% !important;
+    }
+    .atnx-admin-actions {
+        display: grid !important;
+        grid-template-columns: minmax(0, 1fr) auto auto;
+        align-items: center;
+    }
+
+    .atnx-admin-summary,
+    .atlas-module-actions,
+    .atlas-module-kpis,
+    .atlas-exp-summary {
+        width: 100%;
+        align-items: stretch !important;
+    }
+    .atnx-admin-summary-pill,
+    .atlas-module-pill,
+    .atlas-module-kpis > div,
+    .atlas-exp-summary span {
+        min-width: 0 !important;
+        white-space: normal !important;
+        text-align: center;
+    }
+
+    .atlas-pmo-form-grid,
+    .atlas-pmo-form-grid.compact,
+    .atlas-exp-inline-form-grid,
+    .atlas-field-form,
+    .atlas-maint-filters {
+        grid-template-columns: 1fr !important;
+    }
+    .atlas-maint-kpis,
+    .atlas-maint-regional-board,
+    .atlas-maint-grid,
+    .atlas-maint-flow,
+    .atlas-admin-role-grid {
+        grid-template-columns: 1fr !important;
+    }
+
+    .atlas-module-table-wrap,
+    .atlas-admin-table-wrap {
+        margin-left: 0 !important;
+        margin-right: 0 !important;
+        border-radius: 6px !important;
+    }
+    .atlas-admin-card-head {
+        flex-wrap: wrap !important;
+    }
+
+    .atnx-modal-overlay,
+    .atlas-attachment-viewer-backdrop {
+        padding: 8px !important;
+    }
+    .atnx-modal-card,
+    .atnx-modal-card-wide {
+        width: 100% !important;
+        max-height: calc(100dvh - 16px) !important;
+        overflow-y: auto !important;
+    }
+    .atnx-modal-actions,
+    .atlas-exp-inline-form-actions,
+    .atlas-pmo-form-actions,
+    .atlas-attachment-viewer-actions {
+        width: 100%;
+        flex-wrap: wrap !important;
+    }
+    .atnx-modal-actions button,
+    .atlas-exp-inline-form-actions button,
+    .atlas-pmo-form-actions button {
+        flex: 1 1 130px;
+    }
+
+    .atlas-attachment-viewer-head {
+        padding: 10px !important;
+    }
+    .atlas-attachment-viewer-nav {
+        width: 38px !important;
+        height: 48px !important;
+    }
+    .atlas-attachment-viewer-nav.prev { left: 6px !important; }
+    .atlas-attachment-viewer-nav.next { right: 6px !important; }
+
+    #atlas-footer > div:first-child {
+        display: none;
+    }
+    #atlas-footer > div:last-child {
+        width: 100%;
+        justify-content: center;
+    }
+    .atlas-user-chip {
+        max-width: 150px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .atlas-auth-root {
+        padding: 8px !important;
+    }
+    .atlas-auth-card,
+    .atlas-auth-side {
+        padding: 16px !important;
+    }
+}
+
+@media (max-width: 380px) {
+    #txt-nome-obra {
+        font-size: 16px !important;
+    }
+    .atnx-admin-kpis {
+        grid-template-columns: 1fr !important;
+    }
+    .atnx-admin-actions {
+        grid-template-columns: 1fr auto auto !important;
+    }
+    .atnx-doc-tab,
+    .atlas-admin-tabs button {
+        padding-left: 10px !important;
+        padding-right: 10px !important;
+    }
+    .atlas-auth-brand strong {
+        font-size: 22px !important;
+    }
+}
+
+@media (max-height: 560px) and (orientation: landscape) {
+    #sidebar-container {
+        overflow-y: auto !important;
+    }
+    #header-conteudo {
+        padding-top: 8px !important;
+        padding-bottom: 6px !important;
+    }
+    #atlas-footer > div:first-child {
+        display: none;
+    }
+    .atlas-auth-root {
+        place-items: start center !important;
+        overflow-y: auto !important;
+    }
+}
+
+@media (pointer: coarse) {
+    button,
+    select,
+    input[type="button"],
+    input[type="submit"] {
+        min-height: 38px;
+        touch-action: manipulation;
+    }
+}
+
+/* Atlas V1.4.1 - zoom mobile bloqueado e scroll horizontal consolidado em Expansoes. */
+body.atlas-exp-projetos-scroll-mode #painel-expansoes .atlas-exp-board,
+body.atlas-exp-projetos-scroll-mode #painel-expansoes .atlas-exp-group,
+body.atlas-exp-projetos-scroll-mode #painel-expansoes .atlas-exp-group-body {
+    min-width: 0 !important;
+    max-width: 100% !important;
+}
+
+body.atlas-exp-projetos-scroll-mode #painel-expansoes .atlas-exp-group-body {
+    overflow: hidden !important;
+}
+
+body.atlas-exp-projetos-scroll-mode #painel-expansoes .atlas-exp-table-wrap {
+    display: block !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    overscroll-behavior-x: contain !important;
+    scroll-behavior: auto !important;
+    touch-action: pan-x pan-y !important;
+}
+
+body.atlas-exp-projetos-scroll-mode #painel-expansoes .atlas-exp-sub-table-wrap {
+    max-width: 100% !important;
+    overflow-x: auto !important;
+    overscroll-behavior-x: contain !important;
+    scroll-behavior: auto !important;
+    touch-action: pan-x pan-y !important;
+}
+
+@media (max-width: 900px) {
+    html,
+    body,
+    #atlas-app-shell,
+    #atlas-main-content {
+        touch-action: pan-x pan-y !important;
+    }
+
+    input,
+    select,
+    textarea {
+        font-size: 16px !important;
+    }
+
+    body.atlas-exp-projetos-scroll-mode .atlas-page-hscroll {
+        display: none !important;
+    }
+
+    body.atlas-exp-projetos-scroll-mode #painel-expansoes .atlas-exp-table-wrap {
+        scrollbar-width: thin !important;
+        scrollbar-color: #0073ea rgba(148, 163, 184, .22) !important;
+        scrollbar-gutter: stable !important;
+        -ms-overflow-style: auto !important;
+    }
+
+    body.atlas-exp-projetos-scroll-mode #painel-expansoes .atlas-exp-table-wrap::-webkit-scrollbar {
+        display: block !important;
+        width: 0 !important;
+        height: 12px !important;
+    }
+
+    body.atlas-exp-projetos-scroll-mode #painel-expansoes .atlas-exp-table-wrap::-webkit-scrollbar-track {
+        background: rgba(148, 163, 184, .20) !important;
+        border-radius: 999px !important;
+    }
+
+    body.atlas-exp-projetos-scroll-mode #painel-expansoes .atlas-exp-table-wrap::-webkit-scrollbar-thumb {
+        background: #0073ea !important;
+        border: 3px solid rgba(148, 163, 184, .20) !important;
+        border-radius: 999px !important;
+        background-clip: padding-box !important;
+    }
+
+    body.atnx-theme-dark.atlas-exp-projetos-scroll-mode #painel-expansoes .atlas-exp-table-wrap,
+    body:not(.atnx-theme-light).atlas-exp-projetos-scroll-mode #painel-expansoes .atlas-exp-table-wrap {
+        scrollbar-color: #60a5fa rgba(71, 85, 105, .36) !important;
+    }
+}
+
+/* Atlas V1.4.1 - movimentacao de elementos e navegacao horizontal mobile. */
+html,
+body {
+    margin: 0;
+}
+
+.atlas-exp-obra-fase.is-collapsed > .atlas-exp-obra-table-wrap {
+    display: none !important;
+}
+
+.atlas-exp-move-toolbar {
+    position: sticky;
+    top: 8px;
+    z-index: 35;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    width: calc(100% - 24px);
+    min-height: 52px;
+    margin: 0 12px 12px;
+    padding: 8px 10px 8px 14px;
+    border: 1px solid rgba(0, 115, 234, .32);
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--atnx-card, #fff) 94%, #0073ea 6%);
+    box-shadow: 0 10px 24px rgba(15, 23, 42, .12);
+}
+
+.atlas-exp-move-summary,
+.atlas-exp-move-controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.atlas-exp-move-summary {
+    color: var(--atnx-text, #101828);
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.atlas-exp-move-summary span {
+    color: inherit !important;
+    opacity: 1 !important;
+}
+
+.atlas-exp-move-summary strong {
+    color: #0067d1;
+    font-size: 16px;
+}
+
+.atlas-exp-move-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    background: #0073ea;
+    color: #fff;
+    font-size: 18px;
+    line-height: 1;
+}
+
+.atlas-exp-move-controls select,
+.atlas-exp-move-controls button {
+    min-height: 36px;
+    border: 1px solid var(--atnx-border, #d8e1f1);
+    border-radius: 7px;
+    font-size: 12px;
+    font-weight: 800;
+}
+
+.atlas-exp-move-controls select {
+    width: min(360px, 38vw);
+    padding: 0 34px 0 10px;
+    background: var(--atnx-card, #fff);
+    color: var(--atnx-text, #101828);
+}
+
+.atlas-exp-move-controls button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 0 13px;
+    cursor: pointer;
+}
+
+.atlas-exp-move-confirm {
+    border-color: #0073ea !important;
+    background: #0073ea;
+    color: #fff;
+}
+
+.atlas-exp-move-clear {
+    width: 36px;
+    padding: 0 !important;
+    background: var(--atnx-card, #fff);
+    color: var(--atnx-text-muted, #667085);
+    font-size: 20px !important;
+}
+
+body.atnx-theme-dark .atlas-exp-move-toolbar,
+body:not(.atnx-theme-light) .atlas-exp-move-toolbar {
+    background: color-mix(in srgb, #111827 90%, #0073ea 10%);
+    border-color: rgba(96, 165, 250, .38);
+}
+
+body.atnx-theme-dark .atlas-exp-move-controls select,
+body:not(.atnx-theme-light) .atlas-exp-move-controls select {
+    color-scheme: dark;
+    background: #0f172a !important;
+    border-color: #334155 !important;
+    color: #e2e8f0 !important;
+}
+
+body.atnx-theme-dark .atlas-exp-move-controls select option,
+body:not(.atnx-theme-light) .atlas-exp-move-controls select option {
+    background: #0f172a;
+    color: #e2e8f0;
+}
+
+body.atnx-theme-dark .atlas-exp-move-clear,
+body:not(.atnx-theme-light) .atlas-exp-move-clear {
+    background: #111827;
+    border-color: #334155;
+    color: #cbd5e1;
+}
+
+body.atnx-theme-dark .atlas-exp-move-summary strong,
+body:not(.atnx-theme-light) .atlas-exp-move-summary strong {
+    color: #60a5fa;
+}
+
+body.atnx-theme-light .atlas-exp-move-summary {
+    color: #0f172a !important;
+}
+
+body.atnx-theme-dark .atlas-exp-move-summary,
+body:not(.atnx-theme-light) .atlas-exp-move-summary {
+    color: #e5e7eb !important;
+}
+
+@media (max-width: 900px) {
+    .atlas-exp-move-toolbar {
+        position: relative;
+        top: auto;
+        flex-direction: column;
+        align-items: stretch;
+        width: calc(100% - 16px);
+        margin: 0 8px 10px;
+        padding: 10px;
+    }
+
+    .atlas-exp-move-controls {
+        width: 100%;
+    }
+
+    .atlas-exp-move-controls label {
+        flex: 1 1 auto;
+        min-width: 0;
+    }
+
+    .atlas-exp-move-controls select {
+        width: 100%;
+        max-width: none;
+    }
+
+    #painel-expansoes .atlas-exp-table-wrap,
+    #painel-expansoes .atlas-exp-sub-table-wrap,
+    #painel-expansoes .atlas-exp-obra-table-wrap {
+        touch-action: pan-x pan-y !important;
+        -webkit-overflow-scrolling: touch !important;
+    }
+
+    #painel-expansoes .atlas-exp-table th:nth-child(1),
+    #painel-expansoes .atlas-exp-table td:nth-child(1),
+    #painel-expansoes .atlas-exp-sub-table th:nth-child(1),
+    #painel-expansoes .atlas-exp-sub-table td:nth-child(1),
+    #painel-expansoes .atlas-exp-table th:nth-child(2),
+    #painel-expansoes .atlas-exp-table td.atlas-exp-elemento-cell,
+    #painel-expansoes .atlas-exp-sub-table th:nth-child(2),
+    #painel-expansoes .atlas-exp-sub-table td.atlas-exp-sub-name-cell {
+        position: static !important;
+        inset: auto !important;
+        left: auto !important;
+        right: auto !important;
+        z-index: auto !important;
+        box-shadow: none !important;
+    }
+
+    #painel-expansoes .atlas-exp-table tbody tr.atlas-exp-row-projeto > td:first-child,
+    #painel-expansoes .atlas-exp-table tbody tr.atlas-exp-row-projeto > td.atlas-exp-elemento-cell,
+    #painel-expansoes .atlas-exp-obra-table tbody tr.atlas-exp-obra-row > td:first-child,
+    #painel-expansoes .atlas-exp-obra-table tbody tr.atlas-exp-obra-row > td.atlas-exp-elemento-cell,
+    #painel-expansoes .atlas-exp-sub-table tbody tr.atlas-exp-sub-row > td:first-child,
+    #painel-expansoes .atlas-exp-sub-table tbody tr.atlas-exp-sub-row > td.atlas-exp-sub-name-cell {
+        box-shadow: none !important;
+    }
+}
+
+@media (max-width: 520px) {
+    .atlas-exp-move-controls {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto auto;
+    }
+
+    .atlas-exp-move-confirm span {
+        display: none;
+    }
+
+    .atlas-exp-move-confirm {
+        width: 40px;
+        padding: 0 !important;
+        font-size: 18px !important;
+    }
+}
+
+/* V1.4.1 - Os seletores de movimentacao acompanham o tema escuro do Atlas. */
+body {
+    --atlas-exp-move-select-bg: #0f172a;
+    --atlas-exp-move-select-text: #e2e8f0;
+    --atlas-exp-move-select-border: #334155;
+}
+
+body.atnx-theme-light {
+    --atlas-exp-move-select-bg: #f8fafc;
+    --atlas-exp-move-select-text: #0f172a;
+    --atlas-exp-move-select-border: #cbd5e1;
+}
+
+body.atnx-theme-dark,
+body:not(.atnx-theme-light) {
+    --atlas-exp-move-select-bg: #0f172a;
+    --atlas-exp-move-select-text: #e2e8f0;
+    --atlas-exp-move-select-border: #334155;
+}
+
+html body.atnx-theme-dark select#atlas-exp-projetos-destino,
+html body.atnx-theme-dark select#atlas-exp-obras-destino,
+html body:not(.atnx-theme-light) select#atlas-exp-projetos-destino,
+html body:not(.atnx-theme-light) select#atlas-exp-obras-destino {
+    color-scheme: dark !important;
+    background-color: #0f172a !important;
+    border-color: #334155 !important;
+    color: #e2e8f0 !important;
+    opacity: 1 !important;
+}
+
+html body.atnx-theme-dark select#atlas-exp-projetos-destino option,
+html body.atnx-theme-dark select#atlas-exp-obras-destino option,
+html body:not(.atnx-theme-light) select#atlas-exp-projetos-destino option,
+html body:not(.atnx-theme-light) select#atlas-exp-obras-destino option {
+    background-color: #0f172a !important;
+    color: #e2e8f0 !important;
 }

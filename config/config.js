@@ -1,9 +1,9 @@
 ﻿// Atlas Core configuration
-// Versão oficial do produto: V 1.4.0 Oficial.
+// Versão oficial do produto: V 1.4.1 Oficial.
 window.ATNX_CONFIG = {
     APP_NAME: "Atlas",
     APP_TAGLINE: "Smart Field Management",
-    VERSION: "V 1.4.0 Oficial",
+    VERSION: "V 1.4.1 Oficial",
 
     // Preencha com os dados públicos do seu projeto Supabase.
     SUPABASE_URL: "",
@@ -32,6 +32,6 @@ window.ATNX_CONFIG = {
     // Manutenção de Redes usa controle interno/manual de tickets Voalle.
     // Nenhum token do Voalle deve ser colocado neste arquivo público.
     AUTH_REQUIRED: true,
-    AUTH_VERSION: "1.4.0",
+    AUTH_VERSION: "1.4.1 Oficial",
     LIMITE_UPLOAD_MB: 15
 };

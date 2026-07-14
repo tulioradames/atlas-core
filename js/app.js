@@ -62,21 +62,16 @@
         }
 
         let supabaseClient;
-        let atlasErroInicializacao = '';
         
         try {
-            if (!SUPABASE_URL || !SUPABASE_KEY) {
-                throw new Error('Configure SUPABASE_URL e SUPABASE_KEY em config/config.js.');
-            }
             const lib = window.supabase || window.Supabase;
             supabaseClient = lib.createClient(SUPABASE_URL, SUPABASE_KEY);
         } catch(e) {
-            atlasErroInicializacao = e.message || String(e);
             document.getElementById('status-banco-alerta').className = "bg-red-600 text-white text-center py-2 font-semibold text-xs z-50";
-            document.getElementById('status-banco-alerta').innerText = "Configuração pendente: " + atlasErroInicializacao;
+            document.getElementById('status-banco-alerta').innerText = "❌ Falha crítica ao carregar as dependências.";
         }
 
-        let state = { sidebarAberta: true, moduloAtivo: 'admin_obras', obraAtiva: '', abaAtiva: 'CTO', termoPesquisa: '', linhasExpandidas: {}, obras: [], elementos: [], selecionados: { elementos: {}, subelementos: {} }, cacheElementosPorObra: {}, carregandoObra: false, adminObras: [], adminCarregando: false, adminErro: '', adminSecoesAbertas: { a_realizar: true, em_andamento: true, parada: true, concluida: true }, adminDetalhesAbertos: {}, adminVisualizacao: 'status', adminGanttFullscreen: false, adminGanttZoom: 1, adminGanttFiltro: '', adminGanttEscala: 'meses', adminGanttModoApresentacao: false, executivoCarregando: false, executivoErro: '', historicoSemanal: [], expansoes: [], expansoesSubitems: [], expansoesCarregando: false, expansoesErro: '', expansoesAbertas: { em_progresso: true, grande_porte: true, pequeno_porte: true, concluidos: true }, expansoesProjetosAbertos: {}, expansoesVisualizacao: 'tabela', expansoesObraAtiva: '', expansoesObraNovaAberta: false, expansoesObrasSelecionados: { elementos: {}, subitems: {} }, expansoesGanttZoom: 1, expansoesGanttEscala: 'meses', expansoesGanttFiltro: '', expansoesGanttStatus: [], expansoesGanttGrupo: [], expansoesGanttFullscreen: false, expansaoFormularioAberto: false, expansaoFormularioEditandoId: null, expansaoLinhaNovaGrupo: null, expansaoSubitemNovoProjetoId: null, pmoVisualizacao: 'analise_novos_projetos', pmoProjetos: [], pmoSubelementos: [], pmoUpdates: [], pmoCarregando: false, pmoErro: '', pmoProjetoAberto: '', pmoFormularioAberto: false, pmoEditandoId: null, pmoSubitemNovoProjetoId: null, pmoUpdateNovoProjetoId: null, pmoUltimaEdicaoLocal: 0, pmoEstruturaAbertas: { projetos: true, subelementos: true, updates: true }, manutencoesRede: [], manutencaoRedeCarregando: false, manutencaoRedeErro: '', manutencaoRedeFiltros: { regional: '', cidade: '', documentacao: '', status: '', prioridade: '', responsavel: '', tipo: '', inicio: '' }, auditoria: [], auditoriaCarregando: false, auditoriaErro: '', auditoriaAberta: false, auditoriaTermo: '', authCarregando: true, authSession: null, usuarioAtual: null, perfilAtual: null, usuariosAtlas: [], usuariosCarregando: false, usuariosErro: '', adminCentralAba: 'usuarios', camposPersonalizados: [], camposCarregando: false, camposErro: '', tema: localStorage.getItem('atnx-tema') || 'light' };
+        let state = { sidebarAberta: true, moduloAtivo: 'admin_obras', obraAtiva: '', abaAtiva: 'CTO', termoPesquisa: '', linhasExpandidas: {}, obras: [], elementos: [], selecionados: { elementos: {}, subelementos: {} }, cacheElementosPorObra: {}, carregandoObra: false, adminObras: [], adminCarregando: false, adminErro: '', adminSecoesAbertas: { a_realizar: true, em_andamento: true, parada: true, concluida: true }, adminDetalhesAbertos: {}, adminVisualizacao: 'status', adminGanttFullscreen: false, adminGanttZoom: 1, adminGanttFiltro: '', adminGanttEscala: 'meses', adminGanttModoApresentacao: false, executivoCarregando: false, executivoErro: '', historicoSemanal: [], expansoes: [], expansoesSubitems: [], expansoesCarregando: false, expansoesErro: '', expansoesAbertas: { em_progresso: true, grande_porte: true, pequeno_porte: true, concluidos: true }, expansoesProjetosAbertos: {}, expansoesProjetosSelecionados: {}, expansoesVisualizacao: 'tabela', expansoesObraAtiva: '', expansoesObraNovaAberta: false, expansoesObrasFasesAbertas: {}, expansoesObrasSelecionados: { elementos: {}, subitems: {} }, expansoesGanttZoom: 1, expansoesGanttEscala: 'meses', expansoesGanttFiltro: '', expansoesGanttStatus: [], expansoesGanttGrupo: [], expansoesGanttFullscreen: false, expansaoFormularioAberto: false, expansaoFormularioEditandoId: null, expansaoLinhaNovaGrupo: null, expansaoSubitemNovoProjetoId: null, pmoVisualizacao: 'analise_novos_projetos', pmoProjetos: [], pmoSubelementos: [], pmoUpdates: [], pmoCarregando: false, pmoErro: '', pmoProjetoAberto: '', pmoFormularioAberto: false, pmoEditandoId: null, pmoSubitemNovoProjetoId: null, pmoUpdateNovoProjetoId: null, pmoUltimaEdicaoLocal: 0, pmoEstruturaAbertas: { projetos: true, subelementos: true, updates: true }, manutencoesRede: [], manutencaoRedeCarregando: false, manutencaoRedeErro: '', manutencaoRedeFiltros: { regional: '', cidade: '', documentacao: '', status: '', prioridade: '', responsavel: '', tipo: '', inicio: '' }, auditoria: [], auditoriaCarregando: false, auditoriaErro: '', auditoriaAberta: false, auditoriaTermo: '', authCarregando: true, authSession: null, usuarioAtual: null, perfilAtual: null, usuariosAtlas: [], usuariosCarregando: false, usuariosErro: '', adminCentralAba: 'usuarios', camposPersonalizados: [], camposCarregando: false, camposErro: '', tema: localStorage.getItem('atnx-tema') || 'light' };
         window.state = state;
 
         const ATNX_COR_OFICIAL = '#0073ea';
@@ -312,7 +307,7 @@
             if (modo === 'erro') {
                 root.innerHTML = `<div class="atlas-auth-card">
                     <div class="atlas-auth-brand">Atlas</div>
-                    <h1>Configuração necessária</h1>
+                    <h1>Login aguardando SQL</h1>
                     <p>${escaparHtml(mensagem || 'Execute o SQL da V1.4 no Supabase para ativar perfis e permissões.')}</p>
                     <button type="button" class="atlas-auth-secondary" onclick="sairAtlas()">Voltar</button>
                 </div>`;
@@ -323,7 +318,7 @@
                 <section class="atlas-auth-card atlas-auth-card-main">
                     <div class="atlas-auth-brand">Atlas</div>
                     <h1>${cadastro ? 'Criar acesso' : 'Entrar no Atlas'}</h1>
-                    <p>${cadastro ? 'Seu acesso será criado como Visualizador pendente. Um Admin precisa liberar sua entrada.' : 'A V1.4.0 Oficial protege os dados com usuário autenticado e acesso liberado.'}</p>
+                    <p>${cadastro ? 'Seu acesso será criado como Visualizador pendente. Um Admin precisa liberar sua entrada.' : 'A V1.4.1 protege os dados com usuário autenticado e acesso liberado.'}</p>
                     ${mensagem ? `<div class="atlas-auth-alert">${escaparHtml(mensagem)}</div>` : ''}
                     <form class="atlas-auth-form" onsubmit="${cadastro ? 'criarAcessoAtlas(event)' : 'entrarAtlas(event)'}">
                         ${cadastro ? '<label><span>Nome</span><input name="nome" autocomplete="name" placeholder="Seu nome"></label>' : ''}
@@ -336,8 +331,8 @@
                 <aside class="atlas-auth-side">
                     <div class="atlas-auth-release-head">
                         <span class="atlas-auth-release-kicker">Lançamento oficial</span>
-                        <b>Atlas V1.4.0 Oficial</b>
-                        <p>Controle operacional, colaboração e administração em uma versão pronta para o uso da equipe.</p>
+                        <b>Atlas V1.4.1 Oficial</b>
+                        <p>Controle operacional com status mais flexíveis e experiência adaptada a computadores, tablets e celulares.</p>
                     </div>
                     <div class="atlas-auth-feature-grid">
                         <div class="atlas-auth-feature"><i>1</i><span><strong>Login e liberação</strong><small>Novos usuários aguardam aprovação do Admin.</small></span></div>
@@ -346,8 +341,8 @@
                         <div class="atlas-auth-feature"><i>4</i><span><strong>Auditoria real</strong><small>Ações vinculadas ao usuário autenticado.</small></span></div>
                         <div class="atlas-auth-feature"><i>5</i><span><strong>Campos configuráveis</strong><small>Estrutura flexível para módulos e registros.</small></span></div>
                         <div class="atlas-auth-feature"><i>6</i><span><strong>Manutenção de Redes</strong><small>Regionais, chamados, documentação e anexos.</small></span></div>
-                        <div class="atlas-auth-feature"><i>7</i><span><strong>PMO e Expansões</strong><small>Projetos, cópias operacionais e acompanhamento.</small></span></div>
-                        <div class="atlas-auth-feature"><i>8</i><span><strong>Arquivos no Atlas</strong><small>Visualização, navegação e download de anexos.</small></span></div>
+                        <div class="atlas-auth-feature"><i>7</i><span><strong>Status opcional</strong><small>CTO, CEO ou POP podem ficar sem status quando não se aplicarem.</small></span></div>
+                        <div class="atlas-auth-feature"><i>8</i><span><strong>Layout responsivo</strong><small>Navegação adaptada para computadores, tablets e celulares.</small></span></div>
                     </div>
                     <div class="atlas-auth-release-foot">Modo claro e escuro · Supabase em tempo real · Google Drive integrado</div>
                 </aside>
@@ -412,7 +407,7 @@
         async function inicializarAtlasV14Auth() {
             aplicarTemaAtnx();
             if (!supabaseClient || !supabaseClient.auth) {
-                renderAuthScreenAtlas('erro', atlasErroInicializacao || 'Supabase Auth indisponível. Confira as dependências do Supabase.');
+                renderAuthScreenAtlas('erro', 'Supabase Auth indisponível. Confira as dependências do Supabase.');
                 return;
             }
             renderAuthScreenAtlas('loading');
@@ -739,7 +734,7 @@
             }
             painel.innerHTML = `<div class="atlas-admin-shell">
                 <div class="atlas-module-titlebar">
-                    <div><div class="atlas-module-kicker">Atlas V1.4</div><h2>Central de Administração</h2><p>Login, perfis, permissões e campos configuráveis.</p></div>
+                    <div><div class="atlas-module-kicker">Sistema</div><h2>Central de Administração</h2><p>Login, perfis, permissões e campos configuráveis.</p></div>
                     <div class="atlas-module-actions"><button class="atlas-action-btn" onclick="carregarAdminCentral()">Atualizar</button></div>
                 </div>
                 ${tabs}
@@ -751,26 +746,45 @@
         let tokenCarregamentoObra = 0;
         let preCarregamentoObrasEmExecucao = false;
 
-        function toggleSidebar() {
-            state.sidebarAberta = !state.sidebarAberta;
+        function aplicarEstadoSidebarAtlas() {
             const sb = document.getElementById('sidebar-container');
             const btnAbrir = document.getElementById('btn-abrir-sidebar');
             const header = document.getElementById('header-conteudo');
+            const backdrop = document.getElementById('atlas-sidebar-backdrop');
+            if (!sb || !btnAbrir || !header) return;
 
             if (state.sidebarAberta) {
                 sb.classList.remove('w-0', 'border-r-0');
                 sb.classList.add('w-72');
                 btnAbrir.classList.add('hidden');
                 header.classList.remove('pl-16');
+                document.body.classList.add('atlas-sidebar-open');
+                document.body.classList.remove('atlas-sidebar-closed');
             } else {
                 sb.classList.remove('w-72');
                 sb.classList.add('w-0', 'border-r-0');
                 btnAbrir.classList.remove('hidden');
                 header.classList.add('pl-16');
+                document.body.classList.remove('atlas-sidebar-open');
+                document.body.classList.add('atlas-sidebar-closed');
             }
+            sb.setAttribute('aria-hidden', state.sidebarAberta ? 'false' : 'true');
+            btnAbrir.setAttribute('aria-expanded', state.sidebarAberta ? 'true' : 'false');
+            if (backdrop) backdrop.setAttribute('aria-hidden', state.sidebarAberta ? 'false' : 'true');
+        }
+
+        function toggleSidebar(forcarAberta) {
+            state.sidebarAberta = typeof forcarAberta === 'boolean' ? forcarAberta : !state.sidebarAberta;
+            aplicarEstadoSidebarAtlas();
             window.dispatchEvent(new CustomEvent('atlas-layout-change'));
             setTimeout(() => window.dispatchEvent(new CustomEvent('atlas-layout-change')), 180);
             setTimeout(() => window.dispatchEvent(new CustomEvent('atlas-layout-change')), 420);
+        }
+
+        function fecharSidebarResponsiva() {
+            if (window.matchMedia('(max-width: 900px)').matches && state.sidebarAberta) {
+                toggleSidebar(false);
+            }
         }
 
         async function inicializarBanco() {
@@ -1399,7 +1413,7 @@ Itens importados do Google Drive serão preservados no Drive. A exclusão remove
             const previewUrl = atlasPreviewUrlAnexo(anexo);
             const contador = atual.lista.length > 1 ? `${atual.indice + 1} de ${atual.lista.length}` : '1 arquivo';
             const conteudo = atlasEhImagemAnexo(anexo)
-                ? `<img class="atlas-attachment-viewer-image" src="${escaparHtml(previewUrl)}" alt="${escaparHtml(nome)}" onload="atlasConcluirCarregamentoAnexo()" onerror="atlasFalhaCarregamentoAnexo(this)">`
+                ? `<div class="atlas-attachment-viewer-image-stage"><img class="atlas-attachment-viewer-image" src="${escaparHtml(previewUrl)}" alt="${escaparHtml(nome)}" onload="atlasConcluirCarregamentoAnexo()" onerror="atlasFalhaCarregamentoAnexo(this)"></div>`
                 : `<iframe class="atlas-attachment-viewer-frame" src="${escaparHtml(previewUrl)}" title="${escaparHtml(nome)}" onload="atlasConcluirCarregamentoAnexo()" onerror="atlasFalhaCarregamentoAnexo(this)"></iframe>`;
             root.innerHTML = `<div class="atlas-attachment-viewer-backdrop" onclick="atlasFecharVisualizadorAnexos()">
                 <section class="atlas-attachment-viewer-panel" role="dialog" aria-modal="true" onclick="event.stopPropagation()">
@@ -1459,7 +1473,8 @@ Itens importados do Google Drive serão preservados no Drive. A exclusão remove
             'atnx-status-control-admin_concluida',
             'atnx-status-control-admin_em_andamento',
             'atnx-status-control-admin_parada',
-            'atnx-status-control-admin_a_realizar'
+            'atnx-status-control-admin_a_realizar',
+            'atnx-status-control-admin_vazio'
         ];
 
         function aplicarChaveStatusControle(elemento, chaveStatus) {
@@ -2659,7 +2674,7 @@ Cole a URL NOVA da implantação ativa do Apps Script de Expansões. Ela precisa
 Checklist rápido:
 1) A URL do Apps Script de Expansões precisa ser a implantação ativa que termina em /exec.
 2) Se aparecer a janela para corrigir a URL, cole a URL /exec nova da implantação V16/V17/V18 do Apps Script.
-3) A pasta externa precisa estar compartilhada com a conta proprietária do Drive de Expansões.
+3) A pasta externa precisa estar compartilhada com a conta proprietária do Apps Script.
 4) O proxy /api/drive é opcional nesta versão; a importação funciona direto por JSONP.`);
             }
         }
@@ -3331,7 +3346,7 @@ Itens importados do Google Drive serão preservados no Drive. A exclusão remove
 
         function obterStatusCategoriaAdmin(item, categoria) {
             const campo = categoria === 'cto' ? 'ctos_status' : categoria === 'ceo' ? 'caixas_status' : 'pops_status';
-            return normalizarStatusAdminValor(item?.[campo], normalizarStatusAdminValor(item?.status || 'a_realizar'));
+            return normalizarStatusAdminValor(String(item?.[campo] ?? '').trim(), '');
         }
 
         function obterDatasCategoriaAdmin(item, categoria, opcoes = {}) {
@@ -3346,18 +3361,23 @@ Itens importados do Google Drive serão preservados no Drive. A exclusão remove
             return { inicio, previsao };
         }
 
-        function renderOpcoesStatusAdmin(statusAtual) {
-            return ADMIN_STATUS_TODOS.map(st => `<option value="${st.id}" ${st.id === statusAtual ? 'selected' : ''}>${escaparHtml(st.titulo)}</option>`).join('');
+        function renderOpcoesStatusAdmin(statusAtual, permitirVazio = false) {
+            const vazio = permitirVazio
+                ? `<option value="" ${statusAtual === '' ? 'selected' : ''}></option>`
+                : '';
+            return vazio + ADMIN_STATUS_TODOS.map(st => `<option value="${st.id}" ${st.id === statusAtual ? 'selected' : ''}>${escaparHtml(st.titulo)}</option>`).join('');
         }
 
         function obterTituloStatusAdmin(statusAtual) {
-            const status = normalizarStatusAdminValor(statusAtual || 'a_realizar');
+            if (String(statusAtual ?? '').trim() === '') return '';
+            const status = normalizarStatusAdminValor(statusAtual, '');
             const itemStatus = ADMIN_STATUS_TODOS.find(st => st.id === status) || ADMIN_STATUS_TODOS[0];
-            return itemStatus?.titulo || 'Documentações para ser realizada';
+            return itemStatus?.titulo || '';
         }
 
         function chaveStatusAdminVisual(statusAtual) {
-            const status = normalizarStatusAdminValor(statusAtual || 'a_realizar');
+            if (String(statusAtual ?? '').trim() === '') return 'admin_vazio';
+            const status = normalizarStatusAdminValor(statusAtual, '');
             if (status === 'concluida') return 'admin_concluida';
             if (status === 'em_andamento') return 'admin_em_andamento';
             if (status === 'parada') return 'admin_parada';
@@ -3365,19 +3385,22 @@ Itens importados do Google Drive serão preservados no Drive. A exclusão remove
         }
 
         function classeStatusAdminSelect(statusAtual) {
-            const status = normalizarStatusAdminValor(statusAtual || 'a_realizar');
+            const status = String(statusAtual ?? '').trim() === '' ? '' : normalizarStatusAdminValor(statusAtual, '');
             return `atnx-admin-status-select status-${status} atnx-status-select-${chaveStatusAdminVisual(status)}`;
         }
 
-        function renderizarSelectStatusAdmin(statusAtual, onchange, pequeno = false) {
-            const status = normalizarStatusAdminValor(statusAtual || 'a_realizar');
+        function renderizarSelectStatusAdmin(statusAtual, onchange, pequeno = false, permitirVazio = false) {
+            const valorAtual = String(statusAtual ?? '').trim();
+            const status = permitirVazio
+                ? normalizarStatusAdminValor(valorAtual, '')
+                : normalizarStatusAdminValor(valorAtual || 'a_realizar');
             const chave = chaveStatusAdminVisual(status);
             const classeTamanho = pequeno ? 'atnx-status-control-sm' : 'atnx-status-control-md';
             const classeSelect = pequeno ? 'atnx-admin-select-sm' : '';
             return `<span data-status-key="${chave}" class="atnx-status-control atnx-admin-status-control atnx-status-control-${chave} ${classeTamanho}">
                 <span class="atnx-status-dot" aria-hidden="true"></span>
                 <span class="atnx-status-label">${escaparHtml(obterTituloStatusAdmin(status))}</span>
-                <select aria-label="Alterar status" data-status-key="${chave}" class="atnx-admin-select ${classeSelect} ${classeStatusAdminSelect(status)} atnx-status-native" onchange="${onchange}">${renderOpcoesStatusAdmin(status)}</select>
+                <select aria-label="Alterar status" data-status-key="${chave}" class="atnx-admin-select ${classeSelect} ${classeStatusAdminSelect(status)} atnx-status-native" onchange="${onchange}">${renderOpcoesStatusAdmin(status, permitirVazio)}</select>
                 <span class="atnx-status-arrow" aria-hidden="true">▾</span>
             </span>`;
         }
@@ -3398,6 +3421,7 @@ Itens importados do Google Drive serão preservados no Drive. A exclusão remove
             const modoEspecial = (admin && !adminObrasInternas) || executivo || expansoes || pmo || manutencaoRedes || adminCentral;
             document.body?.classList.toggle('atnx-admin-mode', admin && !adminObrasInternas);
             document.body?.classList.toggle('atlas-expansoes-mode', expansoes);
+            document.body?.classList.toggle('atlas-exp-projetos-scroll-mode', expansoes && expVisualizacao === 'tabela');
             document.body?.classList.toggle('atlas-pmo-mode', pmo);
             document.body?.classList.toggle('atlas-admin-central-mode', adminCentral);
             document.body?.classList.toggle('atlas-manutencao-mode', manutencaoRedes);
@@ -3994,7 +4018,9 @@ Itens importados do Google Drive serão preservados no Drive. A exclusão remove
 
 
         async function alterarStatusCategoriaAdmin(id, categoria, novoStatus) {
-            const status = normalizarStatusAdminValor(novoStatus);
+            const valorRecebido = String(novoStatus ?? '').trim();
+            const status = valorRecebido === '' ? '' : normalizarStatusAdminValor(valorRecebido, '');
+            if (valorRecebido !== '' && status === '') return;
             const item = state.adminObras.find(o => o.id === id);
             if (!item) return;
             const campo = categoria === 'cto' ? 'ctos_status' : categoria === 'ceo' ? 'caixas_status' : 'pops_status';
@@ -4185,15 +4211,15 @@ Itens importados do Google Drive serão preservados no Drive. A exclusão remove
                     <div class="atnx-admin-item-status-list">
                         <div class="atnx-admin-item-status-row">
                             <span class="atnx-admin-item-status-label">CTO</span>
-                            ${renderizarSelectStatusAdmin(statusCto, `alterarStatusCategoriaAdmin('${item.id}', 'cto', this.value)`, true)}
+                            ${renderizarSelectStatusAdmin(statusCto, `alterarStatusCategoriaAdmin('${item.id}', 'cto', this.value)`, true, true)}
                         </div>
                         <div class="atnx-admin-item-status-row">
                             <span class="atnx-admin-item-status-label">CEO</span>
-                            ${renderizarSelectStatusAdmin(statusCeo, `alterarStatusCategoriaAdmin('${item.id}', 'ceo', this.value)`, true)}
+                            ${renderizarSelectStatusAdmin(statusCeo, `alterarStatusCategoriaAdmin('${item.id}', 'ceo', this.value)`, true, true)}
                         </div>
                         <div class="atnx-admin-item-status-row">
                             <span class="atnx-admin-item-status-label">POP</span>
-                            ${renderizarSelectStatusAdmin(statusPop, `alterarStatusCategoriaAdmin('${item.id}', 'pop', this.value)`, true)}
+                            ${renderizarSelectStatusAdmin(statusPop, `alterarStatusCategoriaAdmin('${item.id}', 'pop', this.value)`, true, true)}
                         </div>
                     </div>
                     <div class="atnx-admin-progress-wrap">
@@ -6467,12 +6493,101 @@ Não encontrei o ID do arquivo no Drive. O Atlas removerá apenas o registro do 
             </td></tr>`;
         }
 
+        function obterSelecaoProjetosExpansoes() {
+            state.expansoesProjetosSelecionados = state.expansoesProjetosSelecionados || {};
+            return state.expansoesProjetosSelecionados;
+        }
+
+        function projetoExpansaoSelecionado(id) {
+            return !!obterSelecaoProjetosExpansoes()[id];
+        }
+
+        function toggleSelecaoProjetoExpansao(id, marcado) {
+            const selecao = obterSelecaoProjetosExpansoes();
+            if (marcado) selecao[id] = true;
+            else delete selecao[id];
+            renderExpansoes();
+        }
+
+        function toggleSelecaoGrupoProjetosExpansoes(grupoId, marcado) {
+            const termo = String(state.termoPesquisa || '').trim().toLowerCase();
+            const selecao = obterSelecaoProjetosExpansoes();
+            (state.expansoes || [])
+                .filter(ehProjetoManualExpansao)
+                .filter(projeto => (projeto.grupo || 'em_progresso') === grupoId)
+                .filter(projeto => filtrarProjetoExpansao(projeto, termo))
+                .forEach(projeto => {
+                    if (marcado) selecao[projeto.id] = true;
+                    else delete selecao[projeto.id];
+                });
+            renderExpansoes();
+        }
+
+        function limparSelecaoProjetosExpansoes() {
+            state.expansoesProjetosSelecionados = {};
+            renderExpansoes();
+        }
+
+        function idsProjetosExpansoesSelecionados() {
+            const idsValidos = new Set((state.expansoes || []).filter(ehProjetoManualExpansao).map(projeto => projeto.id));
+            return Object.keys(obterSelecaoProjetosExpansoes()).filter(id => idsValidos.has(id));
+        }
+
+        function renderBarraMoverProjetosExpansoes() {
+            const ids = idsProjetosExpansoesSelecionados();
+            if (!ids.length) return '';
+            const opcoes = ATLAS_EXP_GRUPOS.map(grupo => `<option value="${escaparHtml(grupo.id)}">${escaparHtml(grupo.titulo)}</option>`).join('');
+            return `<div class="atlas-exp-move-toolbar" role="region" aria-label="Mover elementos selecionados">
+                <div class="atlas-exp-move-summary"><span class="atlas-exp-move-icon" aria-hidden="true">↪</span><strong>${ids.length}</strong><span>elemento(s) selecionado(s)</span></div>
+                <div class="atlas-exp-move-controls">
+                    <label title="Escolher grupo de destino"><select id="atlas-exp-projetos-destino" aria-label="Grupo de destino" style="background-color:var(--atlas-exp-move-select-bg)!important;color:var(--atlas-exp-move-select-text)!important;border-color:var(--atlas-exp-move-select-border)!important"><option value="">Mover para...</option>${opcoes}</select></label>
+                    <button type="button" class="atlas-exp-move-confirm" onclick="moverProjetosExpansoesSelecionados()" title="Mover elementos para o grupo escolhido">↪ <span>Mover</span></button>
+                    <button type="button" class="atlas-exp-move-clear" onclick="limparSelecaoProjetosExpansoes()" title="Limpar seleção" aria-label="Limpar seleção">×</button>
+                </div>
+            </div>`;
+        }
+
+        async function moverProjetosExpansoesSelecionados() {
+            if (!await exigirPermissaoAtlas('editar_registro', 'mover elementos entre grupos')) return;
+            const destino = document.getElementById('atlas-exp-projetos-destino')?.value || '';
+            const grupoDestino = ATLAS_EXP_GRUPOS.find(grupo => grupo.id === destino);
+            if (!grupoDestino) {
+                await alertaVisualAtnx('Escolha o destino', 'Selecione o grupo para onde os elementos devem ser movidos.');
+                return;
+            }
+            const ids = idsProjetosExpansoesSelecionados();
+            if (!ids.length) return;
+            const anteriores = new Map();
+            (state.expansoes || []).forEach(projeto => {
+                if (ids.includes(projeto.id)) {
+                    anteriores.set(projeto.id, projeto.grupo || 'em_progresso');
+                    projeto.grupo = grupoDestino.id;
+                }
+            });
+            state.expansoesAbertas[grupoDestino.id] = true;
+            state.expansoesProjetosSelecionados = {};
+            renderExpansoes();
+            exibirStatusTemporario(`Movendo ${ids.length} elemento(s) para ${grupoDestino.titulo}...`, 'bg-[#0073ea]');
+            try {
+                const { error } = await supabaseClient.from('atlas_expansoes').update({ grupo: grupoDestino.id, updated_at: new Date().toISOString() }).in('id', ids);
+                if (error) throw error;
+                await registrarAuditoria('edição', 'expansao', ids.join(','), `${ids.length} elemento(s)`, 'grupo', 'grupos anteriores', grupoDestino.titulo, 'Elementos movidos entre grupos em Expansões > Projetos');
+                exibirStatusTemporario(`✅ ${ids.length} elemento(s) movido(s) para ${grupoDestino.titulo}.`, 'bg-emerald-600');
+            } catch (err) {
+                (state.expansoes || []).forEach(projeto => {
+                    if (anteriores.has(projeto.id)) projeto.grupo = anteriores.get(projeto.id);
+                });
+                renderExpansoes();
+                await alertaVisualAtnx('Erro ao mover elementos', err.message || String(err));
+            }
+        }
+
         function renderProjetoExpansao(projeto) {
             const aberto = !!state.expansoesProjetosAbertos[projeto.id];
             const subs = (state.expansoesSubitems || []).filter(s => s.expansao_id === projeto.id);
             const subitemsHtml = aberto ? renderTabelaSubitemsExpansao(subs, projeto.id) : '';
-            return `<tr class="atlas-exp-row atlas-exp-row-projeto">
-                <td class="atlas-exp-check"><input type="checkbox" aria-label="Selecionar ${escaparHtml(projeto.nome || 'projeto')}" /></td>
+            return `<tr class="atlas-exp-row atlas-exp-row-projeto ${projetoExpansaoSelecionado(projeto.id) ? 'is-selected' : ''}">
+                <td class="atlas-exp-check"><input type="checkbox" aria-label="Selecionar ${escaparHtml(projeto.nome || 'projeto')}" ${projetoExpansaoSelecionado(projeto.id) ? 'checked' : ''} onclick="event.stopPropagation();toggleSelecaoProjetoExpansao('${escaparAtributoJs(projeto.id)}', this.checked)" /></td>
                 <td class="atlas-exp-elemento-cell">
                     <div class="atlas-exp-elemento-inline">
                         <button class="atlas-exp-caret-btn" type="button" onclick="alternarProjetoExpansoes('${projeto.id}')">${aberto ? '⌄' : '›'}</button>
@@ -6558,11 +6673,13 @@ Não encontrei o ID do arquivo no Drive. O Atlas removerá apenas o registro do 
                 <div class="atlas-exp-group-cell"><span>duração da fusão</span><strong>${formatarDuracaoExpansao(resumo.duracaoFusao)}</strong><small>Total</small></div>
             </button>`;
             const linhasProjetos = filtrados.map(renderProjetoExpansao).join('');
+            const selecionadosGrupo = filtrados.filter(projeto => projetoExpansaoSelecionado(projeto.id)).length;
+            const grupoSelecionado = filtrados.length > 0 && selecionadosGrupo === filtrados.length;
             const linhaNova = state.expansaoLinhaNovaGrupo === grupo.id ? renderNovaLinhaProjetoExpansao(grupo.id) : renderLinhaAdicionarProjetoExpansao(grupo.id);
             const table = `<div class="atlas-exp-table-wrap">
                 <table class="atlas-exp-table">
                     <thead><tr>
-                        <th class="atlas-exp-check"><input type="checkbox" disabled /></th>
+                        <th class="atlas-exp-check"><input type="checkbox" aria-label="Selecionar elementos de ${escaparHtml(grupo.titulo)}" ${grupoSelecionado ? 'checked' : ''} ${filtrados.length ? '' : 'disabled'} onchange="event.stopPropagation();toggleSelecaoGrupoProjetosExpansoes('${escaparAtributoJs(grupo.id)}', this.checked)" /></th>
                         <th>Elemento</th>
                         <th></th>
                         <th>Duração Completa</th>
@@ -6592,7 +6709,7 @@ Não encontrei o ID do arquivo no Drive. O Atlas removerá apenas o registro do 
                 </table>
             </div>`;
             const body = aberto ? `<div class="atlas-exp-group-body">${table}</div>` : '';
-            return `<section class="atlas-exp-group">${header}${body}</section>`;
+            return `<section class="atlas-exp-group" data-exp-grupo="${escaparHtml(grupo.id)}">${header}${body}</section>`;
         }
 
         function alternarGrupoExpansoes(id) {
@@ -6962,6 +7079,71 @@ Não encontrei o ID do arquivo no Drive. O Atlas removerá apenas o registro do 
         function existeSelecaoObrasExpansoes() {
             const selecao = obterSelecaoObrasExpansoes();
             return Object.keys(selecao.elementos).length > 0 || Object.keys(selecao.subitems).length > 0;
+        }
+
+        function idsElementosObrasExpansoesSelecionados() {
+            const idsValidos = new Set((state.expansoes || []).filter(ehElementoObraExpansao).map(projeto => projeto.id));
+            return Object.keys(obterSelecaoObrasExpansoes().elementos).filter(id => idsValidos.has(id));
+        }
+
+        function limparSelecaoObrasExpansoes() {
+            state.expansoesObrasSelecionados = { elementos: {}, subitems: {} };
+            renderExpansoes();
+        }
+
+        function renderBarraMoverObrasExpansoes() {
+            const ids = idsElementosObrasExpansoesSelecionados();
+            if (!ids.length) return '';
+            const opcoes = ATLAS_EXP_OBRA_FASES.map(fase => `<option value="${escaparHtml(fase.id)}">${escaparHtml(fase.titulo)}</option>`).join('');
+            return `<div class="atlas-exp-move-toolbar atlas-exp-obras-move-toolbar" role="region" aria-label="Mover elementos selecionados da obra">
+                <div class="atlas-exp-move-summary"><span class="atlas-exp-move-icon" aria-hidden="true">↪</span><strong>${ids.length}</strong><span>elemento(s) selecionado(s)</span></div>
+                <div class="atlas-exp-move-controls">
+                    <label title="Escolher grupo de destino"><select id="atlas-exp-obras-destino" aria-label="Grupo de destino" style="background-color:var(--atlas-exp-move-select-bg)!important;color:var(--atlas-exp-move-select-text)!important;border-color:var(--atlas-exp-move-select-border)!important"><option value="">Mover para o grupo...</option>${opcoes}</select></label>
+                    <button type="button" class="atlas-exp-move-confirm" onclick="moverElementosObrasExpansoesSelecionados()" title="Mover elementos para o grupo escolhido">↪ <span>Mover</span></button>
+                    <button type="button" class="atlas-exp-move-clear" onclick="limparSelecaoObrasExpansoes()" title="Limpar seleção" aria-label="Limpar seleção">×</button>
+                </div>
+            </div>`;
+        }
+
+        async function moverElementosObrasExpansoesSelecionados() {
+            if (!await exigirPermissaoAtlas('editar_registro', 'mover elementos entre os grupos da obra')) return;
+            const faseId = document.getElementById('atlas-exp-obras-destino')?.value || '';
+            const fase = ATLAS_EXP_OBRA_FASES.find(item => item.id === faseId);
+            if (!fase) {
+                await alertaVisualAtnx('Escolha o destino', 'Selecione o grupo para onde os elementos devem ser movidos.');
+                return;
+            }
+            const ids = idsElementosObrasExpansoesSelecionados();
+            if (!ids.length) return;
+            const primeiroElemento = (state.expansoes || []).find(projeto => ids.includes(projeto.id));
+            const nomeObra = obterObraNomeExpansao(primeiroElemento);
+            const anteriores = new Map();
+            const grupoDestino = obterGrupoPadraoPorFaseExpansao(fase.id);
+            (state.expansoes || []).forEach(projeto => {
+                if (ids.includes(projeto.id)) {
+                    anteriores.set(projeto.id, { fase: projeto.fase, grupo: projeto.grupo });
+                    projeto.fase = fase.id;
+                    projeto.grupo = grupoDestino;
+                }
+            });
+            state.expansoesObraAtiva = nomeObra;
+            state.expansoesObrasFasesAbertas[`${nomeObra}::${fase.id}`] = true;
+            state.expansoesObrasSelecionados = { elementos: {}, subitems: {} };
+            renderExpansoes();
+            exibirStatusTemporario(`Movendo ${ids.length} elemento(s) para ${nomeObra} · ${fase.titulo}...`, 'bg-[#0073ea]');
+            try {
+                const { error } = await supabaseClient.from('atlas_expansoes').update({ fase: fase.id, grupo: grupoDestino, updated_at: new Date().toISOString() }).in('id', ids);
+                if (error) throw error;
+                await registrarAuditoria('edição', 'expansao', ids.join(','), `${ids.length} elemento(s)`, 'fase', 'grupos anteriores', fase.titulo, `Elementos movidos entre grupos da obra ${nomeObra}`);
+                exibirStatusTemporario(`✅ ${ids.length} elemento(s) movido(s) para ${nomeObra} · ${fase.titulo}.`, 'bg-emerald-600');
+            } catch (err) {
+                (state.expansoes || []).forEach(projeto => {
+                    const anterior = anteriores.get(projeto.id);
+                    if (anterior) Object.assign(projeto, anterior);
+                });
+                renderExpansoes();
+                await alertaVisualAtnx('Erro ao mover elementos', err.message || String(err));
+            }
         }
 
         function obterSelecaoParaStatusObraExpansao(tipoOrigem, idOrigem) {
@@ -7344,6 +7526,22 @@ Serão removidos ${projetos.length} elemento(s) e ${totalSub} subelemento(s). Os
             return `<tr class="atlas-exp-row atlas-exp-obra-row ${elementoObraExpansaoSelecionado(projeto.id) ? 'is-selected' : ''}">${colunas.map(col => renderCelulaElementoObraExpansao(projeto, col, aberto)).join('')}</tr>${subitemsHtml}`;
         }
 
+        function chaveFaseObraExpansao(nomeObra, faseId) {
+            return `${nomeObra || ''}::${faseId || ''}`;
+        }
+
+        function faseObraExpansaoAberta(nomeObra, faseId) {
+            state.expansoesObrasFasesAbertas = state.expansoesObrasFasesAbertas || {};
+            return state.expansoesObrasFasesAbertas[chaveFaseObraExpansao(nomeObra, faseId)] !== false;
+        }
+
+        function alternarFaseObraExpansao(nomeObra, faseId) {
+            const chave = chaveFaseObraExpansao(nomeObra, faseId);
+            state.expansoesObrasFasesAbertas = state.expansoesObrasFasesAbertas || {};
+            state.expansoesObrasFasesAbertas[chave] = !faseObraExpansaoAberta(nomeObra, faseId);
+            renderExpansoes();
+        }
+
         function renderGrupoFaseObraExpansao(nomeObra, fase, projetos) {
             const filtrados = projetos.filter(p => normalizarFaseObraExpansao(p.fase, p.nome) === fase.id);
             const totalSub = filtrados.reduce((acc, p) => acc + obterSubitemsDaExpansao(p.id).length, 0);
@@ -7351,11 +7549,12 @@ Serão removidos ${projetos.length} elemento(s) e ${totalSub} subelemento(s). Os
             const colunas = obterColunasElementoObraExpansao(fase.id);
             const nomeJs = escaparAtributoJs(nomeObra);
             const faseJs = escaparAtributoJs(fase.id);
+            const aberto = faseObraExpansaoAberta(nomeObra, fase.id);
             const resumoSelecao = obterResumoSelecaoGrupoFaseObraExpansao(nomeObra, fase.id, filtrados);
             const textoSelecaoGrupo = textoResumoSelecaoGrupoFaseObraExpansao(resumoSelecao);
-            return `<section class="atlas-exp-obra-fase" style="--atlas-exp-color:${fase.cor}">
+            return `<section class="atlas-exp-obra-fase ${aberto ? '' : 'is-collapsed'}" style="--atlas-exp-color:${fase.cor}">
                 <div class="atlas-exp-obra-fase-head">
-                    <button class="atlas-exp-obra-fase-toggle" type="button" onclick="this.closest('.atlas-exp-obra-fase')?.classList.toggle('is-collapsed')"><span class="atlas-exp-fase-caret">⌄</span><strong>${escaparHtml(fase.titulo)}</strong></button>
+                    <button class="atlas-exp-obra-fase-toggle" type="button" aria-expanded="${aberto ? 'true' : 'false'}" onclick="alternarFaseObraExpansao('${nomeJs}','${faseJs}')"><span class="atlas-exp-fase-caret">⌄</span><strong>${escaparHtml(fase.titulo)}</strong></button>
                     <small>${filtrados.length} Elementos / ${totalSub} subelementos</small>
                     <label class="atlas-exp-obras-select-group" onclick="event.stopPropagation()" title="Selecionar todos os itens deste grupo">
                         <input type="checkbox" data-exp-select-grupo data-obra="${escaparHtml(nomeObra)}" data-fase="${escaparHtml(fase.id)}" ${resumoSelecao.checked ? 'checked' : ''} ${resumoSelecao.total ? '' : 'disabled'} onchange="event.stopPropagation();toggleSelecaoGrupoFaseObraExpansao('${nomeJs}','${faseJs}',this.checked)">
@@ -7386,9 +7585,7 @@ Serão removidos ${projetos.length} elemento(s) e ${totalSub} subelemento(s). Os
             const conteudo = grupoSelecionado
                 ? renderObraExpansao(grupoSelecionado[0], grupoSelecionado[1])
                 : `<div class="atlas-v13-card atlas-v13-empty">Nenhuma obra de Expansões cadastrada. Clique em “Criar obra” para começar.</div>`;
-            const totalSelecionados = Object.keys(obterSelecaoObrasExpansoes().elementos).length + Object.keys(obterSelecaoObrasExpansoes().subitems).length;
-            const textoSelecionados = totalSelecionados ? `${totalSelecionados} selecionado(s)` : 'Nenhum item selecionado';
-            return `<div class="atlas-exp-obras-shell">${conteudo}</div>`;
+            return `<div class="atlas-exp-obras-shell">${renderBarraMoverObrasExpansoes()}${conteudo}</div>`;
         }
 
         async function criarObraExpansoes() {
@@ -8577,7 +8774,7 @@ Serão removidos ${projetos.length} elemento(s) e ${totalSub} subelemento(s). Os
                 painel.innerHTML = `<div class="atlas-module-shell atlas-pmo-shell">
                     <div class="atlas-module-titlebar">
                         <div>
-                            <div class="atlas-module-kicker">Atlas V1.3.6 Oficial</div>
+                            <div class="atlas-module-kicker">Gestão de projetos</div>
                             <h2>PMO</h2>
                             <p>Análise de Novos Projetos.</p>
                         </div>
@@ -9218,7 +9415,7 @@ Serão removidos ${projetos.length} elemento(s) e ${totalSub} subelemento(s). Os
             const subitemsObras = (state.expansoesSubitems || []).filter(sub => idsObras.has(sub.expansao_id));
             const totais = { grupos: ATLAS_EXP_GRUPOS.length, projetos: projetosManuais.length, obras: nomesObras.size, elementosObras: elementosObras.length, subelementos: subitemsManuais.length, subelementosObras: subitemsObras.length };
             const toolbar = `<div class="atlas-exp-toolbar atlas-exp-toolbar-minimal">
-                <div><div class="atlas-exp-kicker">Atlas V1.3.6 Oficial</div><h2>Expansões</h2><p>Projetos, Gantt e Obras.</p></div>
+                <div><div class="atlas-exp-kicker">Gestão de expansões</div><h2>Expansões</h2><p>Projetos, Gantt e Obras.</p></div>
                 <div class="atlas-exp-toolbar-right">
                     <div class="atlas-exp-summary"><span>${totais.grupos} grupos</span><span>${totais.projetos} projetos</span><span>${totais.obras} obras</span><span>${totais.subelementos + totais.subelementosObras} subelementos</span></div>
                     <div class="atlas-exp-drive-actions">
@@ -9235,7 +9432,7 @@ Serão removidos ${projetos.length} elemento(s) e ${totalSub} subelemento(s). Os
                 ? renderGanttExpansoes(projetosManuais, termo)
                 : state.expansoesVisualizacao === 'obras'
                     ? renderExpansoesObras(elementosObras, termo)
-                    : `<div class="atlas-exp-board">${ATLAS_EXP_GRUPOS.map(grupo => renderGrupoExpansao(grupo, projetosManuais.filter(p => (p.grupo || 'em_progresso') === grupo.id), termo)).join('')}</div>`;
+                    : `<div class="atlas-exp-board">${renderBarraMoverProjetosExpansoes()}${ATLAS_EXP_GRUPOS.map(grupo => renderGrupoExpansao(grupo, projetosManuais.filter(p => (p.grupo || 'em_progresso') === grupo.id), termo)).join('')}</div>`;
             painel.innerHTML = `${toolbar}${board}`;
             if (state.expansoesVisualizacao === 'obras') {
                 setTimeout(() => {
@@ -10088,7 +10285,35 @@ Imagens afetadas: ${totalImagens}.`,
             }
         });
 
-        window.onload = () => { inicializarAtlasV14Auth(); };
+        let atlasViewportCompacto = null;
+
+        function aplicarLayoutResponsivoAtlas() {
+            const compacto = window.matchMedia('(max-width: 900px)').matches;
+            document.body.classList.toggle('atlas-viewport-compacto', compacto);
+            if (atlasViewportCompacto === null || atlasViewportCompacto !== compacto) {
+                state.sidebarAberta = !compacto;
+                atlasViewportCompacto = compacto;
+            }
+            aplicarEstadoSidebarAtlas();
+        }
+
+        document.addEventListener('click', event => {
+            if (!window.matchMedia('(max-width: 900px)').matches) return;
+            if (event.target.closest('#sidebar-container .atnx-sidebar-submodule, #sidebar-obras button, #btn-modulo-admin-central')) {
+                setTimeout(fecharSidebarResponsiva, 0);
+            }
+        });
+
+        let atlasResizeTimer = 0;
+        window.addEventListener('resize', () => {
+            clearTimeout(atlasResizeTimer);
+            atlasResizeTimer = setTimeout(aplicarLayoutResponsivoAtlas, 120);
+        }, { passive: true });
+
+        window.onload = () => {
+            aplicarLayoutResponsivoAtlas();
+            inicializarAtlasV14Auth();
+        };
 
 
 /* ATNX V1.3.2.4 — neutralizador de hover/tooltips das barras do Gantt
@@ -10512,16 +10737,28 @@ Imagens afetadas: ${totalImagens}.`,
         return visible - centerPenalty;
     }
 
+    function normalizeTarget(el){
+        if (!el) return null;
+        if (el.matches?.('#painel-expansoes .atlas-exp-board .atlas-exp-sub-table-wrap')) {
+            return el.closest('.atlas-exp-table-wrap') || el;
+        }
+        return el;
+    }
+
     function candidateFromEventTarget(target){
-        const el = target?.closest?.(TARGET_SELECTOR);
+        const el = normalizeTarget(target?.closest?.(TARGET_SELECTOR));
         return isScrollableX(el) ? el : null;
     }
 
     function findBestTarget(){
-        if (isScrollableX(activeTarget)) return activeTarget;
-        const focused = document.activeElement?.closest?.(TARGET_SELECTOR);
+        const normalizedActive = normalizeTarget(activeTarget);
+        if (isScrollableX(normalizedActive)) {
+            activeTarget = normalizedActive;
+            return normalizedActive;
+        }
+        const focused = normalizeTarget(document.activeElement?.closest?.(TARGET_SELECTOR));
         if (isScrollableX(focused)) return focused;
-        const list = Array.from(document.querySelectorAll(TARGET_SELECTOR)).filter(isScrollableX);
+        const list = [...new Set(Array.from(document.querySelectorAll(TARGET_SELECTOR)).map(normalizeTarget))].filter(isScrollableX);
         if (!list.length) return null;
         return list.sort((a, b) => visibleScore(b) - visibleScore(a))[0];
     }
@@ -10899,4 +11136,122 @@ Imagens afetadas: ${totalImagens}.`,
 })();
 
 /* V1.3.5 — PMO copia para Expansões: ao mudar status, cria/atualiza o projeto espelhado em Expansões > Projetos. */
+
+/* Atlas V1.4.1 - bloqueio de zoom em telas moveis. */
+(function atlasV141BloqueioZoomMobile(){
+    if (window.__ATLAS_V141_ZOOM_MOBILE__) return;
+    window.__ATLAS_V141_ZOOM_MOBILE__ = true;
+    const mobile = window.matchMedia('(max-width: 900px)');
+
+    function bloquearGesto(event){
+        if (mobile.matches) event.preventDefault();
+    }
+
+    ['gesturestart', 'gesturechange', 'gestureend'].forEach(tipo => {
+        document.addEventListener(tipo, bloquearGesto, { passive: false, capture: true });
+    });
+    document.addEventListener('touchmove', function(event){
+        if (mobile.matches && event.touches?.length > 1) event.preventDefault();
+    }, { passive: false, capture: true });
+    document.addEventListener('wheel', function(event){
+        if (mobile.matches && event.ctrlKey) event.preventDefault();
+    }, { passive: false, capture: true });
+})();
+
+/* Atlas V1.4.1 - uma unica posicao horizontal por grupo em Expansoes > Projetos. */
+(function atlasV141SincronizarScrollProjetosExpansoes(){
+    if (window.__ATLAS_V141_EXP_PROJETOS_SCROLL__) return;
+    window.__ATLAS_V141_EXP_PROJETOS_SCROLL__ = true;
+    const GROUP_SELECTOR = '#painel-expansoes .atlas-exp-board .atlas-exp-group';
+    const posicoesPorGrupo = new Map();
+    let raf = 0;
+
+    function maxLeft(elemento){
+        return Math.max(0, Number(elemento?.scrollWidth || 0) - Number(elemento?.clientWidth || 0));
+    }
+
+    function targetsDoGrupo(grupo){
+        const principal = grupo?.querySelector('.atlas-exp-table-wrap');
+        if (!principal) return [];
+        return [principal, ...grupo.querySelectorAll('.atlas-exp-sub-table-wrap')];
+    }
+
+    function chaveDoGrupo(grupo){
+        return String(grupo?.dataset?.expGrupo || grupo?.querySelector('.atlas-exp-group-title')?.textContent || '').trim();
+    }
+
+    function aplicarProporcao(grupo, proporcao, origem = null){
+        grupo.__atlasExpScrollSyncing = true;
+        targetsDoGrupo(grupo).forEach(destino => {
+            if (destino === origem) return;
+            const proximo = Math.round(maxLeft(destino) * proporcao);
+            destino.__atlasExpLastHorizontal = proximo;
+            if (Math.abs(Number(destino.scrollLeft || 0) - proximo) > 1) destino.scrollLeft = proximo;
+        });
+        requestAnimationFrame(() => {
+            grupo.__atlasExpScrollSyncing = false;
+        });
+    }
+
+    function sincronizar(grupo, origem){
+        if (!grupo || grupo.__atlasExpScrollSyncing) return;
+        const maxOrigem = maxLeft(origem);
+        const proporcao = maxOrigem > 0 ? Math.max(0, Math.min(1, Number(origem.scrollLeft || 0) / maxOrigem)) : 0;
+        const chave = chaveDoGrupo(grupo);
+        if (chave) posicoesPorGrupo.set(chave, proporcao);
+        aplicarProporcao(grupo, proporcao, origem);
+    }
+
+    function vincularAlvo(grupo, alvo){
+        if (!alvo || alvo.__atlasExpHorizontalBound) return;
+        alvo.__atlasExpHorizontalBound = true;
+        alvo.__atlasExpLastHorizontal = Number(alvo.scrollLeft || 0);
+        alvo.addEventListener('scroll', function(){
+            const atual = Number(alvo.scrollLeft || 0);
+            if (Math.abs(atual - Number(alvo.__atlasExpLastHorizontal || 0)) <= 1) return;
+            alvo.__atlasExpLastHorizontal = atual;
+            sincronizar(grupo, alvo);
+        }, { passive: true });
+    }
+
+    function vincularGrupo(grupo){
+        const alvos = targetsDoGrupo(grupo);
+        if (!alvos.length) return;
+        alvos.forEach(alvo => vincularAlvo(grupo, alvo));
+        const principal = alvos[0];
+        const chave = chaveDoGrupo(grupo);
+        if (chave && posicoesPorGrupo.has(chave)) {
+            aplicarProporcao(grupo, posicoesPorGrupo.get(chave));
+        } else if (alvos.length > 1) {
+            sincronizar(grupo, principal);
+        }
+    }
+
+    function atualizar(){
+        raf = 0;
+        document.querySelectorAll(GROUP_SELECTOR).forEach(vincularGrupo);
+    }
+
+    function agendar(){
+        if (raf) cancelAnimationFrame(raf);
+        raf = requestAnimationFrame(atualizar);
+    }
+
+    document.addEventListener('pointerdown', function(event){
+        const grupo = event.target?.closest?.(GROUP_SELECTOR);
+        if (grupo) vincularGrupo(grupo);
+    }, { passive: true, capture: true });
+    window.addEventListener('resize', agendar, { passive: true });
+    window.addEventListener('atlas-layout-change', agendar, { passive: true });
+
+    const observer = new MutationObserver(agendar);
+    function iniciar(){
+        if (document.body) observer.observe(document.body, { childList: true, subtree: true });
+        agendar();
+    }
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', iniciar);
+    else iniciar();
+
+    window.atlasV141AtualizarScrollProjetosExpansoes = agendar;
+})();
 
