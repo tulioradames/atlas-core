@@ -12259,6 +12259,76 @@ button {
     }
 }
 
+/* V1.4.1 - Ações dos subelementos contidas na própria coluna. */
+#painel-expansoes .atlas-exp-board .atlas-exp-sub-table th:nth-child(3),
+#painel-expansoes .atlas-exp-board .atlas-exp-sub-table td:nth-child(3),
+#painel-expansoes .atlas-exp-board .atlas-exp-sub-table td.atlas-exp-mini-actions {
+    box-sizing: border-box !important;
+    width: 126px !important;
+    min-width: 126px !important;
+    max-width: 126px !important;
+}
+
+#painel-expansoes .atlas-exp-board .atlas-exp-sub-table td.atlas-exp-sub-name-cell {
+    overflow: hidden !important;
+}
+
+#painel-expansoes .atlas-exp-board .atlas-exp-sub-table td.atlas-exp-sub-name-cell .atlas-exp-cell-control {
+    box-sizing: border-box !important;
+    width: 100% !important;
+    max-width: 100% !important;
+}
+
+#painel-expansoes .atlas-exp-board .atlas-exp-sub-table td.atlas-exp-mini-actions {
+    position: static !important;
+    z-index: auto !important;
+    overflow: hidden !important;
+    padding: 6px 10px !important;
+    text-align: center !important;
+}
+
+#painel-expansoes .atlas-exp-board .atlas-exp-sub-actions {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    width: 100%;
+    min-width: 0;
+}
+
+#painel-expansoes .atlas-exp-board .atlas-exp-sub-actions button {
+    flex: 0 0 30px !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    box-sizing: border-box !important;
+    width: 30px !important;
+    height: 30px !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    line-height: 1 !important;
+}
+
+#painel-expansoes .atlas-exp-board .atlas-exp-sub-actions button:first-child {
+    border-color: rgba(96, 165, 250, .48) !important;
+    color: #bfdbfe !important;
+}
+
+#painel-expansoes .atlas-exp-board .atlas-exp-sub-actions button:last-child {
+    border-color: rgba(248, 113, 113, .42) !important;
+    color: #fecaca !important;
+}
+
+body.atnx-theme-light #painel-expansoes .atlas-exp-board .atlas-exp-sub-actions button:first-child {
+    color: #1d4ed8 !important;
+    border-color: #93c5fd !important;
+}
+
+body.atnx-theme-light #painel-expansoes .atlas-exp-board .atlas-exp-sub-actions button:last-child {
+    color: #b91c1c !important;
+    border-color: #fca5a5 !important;
+}
+
 @media (max-width: 600px) {
     #status-banco-alerta {
         padding: 6px 8px !important;
@@ -12797,4 +12867,462 @@ html body:not(.atnx-theme-light) select#atlas-exp-projetos-destino option,
 html body:not(.atnx-theme-light) select#atlas-exp-obras-destino option {
     background-color: #0f172a !important;
     color: #e2e8f0 !important;
+}
+
+/* V1.4.1 - Expansões > Projetos: altura dos subelementos ajustável pelo usuário. */
+#painel-expansoes .atlas-exp-board .atlas-exp-sub-resizable {
+    position: relative;
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
+    padding-bottom: 0;
+    background: rgba(16, 185, 129, .035);
+}
+
+#painel-expansoes .atlas-exp-board .atlas-exp-sub-resizable .atlas-exp-sub-table-wrap {
+    box-sizing: border-box !important;
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    overflow-x: auto !important;
+    overflow-y: visible !important;
+    border-bottom: 0 !important;
+}
+
+#painel-expansoes .atlas-exp-board .atlas-exp-sub-resizable .atlas-exp-sub-table-wrap.atlas-exp-sub-user-sized {
+    height: var(--atlas-exp-sub-user-height) !important;
+    min-height: 120px !important;
+    max-height: none !important;
+    overflow-y: auto !important;
+    overscroll-behavior-y: contain !important;
+}
+
+#painel-expansoes .atlas-exp-board .atlas-exp-sub-resize-line {
+    position: relative;
+    z-index: 140;
+    display: block;
+    box-sizing: border-box;
+    width: 100%;
+    height: 12px;
+    min-height: 12px;
+    margin: 0;
+    border: 0;
+    border-top: 2px solid #3b82f6;
+    background: rgba(59, 130, 246, .08);
+    cursor: ns-resize;
+    touch-action: none !important;
+}
+
+#painel-expansoes .atlas-exp-board .atlas-exp-sub-resize-line:hover,
+#painel-expansoes .atlas-exp-board .atlas-exp-sub-resize-line:focus-visible,
+#painel-expansoes .atlas-exp-board .atlas-exp-sub-resize-line.is-dragging {
+    border-top-color: #60a5fa;
+    background: rgba(59, 130, 246, .20);
+    outline: none;
+}
+
+body.atnx-theme-light #painel-expansoes .atlas-exp-board .atlas-exp-sub-resize-line {
+    border-top-color: #60a5fa;
+    background: rgba(37, 99, 235, .06);
+}
+
+body.atnx-theme-light #painel-expansoes .atlas-exp-board .atlas-exp-sub-resize-line:hover,
+body.atnx-theme-light #painel-expansoes .atlas-exp-board .atlas-exp-sub-resize-line:focus-visible,
+body.atnx-theme-light #painel-expansoes .atlas-exp-board .atlas-exp-sub-resize-line.is-dragging {
+    border-top-color: #2563eb;
+    background: rgba(37, 99, 235, .14);
+}
+
+body.atnx-theme-light #painel-expansoes .atlas-exp-board .atlas-exp-sub-resizable {
+    background: rgba(16, 185, 129, .025);
+}
+
+/* Cada elemento expandido cresce com suas linhas e não é cortado pelo grupo. */
+body.atlas-exp-projetos-scroll-mode #painel-expansoes .atlas-exp-board,
+body.atlas-exp-projetos-scroll-mode #painel-expansoes .atlas-exp-group,
+body.atlas-exp-projetos-scroll-mode #painel-expansoes .atlas-exp-group-body {
+    height: auto !important;
+    max-height: none !important;
+    overflow-y: visible !important;
+}
+
+body.atlas-exp-projetos-scroll-mode #painel-expansoes .atlas-exp-table-wrap {
+    height: auto !important;
+    max-height: none !important;
+    overflow-x: auto !important;
+    overflow-y: visible !important;
+}
+
+#painel-expansoes .atlas-exp-board .atlas-exp-sub-table-row,
+#painel-expansoes .atlas-exp-board .atlas-exp-sub-table-row > td {
+    height: auto !important;
+    max-height: none !important;
+    overflow-y: visible !important;
+}
+
+#painel-expansoes .atlas-exp-board .atlas-exp-sub-table-row > td {
+    border-bottom: 0 !important;
+}
+
+#painel-expansoes .atlas-exp-board .atlas-exp-sub-table tbody tr:last-child td {
+    border-bottom-color: rgba(16, 185, 129, .38) !important;
+}
+
+body.atlas-exp-sub-resizing,
+body.atlas-exp-sub-resizing * {
+    cursor: ns-resize !important;
+    user-select: none !important;
+}
+
+@media (max-width: 900px) {
+    #painel-expansoes .atlas-exp-board .atlas-exp-sub-resize-line {
+        height: 20px;
+        min-height: 20px;
+    }
+}
+
+/* V1.4.1 - Hierarquia visual única para elementos e subelementos em todo o Atlas. */
+body {
+    --atlas-hierarchy-gap: #0b1220;
+    --atlas-hierarchy-border: rgba(96, 165, 250, .42);
+    --atlas-hierarchy-child-border: rgba(16, 185, 129, .34);
+}
+
+body.atnx-theme-light {
+    --atlas-hierarchy-gap: #e8eef7;
+    --atlas-hierarchy-border: rgba(37, 99, 235, .34);
+    --atlas-hierarchy-child-border: rgba(5, 150, 105, .30);
+}
+
+table > tbody > tr.atlas-hierarchy-parent:not(:first-child) > td {
+    border-top: 6px solid var(--atlas-hierarchy-gap) !important;
+}
+
+table > tbody > tr.atlas-hierarchy-parent > td:first-child {
+    box-shadow: inset 3px 0 0 var(--atlas-hierarchy-border);
+}
+
+table > tbody > tr.atlas-hierarchy-children > td {
+    border-bottom: 2px solid var(--atlas-hierarchy-border) !important;
+}
+
+table > tbody > tr.atlas-hierarchy-child > td:first-child {
+    box-shadow: inset 3px 0 0 var(--atlas-hierarchy-child-border);
+}
+
+/* Expansões: o subelemento começa na mesma origem horizontal do elemento. */
+#painel-expansoes .atlas-exp-board .atlas-exp-sub-table-wrap {
+    padding-left: 0 !important;
+}
+
+#painel-expansoes .atlas-exp-board .atlas-exp-sub-table th:nth-child(2),
+#painel-expansoes .atlas-exp-board .atlas-exp-sub-table td.atlas-exp-sub-name-cell {
+    width: 360px !important;
+    min-width: 360px !important;
+    max-width: 360px !important;
+}
+
+#painel-expansoes .atlas-exp-board .atlas-exp-sub-resize-line {
+    border-bottom: 4px solid var(--atlas-hierarchy-gap);
+}
+
+/* Documentação: remove o recuo do quadro interno e preserva um fechamento discreto. */
+#tabela-elementos > tr.atlas-hierarchy-children > td,
+#tabela-elementos > tbody > tr.atlas-hierarchy-children > td {
+    padding: 0 0 6px !important;
+    background: var(--atlas-min-surface-soft, #111827) !important;
+}
+
+#tabela-elementos tr.atlas-hierarchy-children table {
+    width: 100% !important;
+    margin: 0 !important;
+    border-left: 0 !important;
+    border-right: 0 !important;
+}
+
+/* PMO: os detalhes acompanham a largura do elemento e encerram antes do próximo. */
+.atlas-pmo-detail-row.atlas-hierarchy-children > td {
+    padding: 0 0 6px !important;
+}
+
+.atlas-pmo-detail-row .atlas-pmo-detail-card {
+    margin: 0 !important;
+    border-radius: 0 0 6px 6px !important;
+    border-left: 0 !important;
+    border-right: 0 !important;
+}
+
+@media (max-width: 900px) {
+    table > tbody > tr.atlas-hierarchy-parent:not(:first-child) > td {
+        border-top-width: 5px !important;
+    }
+
+    #painel-expansoes .atlas-exp-board .atlas-exp-sub-table th:nth-child(2),
+    #painel-expansoes .atlas-exp-board .atlas-exp-sub-table td.atlas-exp-sub-name-cell {
+        width: 320px !important;
+        min-width: 320px !important;
+        max-width: 320px !important;
+    }
+}
+
+/* Grade definitiva de Expansões: sem sobreposição horizontal entre controles. */
+#painel-expansoes .atlas-exp-board .atlas-exp-table,
+#painel-expansoes .atlas-exp-board .atlas-exp-sub-table {
+    table-layout: fixed !important;
+    border-collapse: separate !important;
+    border-spacing: 0 !important;
+}
+
+#painel-expansoes .atlas-exp-board .atlas-exp-table {
+    width: 4450px !important;
+    min-width: 4450px !important;
+    max-width: 4450px !important;
+}
+
+#painel-expansoes .atlas-exp-board .atlas-exp-sub-table {
+    width: 2310px !important;
+    min-width: 2310px !important;
+    max-width: 2310px !important;
+}
+
+#painel-expansoes .atlas-exp-board .atlas-exp-table td,
+#painel-expansoes .atlas-exp-board .atlas-exp-sub-table td,
+#painel-expansoes .atlas-exp-obras-shell .atlas-exp-obra-table td,
+#painel-expansoes .atlas-exp-obras-shell .atlas-exp-obra-sub-table td {
+    position: static !important;
+    inset: auto !important;
+    left: auto !important;
+    right: auto !important;
+    z-index: auto !important;
+}
+
+#painel-expansoes .atlas-exp-board .atlas-exp-table tbody td:nth-child(1),
+#painel-expansoes .atlas-exp-board .atlas-exp-table tbody td.atlas-exp-elemento-cell,
+#painel-expansoes .atlas-exp-board .atlas-exp-table tbody td:nth-child(3),
+#painel-expansoes .atlas-exp-board .atlas-exp-sub-table tbody td:nth-child(1),
+#painel-expansoes .atlas-exp-board .atlas-exp-sub-table tbody td.atlas-exp-sub-name-cell,
+#painel-expansoes .atlas-exp-board .atlas-exp-sub-table tbody td:nth-child(3),
+#painel-expansoes .atlas-exp-board .atlas-exp-sub-table tbody td.atlas-exp-mini-actions {
+    position: static !important;
+    inset: auto !important;
+    left: auto !important;
+    right: auto !important;
+    z-index: auto !important;
+    box-shadow: none !important;
+}
+
+#painel-expansoes .atlas-exp-board .atlas-exp-table th,
+#painel-expansoes .atlas-exp-board .atlas-exp-sub-table th,
+#painel-expansoes .atlas-exp-obras-shell .atlas-exp-obra-table th,
+#painel-expansoes .atlas-exp-obras-shell .atlas-exp-obra-sub-table th {
+    position: sticky !important;
+    top: 0 !important;
+    left: auto !important;
+    right: auto !important;
+    z-index: 4 !important;
+}
+
+#painel-expansoes .atlas-exp-board .atlas-exp-table thead th:nth-child(1),
+#painel-expansoes .atlas-exp-board .atlas-exp-table thead th:nth-child(2),
+#painel-expansoes .atlas-exp-board .atlas-exp-table thead th:nth-child(3),
+#painel-expansoes .atlas-exp-board .atlas-exp-sub-table thead th:nth-child(1),
+#painel-expansoes .atlas-exp-board .atlas-exp-sub-table thead th:nth-child(2),
+#painel-expansoes .atlas-exp-board .atlas-exp-sub-table thead th:nth-child(3) {
+    position: sticky !important;
+    top: 0 !important;
+    bottom: auto !important;
+    left: auto !important;
+    right: auto !important;
+    z-index: 4 !important;
+    box-shadow: none !important;
+}
+
+#painel-expansoes .atlas-exp-board .atlas-exp-table td,
+#painel-expansoes .atlas-exp-board .atlas-exp-table th,
+#painel-expansoes .atlas-exp-board .atlas-exp-sub-table td,
+#painel-expansoes .atlas-exp-board .atlas-exp-sub-table th {
+    box-sizing: border-box !important;
+    overflow: hidden !important;
+}
+
+#painel-expansoes .atlas-exp-board .atlas-exp-table td:nth-child(1),
+#painel-expansoes .atlas-exp-board .atlas-exp-table th:nth-child(1),
+#painel-expansoes .atlas-exp-board .atlas-exp-sub-table td:nth-child(1),
+#painel-expansoes .atlas-exp-board .atlas-exp-sub-table th:nth-child(1) {
+    width: 44px !important; min-width: 44px !important; max-width: 44px !important;
+}
+
+#painel-expansoes .atlas-exp-board .atlas-exp-table td:nth-child(2),
+#painel-expansoes .atlas-exp-board .atlas-exp-table th:nth-child(2),
+#painel-expansoes .atlas-exp-board .atlas-exp-sub-table td:nth-child(2),
+#painel-expansoes .atlas-exp-board .atlas-exp-sub-table th:nth-child(2) {
+    width: 520px !important; min-width: 520px !important; max-width: 520px !important;
+}
+
+#painel-expansoes .atlas-exp-board .atlas-exp-table td:nth-child(3),
+#painel-expansoes .atlas-exp-board .atlas-exp-table th:nth-child(3),
+#painel-expansoes .atlas-exp-board .atlas-exp-sub-table td:nth-child(3),
+#painel-expansoes .atlas-exp-board .atlas-exp-sub-table th:nth-child(3) {
+    width: 126px !important; min-width: 126px !important; max-width: 126px !important;
+}
+
+#painel-expansoes .atlas-exp-board .atlas-exp-sub-table td:nth-child(4),
+#painel-expansoes .atlas-exp-board .atlas-exp-sub-table th:nth-child(4) {
+    width: 220px !important; min-width: 220px !important; max-width: 220px !important;
+}
+
+#painel-expansoes .atlas-exp-board .atlas-exp-sub-table td:nth-child(5),
+#painel-expansoes .atlas-exp-board .atlas-exp-sub-table th:nth-child(5),
+#painel-expansoes .atlas-exp-board .atlas-exp-sub-table td:nth-child(6),
+#painel-expansoes .atlas-exp-board .atlas-exp-sub-table th:nth-child(6),
+#painel-expansoes .atlas-exp-board .atlas-exp-sub-table td:nth-child(8),
+#painel-expansoes .atlas-exp-board .atlas-exp-sub-table th:nth-child(8),
+#painel-expansoes .atlas-exp-board .atlas-exp-sub-table td:nth-child(9),
+#painel-expansoes .atlas-exp-board .atlas-exp-sub-table th:nth-child(9),
+#painel-expansoes .atlas-exp-board .atlas-exp-sub-table td:nth-child(11),
+#painel-expansoes .atlas-exp-board .atlas-exp-sub-table th:nth-child(11),
+#painel-expansoes .atlas-exp-board .atlas-exp-sub-table td:nth-child(12),
+#painel-expansoes .atlas-exp-board .atlas-exp-sub-table th:nth-child(12) {
+    width: 180px !important; min-width: 180px !important; max-width: 180px !important;
+}
+
+#painel-expansoes .atlas-exp-board .atlas-exp-sub-table td:nth-child(7),
+#painel-expansoes .atlas-exp-board .atlas-exp-sub-table th:nth-child(7) {
+    width: 130px !important; min-width: 130px !important; max-width: 130px !important;
+}
+
+#painel-expansoes .atlas-exp-board .atlas-exp-sub-table td:nth-child(10),
+#painel-expansoes .atlas-exp-board .atlas-exp-sub-table th:nth-child(10) {
+    width: 190px !important; min-width: 190px !important; max-width: 190px !important;
+}
+
+#painel-expansoes .atlas-exp-board .atlas-exp-table td:nth-child(4),
+#painel-expansoes .atlas-exp-board .atlas-exp-table th:nth-child(4),
+#painel-expansoes .atlas-exp-board .atlas-exp-table td:nth-child(8),
+#painel-expansoes .atlas-exp-board .atlas-exp-table th:nth-child(8) {
+    width: 220px !important; min-width: 220px !important; max-width: 220px !important;
+}
+
+#painel-expansoes .atlas-exp-board .atlas-exp-table td:nth-child(5),
+#painel-expansoes .atlas-exp-board .atlas-exp-table th:nth-child(5) {
+    width: 170px !important; min-width: 170px !important; max-width: 170px !important;
+}
+
+#painel-expansoes .atlas-exp-board .atlas-exp-table td:nth-child(6),
+#painel-expansoes .atlas-exp-board .atlas-exp-table th:nth-child(6),
+#painel-expansoes .atlas-exp-board .atlas-exp-table td:nth-child(7),
+#painel-expansoes .atlas-exp-board .atlas-exp-table th:nth-child(7),
+#painel-expansoes .atlas-exp-board .atlas-exp-table td:nth-child(15),
+#painel-expansoes .atlas-exp-board .atlas-exp-table th:nth-child(15),
+#painel-expansoes .atlas-exp-board .atlas-exp-table td:nth-child(19),
+#painel-expansoes .atlas-exp-board .atlas-exp-table th:nth-child(19),
+#painel-expansoes .atlas-exp-board .atlas-exp-table td:nth-child(20),
+#painel-expansoes .atlas-exp-board .atlas-exp-table th:nth-child(20) {
+    width: 160px !important; min-width: 160px !important; max-width: 160px !important;
+}
+
+#painel-expansoes .atlas-exp-board .atlas-exp-table td:nth-child(9),
+#painel-expansoes .atlas-exp-board .atlas-exp-table th:nth-child(9),
+#painel-expansoes .atlas-exp-board .atlas-exp-table td:nth-child(10),
+#painel-expansoes .atlas-exp-board .atlas-exp-table th:nth-child(10),
+#painel-expansoes .atlas-exp-board .atlas-exp-table td:nth-child(12),
+#painel-expansoes .atlas-exp-board .atlas-exp-table th:nth-child(12),
+#painel-expansoes .atlas-exp-board .atlas-exp-table td:nth-child(21),
+#painel-expansoes .atlas-exp-board .atlas-exp-table th:nth-child(21) {
+    width: 180px !important; min-width: 180px !important; max-width: 180px !important;
+}
+
+#painel-expansoes .atlas-exp-board .atlas-exp-table td:nth-child(11),
+#painel-expansoes .atlas-exp-board .atlas-exp-table th:nth-child(11),
+#painel-expansoes .atlas-exp-board .atlas-exp-table td:nth-child(13),
+#painel-expansoes .atlas-exp-board .atlas-exp-table th:nth-child(13),
+#painel-expansoes .atlas-exp-board .atlas-exp-table td:nth-child(22),
+#painel-expansoes .atlas-exp-board .atlas-exp-table th:nth-child(22) {
+    width: 140px !important; min-width: 140px !important; max-width: 140px !important;
+}
+
+#painel-expansoes .atlas-exp-board .atlas-exp-table td:nth-child(14),
+#painel-expansoes .atlas-exp-board .atlas-exp-table th:nth-child(14),
+#painel-expansoes .atlas-exp-board .atlas-exp-table td:nth-child(23),
+#painel-expansoes .atlas-exp-board .atlas-exp-table th:nth-child(23) {
+    width: 190px !important; min-width: 190px !important; max-width: 190px !important;
+}
+
+#painel-expansoes .atlas-exp-board .atlas-exp-table td:nth-child(16),
+#painel-expansoes .atlas-exp-board .atlas-exp-table th:nth-child(16) {
+    width: 200px !important; min-width: 200px !important; max-width: 200px !important;
+}
+
+#painel-expansoes .atlas-exp-board .atlas-exp-table td:nth-child(17),
+#painel-expansoes .atlas-exp-board .atlas-exp-table th:nth-child(17),
+#painel-expansoes .atlas-exp-board .atlas-exp-table td:nth-child(18),
+#painel-expansoes .atlas-exp-board .atlas-exp-table th:nth-child(18) {
+    width: 150px !important; min-width: 150px !important; max-width: 150px !important;
+}
+
+#painel-expansoes .atlas-exp-board .atlas-exp-table td:nth-child(24),
+#painel-expansoes .atlas-exp-board .atlas-exp-table th:nth-child(24) {
+    width: 220px !important; min-width: 220px !important; max-width: 220px !important;
+}
+
+#painel-expansoes .atlas-exp-board .atlas-exp-table td:nth-child(25),
+#painel-expansoes .atlas-exp-board .atlas-exp-table th:nth-child(25) {
+    width: 110px !important; min-width: 110px !important; max-width: 110px !important;
+}
+
+#painel-expansoes .atlas-exp-board .atlas-exp-table .atlas-exp-cell-control,
+#painel-expansoes .atlas-exp-board .atlas-exp-sub-table .atlas-exp-cell-control,
+#painel-expansoes .atlas-exp-board .atlas-exp-table select,
+#painel-expansoes .atlas-exp-board .atlas-exp-sub-table select {
+    display: block !important;
+    box-sizing: border-box !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+}
+
+#painel-expansoes .atlas-exp-board .atlas-exp-elemento-cell,
+#painel-expansoes .atlas-exp-board .atlas-exp-sub-name-cell {
+    padding: 6px 12px !important;
+}
+
+#painel-expansoes .atlas-exp-board .atlas-exp-table-wrap,
+#painel-expansoes .atlas-exp-board .atlas-exp-sub-table-wrap {
+    overflow-x: auto !important;
+    scroll-padding-inline: 0 !important;
+}
+
+#painel-expansoes .atlas-exp-board .atlas-exp-sub-table-wrap {
+    width: 100% !important;
+    max-width: none !important;
+    overflow-x: visible !important;
+}
+
+@media (max-width: 900px) {
+    #painel-expansoes .atlas-exp-board .atlas-exp-table,
+    #painel-expansoes .atlas-exp-board .atlas-exp-sub-table {
+        transform: none !important;
+    }
+
+    #painel-expansoes .atlas-exp-board .atlas-exp-table {
+        width: 4230px !important;
+        min-width: 4230px !important;
+        max-width: 4230px !important;
+    }
+
+    #painel-expansoes .atlas-exp-board .atlas-exp-sub-table {
+        width: 2090px !important;
+        min-width: 2090px !important;
+        max-width: 2090px !important;
+    }
+
+    #painel-expansoes .atlas-exp-board .atlas-exp-table td:nth-child(2),
+    #painel-expansoes .atlas-exp-board .atlas-exp-table th:nth-child(2),
+    #painel-expansoes .atlas-exp-board .atlas-exp-sub-table td:nth-child(2),
+    #painel-expansoes .atlas-exp-board .atlas-exp-sub-table th:nth-child(2) {
+        width: 300px !important;
+        min-width: 300px !important;
+        max-width: 300px !important;
+    }
 }

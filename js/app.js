@@ -158,6 +158,18 @@
             atlasContextoUltimaRenderizacao = snapshot?.contexto || obterContextoVisualAtlas();
             if (snapshot?.estado) restaurarEstadoVisualAtlas(snapshot.estado);
             setTimeout(aplicarPermissoesInterativasAtlas, 0);
+            setTimeout(() => window.atlasV142RefreshIcons?.(document), 0);
+        }
+
+        function renderBotaoColaboracaoV142(entityType, entityId, entityName) {
+            return window.atlasV142BotaoColaboracao?.(entityType, entityId, entityName) || '';
+        }
+
+        async function arquivarRegistroV142(entityType, item, sourceTable) {
+            if (typeof window.atlasV142ArquivarExclusao !== 'function') {
+                throw new Error('A lixeira da V1.4.2 ainda não foi carregada. Atualize a página antes de excluir.');
+            }
+            return window.atlasV142ArquivarExclusao(entityType, item, sourceTable);
         }
 
         function aplicarTemaAtnx() {
@@ -318,7 +330,7 @@
                 <section class="atlas-auth-card atlas-auth-card-main">
                     <div class="atlas-auth-brand">Atlas</div>
                     <h1>${cadastro ? 'Criar acesso' : 'Entrar no Atlas'}</h1>
-                    <p>${cadastro ? 'Seu acesso será criado como Visualizador pendente. Um Admin precisa liberar sua entrada.' : 'A V1.4.1 protege os dados com usuário autenticado e acesso liberado.'}</p>
+                    <p>${cadastro ? 'Seu acesso será criado como Visualizador pendente. Um Admin precisa liberar sua entrada.' : 'A V1.4.2 reúne colaboração, produtividade e proteção dos registros em uma única experiência.'}</p>
                     ${mensagem ? `<div class="atlas-auth-alert">${escaparHtml(mensagem)}</div>` : ''}
                     <form class="atlas-auth-form" onsubmit="${cadastro ? 'criarAcessoAtlas(event)' : 'entrarAtlas(event)'}">
                         ${cadastro ? '<label><span>Nome</span><input name="nome" autocomplete="name" placeholder="Seu nome"></label>' : ''}
@@ -330,19 +342,21 @@
                 </section>
                 <aside class="atlas-auth-side">
                     <div class="atlas-auth-release-head">
-                        <span class="atlas-auth-release-kicker">Lançamento oficial</span>
-                        <b>Atlas V1.4.1 Oficial</b>
-                        <p>Controle operacional com status mais flexíveis e experiência adaptada a computadores, tablets e celulares.</p>
+                        <span class="atlas-auth-release-kicker">Próxima versão</span>
+                        <b>Atlas V1.4.2</b>
+                        <p>Colaboração e produtividade para acompanhar a operação com mais contexto, velocidade e segurança.</p>
                     </div>
                     <div class="atlas-auth-feature-grid">
-                        <div class="atlas-auth-feature"><i>1</i><span><strong>Login e liberação</strong><small>Novos usuários aguardam aprovação do Admin.</small></span></div>
-                        <div class="atlas-auth-feature"><i>2</i><span><strong>Perfis e permissões</strong><small>Admin, Supervisor, Operador e Visualizador.</small></span></div>
-                        <div class="atlas-auth-feature"><i>3</i><span><strong>Administração</strong><small>Ative, edite ou exclua usuários com proteção.</small></span></div>
-                        <div class="atlas-auth-feature"><i>4</i><span><strong>Auditoria real</strong><small>Ações vinculadas ao usuário autenticado.</small></span></div>
-                        <div class="atlas-auth-feature"><i>5</i><span><strong>Campos configuráveis</strong><small>Estrutura flexível para módulos e registros.</small></span></div>
-                        <div class="atlas-auth-feature"><i>6</i><span><strong>Manutenção de Redes</strong><small>Regionais, chamados, documentação e anexos.</small></span></div>
-                        <div class="atlas-auth-feature"><i>7</i><span><strong>Status opcional</strong><small>CTO, CEO ou POP podem ficar sem status quando não se aplicarem.</small></span></div>
-                        <div class="atlas-auth-feature"><i>8</i><span><strong>Layout responsivo</strong><small>Navegação adaptada para computadores, tablets e celulares.</small></span></div>
+                        <div class="atlas-auth-feature"><i>1</i><span><strong>Comentários e menções</strong><small>Converse no próprio registro e mencione usuários.</small></span></div>
+                        <div class="atlas-auth-feature"><i>2</i><span><strong>Busca global</strong><small>Localize obras, elementos, chamados e projetos.</small></span></div>
+                        <div class="atlas-auth-feature"><i>3</i><span><strong>Visualizações salvas</strong><small>Retome filtros, contexto e organização preferidos.</small></span></div>
+                        <div class="atlas-auth-feature"><i>4</i><span><strong>Ações em massa</strong><small>Atualize vários registros em uma única operação.</small></span></div>
+                        <div class="atlas-auth-feature"><i>5</i><span><strong>Histórico por registro</strong><small>Consulte mudanças e responsáveis sem sair da tela.</small></span></div>
+                        <div class="atlas-auth-feature"><i>6</i><span><strong>Notificações internas</strong><small>Acompanhe menções, atribuições e prazos próximos.</small></span></div>
+                        <div class="atlas-auth-feature"><i>7</i><span><strong>Importação assistida</strong><small>Mapeie colunas de arquivos CSV e Excel antes de importar.</small></span></div>
+                        <div class="atlas-auth-feature"><i>8</i><span><strong>Central de erros</strong><small>Admins visualizam, repetem e encerram falhas registradas.</small></span></div>
+                        <div class="atlas-auth-feature"><i>9</i><span><strong>Lixeira e restauração</strong><small>Recupere registros excluídos durante 30 dias.</small></span></div>
+                        <div class="atlas-auth-feature"><i>10</i><span><strong>Modelos reutilizáveis</strong><small>Reaproveite estruturas sem copiar anexos ou histórico.</small></span></div>
                     </div>
                     <div class="atlas-auth-release-foot">Modo claro e escuro · Supabase em tempo real · Google Drive integrado</div>
                 </aside>
@@ -924,6 +938,7 @@ Itens importados do Google Drive serão preservados no Drive. A exclusão remove
 
                 const estrutura = await carregarEstruturaCompletaObra(id);
                 const contextoExclusao = { obra: estrutura.obra, elementos: estrutura.elementos };
+                await arquivarRegistroV142('obra', estrutura.obra || obra, 'obras');
                 const preservarDrive = devePreservarDriveAoExcluirEntidade('obra', contextoExclusao);
                 let avisoDrive = '';
 
@@ -1063,6 +1078,7 @@ Itens importados do Google Drive serão preservados no Drive. A exclusão remove
                 exibirStatusTemporario('🗑️ Removendo ativo do site...', 'bg-[#0073ea]');
 
                 const contextoExclusao = { obra, elemento };
+                await arquivarRegistroV142('elemento_documentacao', elemento, 'elementos_principais');
                 const preservarDrive = devePreservarDriveAoExcluirEntidade('elemento', contextoExclusao);
                 let avisoDrive = '';
 
@@ -2674,7 +2690,7 @@ Cole a URL NOVA da implantação ativa do Apps Script de Expansões. Ela precisa
 Checklist rápido:
 1) A URL do Apps Script de Expansões precisa ser a implantação ativa que termina em /exec.
 2) Se aparecer a janela para corrigir a URL, cole a URL /exec nova da implantação V16/V17/V18 do Apps Script.
-3) A pasta externa precisa estar compartilhada com a conta proprietária do Apps Script.
+3) A pasta externa precisa estar compartilhada com a conta responsável pelo Drive de Expansões.
 4) O proxy /api/drive é opcional nesta versão; a importação funciona direto por JSONP.`);
             }
         }
@@ -3090,6 +3106,7 @@ Itens importados do Google Drive serão preservados no Drive. A exclusão remove
             try {
                 exibirStatusTemporario('🗑️ Removendo porta/subelemento do site...', 'bg-[#0073ea]');
 
+                await arquivarRegistroV142('subelemento_documentacao', contexto?.subelemento, 'subelementos');
                 const preservarDrive = devePreservarDriveAoExcluirEntidade('subelemento', contexto);
                 let avisoDrive = '';
 
@@ -4052,6 +4069,7 @@ Itens importados do Google Drive serão preservados no Drive. A exclusão remove
             if (!confirmado) return;
 
             try {
+                await arquivarRegistroV142('documentacao_rede_geral', item, ADMIN_OBRAS_TABELA);
                 const { error } = await supabaseClient
                     .from(ADMIN_OBRAS_TABELA)
                     .delete()
@@ -4184,7 +4202,7 @@ Itens importados do Google Drive serão preservados no Drive. A exclusão remove
             const dataConclusao = item.data_conclusao ? formatarDataParaExibicao(item.data_conclusao) : 'Não definida';
             const aberto = state.adminDetalhesAbertos?.[item.id] === true;
 
-            return `<div class="atnx-admin-card ${aberto ? 'is-open' : 'is-collapsed'}">
+            return `<div class="atnx-admin-card ${aberto ? 'is-open' : 'is-collapsed'}" data-atlas-entity-type="documentacao_rede_geral" data-atlas-entity-id="${escaparHtml(item.id)}">
                 <button type="button" class="atnx-admin-card-toggle" onclick="alternarDetalhesCidadeAdmin('${item.id}')" aria-expanded="${aberto ? 'true' : 'false'}">
                     <div class="atnx-admin-card-toggle-main">
                         <div class="atnx-admin-card-title">
@@ -4228,6 +4246,7 @@ Itens importados do Google Drive serão preservados no Drive. A exclusão remove
                     </div>
                     <div class="atnx-admin-actions">
                         ${renderizarSelectStatusAdmin(statusAtual, `alterarStatusCidadeAdmin('${item.id}', this.value)`, false)}
+                        ${renderBotaoColaboracaoV142('documentacao_rede_geral', item.id, item.cidade || 'Cidade sem nome')}
                         <button class="atnx-admin-icon-btn" onclick="editarCidadeAdmin('${item.id}')" title="Editar cidade">✏️</button>
                         <button class="atnx-admin-icon-btn" onclick="excluirCidadeAdmin('${item.id}')" title="Remover da documentação geral">🗑️</button>
                     </div>
@@ -6441,10 +6460,10 @@ Não encontrei o ID do arquivo no Drive. O Atlas removerá apenas o registro do 
         }
 
         function renderSubitemExpansao(sub) {
-            return `<tr class="atlas-exp-sub-row">
+            return `<tr class="atlas-exp-sub-row atlas-hierarchy-child" data-atlas-entity-type="expansao_subitem" data-atlas-entity-id="${escaparHtml(sub.id)}">
                 <td class="atlas-exp-check"><input type="checkbox" aria-label="Selecionar subitem" /></td>
                 <td class="atlas-exp-sub-name-cell">${renderCampoEditavelExpansao('subitem', sub.id, 'nome', sub.nome || '', { placeholder: 'Subelemento' })}</td>
-                <td class="atlas-exp-comment-cell atlas-exp-mini-actions"><button type="button" title="Duplicar subelemento" onclick="duplicarSubitemExpansao('${sub.id}')">⧉</button><button type="button" title="Remover subitem" onclick="excluirSubitemExpansao('${sub.id}')">🗑</button></td>
+                <td class="atlas-exp-comment-cell atlas-exp-mini-actions"><div class="atlas-exp-sub-actions">${renderBotaoColaboracaoV142('expansao_subitem', sub.id, sub.nome || 'Subelemento')}<button type="button" title="Duplicar subelemento" aria-label="Duplicar subelemento" onclick="duplicarSubitemExpansao('${sub.id}')">⧉</button><button type="button" title="Remover subelemento" aria-label="Remover subelemento" onclick="excluirSubitemExpansao('${sub.id}')">🗑</button></div></td>
                 <td>${renderCampoEditavelExpansao('subitem', sub.id, 'status', sub.status || '', { status: true })}</td>
                 <td>${renderCampoEditavelExpansao('subitem', sub.id, 'timeline_inicio', sub.timeline_inicio, { type: 'date' })}</td>
                 <td>${renderCampoEditavelExpansao('subitem', sub.id, 'timeline_fim', sub.timeline_fim, { type: 'date' })}</td>
@@ -6478,17 +6497,169 @@ Não encontrei o ID do arquivo no Drive. O Atlas removerá apenas o registro do 
             return `<tr class="atlas-exp-add-row" onclick="abrirCadastroSubitemExpansao('${expansaoId}')"><td class="atlas-exp-check"><input type="checkbox" disabled /></td><td colspan="11">+ Adicionar subelemento</td></tr>`;
         }
 
+        const ATLAS_EXP_SUB_ALTURAS_STORAGE = 'atlas-exp-sub-alturas-v2';
+        const ATLAS_EXP_SUB_ALTURA_MINIMA = 120;
+        const ATLAS_EXP_SUB_ALTURA_MAXIMA = 2000;
+        let atlasExpSubResizeRaf = 0;
+
+        function lerAlturasSubelementosExpansao() {
+            try {
+                const alturas = JSON.parse(localStorage.getItem(ATLAS_EXP_SUB_ALTURAS_STORAGE) || '{}');
+                return alturas && typeof alturas === 'object' && !Array.isArray(alturas) ? alturas : {};
+            } catch (_) {
+                return {};
+            }
+        }
+
+        function normalizarAlturaSubelementosExpansao(valor) {
+            const altura = Number(valor);
+            if (!Number.isFinite(altura)) return null;
+            return Math.min(ATLAS_EXP_SUB_ALTURA_MAXIMA, Math.max(ATLAS_EXP_SUB_ALTURA_MINIMA, Math.round(altura)));
+        }
+
+        function obterAlturaSubelementosExpansao(expansaoId) {
+            return normalizarAlturaSubelementosExpansao(lerAlturasSubelementosExpansao()[String(expansaoId || '')]);
+        }
+
+        function salvarAlturaSubelementosExpansao(expansaoId, altura) {
+            const alturaNormalizada = normalizarAlturaSubelementosExpansao(altura);
+            if (!alturaNormalizada) return;
+            try {
+                const alturas = lerAlturasSubelementosExpansao();
+                alturas[String(expansaoId || '')] = alturaNormalizada;
+                localStorage.setItem(ATLAS_EXP_SUB_ALTURAS_STORAGE, JSON.stringify(alturas));
+            } catch (_) {}
+        }
+
+        function removerAlturaSubelementosExpansao(expansaoId) {
+            try {
+                const alturas = lerAlturasSubelementosExpansao();
+                delete alturas[String(expansaoId || '')];
+                localStorage.setItem(ATLAS_EXP_SUB_ALTURAS_STORAGE, JSON.stringify(alturas));
+            } catch (_) {}
+        }
+
+        function notificarRedimensionamentoSubelementosExpansao() {
+            if (atlasExpSubResizeRaf) return;
+            atlasExpSubResizeRaf = requestAnimationFrame(() => {
+                atlasExpSubResizeRaf = 0;
+                window.dispatchEvent(new CustomEvent('atlas-layout-change'));
+            });
+        }
+
+        function aplicarAlturaSubelementosExpansao(painel, altura) {
+            const alturaNormalizada = normalizarAlturaSubelementosExpansao(altura);
+            if (!painel || !alturaNormalizada) return null;
+            painel.classList.add('atlas-exp-sub-user-sized');
+            painel.style.setProperty('--atlas-exp-sub-user-height', `${alturaNormalizada}px`);
+            painel.style.setProperty('height', `${alturaNormalizada}px`, 'important');
+            painel.style.setProperty('max-height', 'none', 'important');
+            const alca = painel.parentElement?.querySelector('.atlas-exp-sub-resize-line');
+            if (alca) alca.setAttribute('aria-valuenow', String(alturaNormalizada));
+            notificarRedimensionamentoSubelementosExpansao();
+            return alturaNormalizada;
+        }
+
+        function obterPainelDaAlcaSubelementosExpansao(alca) {
+            return alca?.closest('.atlas-exp-sub-resizable')?.querySelector('.atlas-exp-sub-table-wrap') || null;
+        }
+
+        function iniciarRedimensionamentoSubelementosExpansao(event, linha) {
+            if (!linha || (event.button !== undefined && event.button !== 0)) return;
+            const painel = obterPainelDaAlcaSubelementosExpansao(linha);
+            if (!painel) return;
+
+            event.preventDefault();
+            event.stopPropagation();
+            const expansaoId = linha.dataset.expansaoId || '';
+            const inicioY = event.clientY;
+            const alturaInicial = painel.getBoundingClientRect().height;
+            const pointerId = event.pointerId;
+            document.body.classList.add('atlas-exp-sub-resizing');
+            linha.classList.add('is-dragging');
+
+            const mover = movimento => {
+                if (movimento.pointerId !== pointerId) return;
+                movimento.preventDefault();
+                const altura = aplicarAlturaSubelementosExpansao(painel, alturaInicial + movimento.clientY - inicioY);
+                linha.dataset.altura = `${altura}px`;
+            };
+
+            const finalizar = movimento => {
+                if (movimento?.pointerId !== undefined && movimento.pointerId !== pointerId) return;
+                window.removeEventListener('pointermove', mover);
+                window.removeEventListener('pointerup', finalizar);
+                window.removeEventListener('pointercancel', finalizar);
+                window.removeEventListener('blur', finalizar);
+                document.body.classList.remove('atlas-exp-sub-resizing');
+                linha.classList.remove('is-dragging');
+                delete linha.dataset.altura;
+                salvarAlturaSubelementosExpansao(expansaoId, painel.getBoundingClientRect().height);
+                notificarRedimensionamentoSubelementosExpansao();
+            };
+
+            window.addEventListener('pointermove', mover, { passive: false });
+            window.addEventListener('pointerup', finalizar);
+            window.addEventListener('pointercancel', finalizar);
+            window.addEventListener('blur', finalizar);
+        }
+        window.iniciarRedimensionamentoSubelementosExpansao = iniciarRedimensionamentoSubelementosExpansao;
+
+        document.addEventListener('dblclick', event => {
+            const alca = event.target.closest?.('.atlas-exp-sub-resize-line');
+            if (!alca) return;
+            event.preventDefault();
+            const painel = obterPainelDaAlcaSubelementosExpansao(alca);
+            if (!painel) return;
+            removerAlturaSubelementosExpansao(alca.dataset.expansaoId || '');
+            painel.classList.remove('atlas-exp-sub-user-sized');
+            painel.style.removeProperty('--atlas-exp-sub-user-height');
+            painel.style.removeProperty('height');
+            painel.style.removeProperty('max-height');
+            alca.removeAttribute('aria-valuenow');
+            notificarRedimensionamentoSubelementosExpansao();
+        });
+
+        document.addEventListener('keydown', event => {
+            const alca = event.target.closest?.('.atlas-exp-sub-resize-line');
+            if (!alca || !['ArrowUp', 'ArrowDown', 'Home'].includes(event.key)) return;
+            event.preventDefault();
+            const painel = obterPainelDaAlcaSubelementosExpansao(alca);
+            if (!painel) return;
+            const expansaoId = alca.dataset.expansaoId || '';
+            if (event.key === 'Home') {
+                removerAlturaSubelementosExpansao(expansaoId);
+                painel.classList.remove('atlas-exp-sub-user-sized');
+                painel.style.removeProperty('--atlas-exp-sub-user-height');
+                painel.style.removeProperty('height');
+                painel.style.removeProperty('max-height');
+                alca.removeAttribute('aria-valuenow');
+                notificarRedimensionamentoSubelementosExpansao();
+                return;
+            }
+            const passo = event.shiftKey ? 100 : 40;
+            const direcao = event.key === 'ArrowDown' ? 1 : -1;
+            const altura = aplicarAlturaSubelementosExpansao(painel, painel.getBoundingClientRect().height + (passo * direcao));
+            salvarAlturaSubelementosExpansao(expansaoId, altura);
+        });
+
         function renderTabelaSubitemsExpansao(subs, expansaoId) {
             const novaLinha = state.expansaoSubitemNovoProjetoId === expansaoId ? renderNovaLinhaSubitemExpansao(expansaoId) : renderLinhaAdicionarSubitemExpansao(expansaoId);
-            return `<tr class="atlas-exp-sub-table-row"><td colspan="24">
-                <div class="atlas-exp-sub-table-wrap">
-                    <table class="atlas-exp-sub-table">
-                        <thead><tr>
-                            <th class="atlas-exp-check"><input type="checkbox" disabled /></th><th>Subelemento</th><th></th><th>Status</th><th>Timeline - Start</th><th>Timeline - End</th>
-                            <th>Duração</th><th>Equipe</th><th>Responsável</th><th>Imagens</th><th>Pessoas</th><th>Depende de</th>
-                        </tr></thead>
-                        <tbody>${subs.map(renderSubitemExpansao).join('')}${novaLinha}</tbody>
-                    </table>
+            const alturaSalva = obterAlturaSubelementosExpansao(expansaoId);
+            const classeAltura = alturaSalva ? ' atlas-exp-sub-user-sized' : '';
+            const estiloAltura = alturaSalva ? ` style="--atlas-exp-sub-user-height: ${alturaSalva}px; height: ${alturaSalva}px !important; max-height: none !important"` : '';
+            return `<tr class="atlas-exp-sub-table-row atlas-hierarchy-children"><td colspan="25">
+                <div class="atlas-exp-sub-resizable">
+                    <div class="atlas-exp-sub-table-wrap${classeAltura}" data-atlas-exp-sub-resize-id="${escaparHtml(expansaoId)}"${estiloAltura}>
+                        <table class="atlas-exp-sub-table">
+                            <thead><tr>
+                                <th class="atlas-exp-check"><input type="checkbox" disabled /></th><th>Subelemento</th><th></th><th>Status</th><th>Timeline - Start</th><th>Timeline - End</th>
+                                <th>Duração</th><th>Equipe</th><th>Responsável</th><th>Imagens</th><th>Pessoas</th><th>Depende de</th>
+                            </tr></thead>
+                            <tbody>${subs.map(renderSubitemExpansao).join('')}${novaLinha}</tbody>
+                        </table>
+                    </div>
+                    <div class="atlas-exp-sub-resize-line" data-expansao-id="${escaparHtml(expansaoId)}" role="separator" tabindex="0" aria-orientation="horizontal" title="Puxe esta linha para ajustar a altura. Duplo clique restaura o padrão." aria-label="Linha para ajustar a altura da área de subelementos" aria-valuemin="${ATLAS_EXP_SUB_ALTURA_MINIMA}" aria-valuemax="${ATLAS_EXP_SUB_ALTURA_MAXIMA}"${alturaSalva ? ` aria-valuenow="${alturaSalva}"` : ''} onpointerdown="iniciarRedimensionamentoSubelementosExpansao(event, this)"></div>
                 </div>
             </td></tr>`;
         }
@@ -6586,7 +6757,7 @@ Não encontrei o ID do arquivo no Drive. O Atlas removerá apenas o registro do 
             const aberto = !!state.expansoesProjetosAbertos[projeto.id];
             const subs = (state.expansoesSubitems || []).filter(s => s.expansao_id === projeto.id);
             const subitemsHtml = aberto ? renderTabelaSubitemsExpansao(subs, projeto.id) : '';
-            return `<tr class="atlas-exp-row atlas-exp-row-projeto ${projetoExpansaoSelecionado(projeto.id) ? 'is-selected' : ''}">
+            return `<tr class="atlas-exp-row atlas-exp-row-projeto atlas-hierarchy-parent ${projetoExpansaoSelecionado(projeto.id) ? 'is-selected' : ''}" data-atlas-entity-type="expansao" data-atlas-entity-id="${escaparHtml(projeto.id)}">
                 <td class="atlas-exp-check"><input type="checkbox" aria-label="Selecionar ${escaparHtml(projeto.nome || 'projeto')}" ${projetoExpansaoSelecionado(projeto.id) ? 'checked' : ''} onclick="event.stopPropagation();toggleSelecaoProjetoExpansao('${escaparAtributoJs(projeto.id)}', this.checked)" /></td>
                 <td class="atlas-exp-elemento-cell">
                     <div class="atlas-exp-elemento-inline">
@@ -6595,7 +6766,7 @@ Não encontrei o ID do arquivo no Drive. O Atlas removerá apenas o registro do 
                         <span class="atlas-exp-sub-count">${subs.length}</span>
                     </div>
                 </td>
-                <td class="atlas-exp-comment-cell"><button type="button" title="Adicionar subitem" onclick="abrirCadastroSubitemExpansao('${projeto.id}')">＋</button></td>
+                <td class="atlas-exp-comment-cell atlas-exp-mini-actions">${renderBotaoColaboracaoV142('expansao', projeto.id, projeto.nome || 'Elemento')}<button type="button" title="Adicionar subitem" onclick="abrirCadastroSubitemExpansao('${projeto.id}')">＋</button></td>
                 <td>${renderCampoEditavelExpansao('projeto', projeto.id, 'duracao_completa', projeto.duracao_completa, { placeholder: 'Selecionar período' })}</td>
                 <td>${renderCampoEditavelExpansao('projeto', projeto.id, 'data_conclusao', projeto.data_conclusao, { type: 'date' })}</td>
                 <td>${renderCampoEditavelExpansao('projeto', projeto.id, 'duracao_lancamento', projeto.duracao_lancamento, { type: 'number' })}</td>
@@ -6652,7 +6823,7 @@ Não encontrei o ID do arquivo no Drive. O Atlas removerá apenas o registro do 
         }
 
         function renderLinhaAdicionarProjetoExpansao(grupoId) {
-            return `<tr class="atlas-exp-add-row" onclick="abrirCadastroExpansao('${grupoId}')"><td class="atlas-exp-check"><input type="checkbox" disabled /></td><td colspan="23">+ Adicionar projeto</td></tr>`;
+            return `<tr class="atlas-exp-add-row" onclick="abrirCadastroExpansao('${grupoId}')"><td class="atlas-exp-check"><input type="checkbox" disabled /></td><td colspan="24">+ Adicionar projeto</td></tr>`;
         }
 
         function renderGrupoExpansao(grupo, projetos, termo) {
@@ -7345,6 +7516,9 @@ Serão removidos ${projetos.length} elemento(s) e ${totalSub} subelemento(s). Os
             try {
                 exibirStatusTemporario('🗑️ Removendo obra de Expansões...', 'bg-[#0073ea]');
                 for (const projeto of projetos) {
+                    await arquivarRegistroV142('expansao', projeto, 'atlas_expansoes');
+                }
+                for (const projeto of projetos) {
                     await excluirEntidadeExpansaoNoGoogleDrive('projeto', projeto);
                 }
                 const ids = projetos.map(p => p.id).filter(Boolean);
@@ -7440,7 +7614,7 @@ Serão removidos ${projetos.length} elemento(s) e ${totalSub} subelemento(s). Os
             switch (coluna.key) {
                 case 'check': return `<td class="atlas-exp-check"><input type="checkbox" aria-label="Selecionar subelemento" ${subitemObraExpansaoSelecionado(sub.id) ? 'checked' : ''} onclick="event.stopPropagation();toggleSelecaoSubitemObraExpansao('${escaparHtml(projeto?.id || '')}', '${escaparHtml(sub.id)}', this.checked)" /></td>`;
                 case 'subelemento': return `<td class="atlas-exp-sub-name-cell">${renderCampoEditavelExpansao('subitem', sub.id, 'nome', sub.nome || '', { placeholder: 'Subelemento' })}</td>`;
-                case 'comentario': return '<td class="atlas-exp-comment-cell"><button type="button" title="Remover subitem" onclick="excluirSubitemExpansao(\'' + escaparHtml(sub.id) + '\')">🗑</button></td>';
+                case 'comentario': return `<td class="atlas-exp-comment-cell atlas-exp-mini-actions">${renderBotaoColaboracaoV142('expansao_subitem', sub.id, sub.nome || 'Subelemento')}<button type="button" title="Remover subitem" onclick="excluirSubitemExpansao('${escaparHtml(sub.id)}')">🗑</button></td>`;
                 case 'status': return `<td>${renderCampoEditavelExpansao('subitem', sub.id, 'status', sub.status || '', { status: true })}</td>`;
                 case 'tipo_cabo': return `<td>${renderCampoEditavelExpansao('subitem', sub.id, 'tipo_cabo', sub.tipo_cabo || '', { placeholder: '2FO / 6FO' })}</td>`;
                 case 'projetado': return `<td>${renderCampoEditavelExpansao('subitem', sub.id, 'projetado', sub.projetado, { type: 'number' })}</td>`;
@@ -7461,7 +7635,7 @@ Serão removidos ${projetos.length} elemento(s) e ${totalSub} subelemento(s). Os
 
         function renderSubitemObraExpansao(sub, projeto) {
             const colunas = obterColunasSubitemObraExpansao(projeto?.fase);
-            return `<tr class="atlas-exp-sub-row atlas-exp-obra-sub-row ${subitemObraExpansaoSelecionado(sub.id) ? 'is-selected' : ''}">${colunas.map(col => renderCelulaSubitemObraExpansao(sub, col, projeto)).join('')}</tr>`;
+            return `<tr class="atlas-exp-sub-row atlas-exp-obra-sub-row atlas-hierarchy-child ${subitemObraExpansaoSelecionado(sub.id) ? 'is-selected' : ''}" data-atlas-entity-type="expansao_subitem" data-atlas-entity-id="${escaparHtml(sub.id)}">${colunas.map(col => renderCelulaSubitemObraExpansao(sub, col, projeto)).join('')}</tr>`;
         }
 
         function renderCelulaNovaSubitemObraExpansao(coluna, projeto) {
@@ -7493,7 +7667,7 @@ Serão removidos ${projetos.length} elemento(s) e ${totalSub} subelemento(s). Os
             const novaLinha = state.expansaoSubitemNovoProjetoId === projeto.id
                 ? `<tr class="atlas-exp-sub-row atlas-exp-new-row" data-new-sub-expansao="${escaparHtml(projeto.id)}">${colunas.map(col => renderCelulaNovaSubitemObraExpansao(col, projeto)).join('')}</tr>`
                 : `<tr class="atlas-exp-add-row" onclick="abrirCadastroSubitemExpansao('${projeto.id}')"><td class="atlas-exp-check"><input type="checkbox" disabled /></td><td colspan="${Math.max(1, colunas.length - 1)}">+ Adicionar subelemento</td></tr>`;
-            return `<tr class="atlas-exp-sub-table-row atlas-exp-obra-sub-table-row"><td colspan="${obterColunasElementoObraExpansao(projeto.fase).length}"><div class="atlas-exp-sub-table-wrap"><table class="atlas-exp-sub-table atlas-exp-obra-sub-table">
+            return `<tr class="atlas-exp-sub-table-row atlas-exp-obra-sub-table-row atlas-hierarchy-children"><td colspan="${obterColunasElementoObraExpansao(projeto.fase).length}"><div class="atlas-exp-sub-table-wrap"><table class="atlas-exp-sub-table atlas-exp-obra-sub-table">
                 <thead><tr>${renderCabecalhoColunasObraExpansao(colunas)}</tr></thead>
                 <tbody>${subs.map(sub => renderSubitemObraExpansao(sub, projeto)).join('')}${novaLinha}</tbody></table></div></td></tr>`;
         }
@@ -7503,7 +7677,7 @@ Serão removidos ${projetos.length} elemento(s) e ${totalSub} subelemento(s). Os
             switch (coluna.key) {
                 case 'check': return `<td class="atlas-exp-check"><input type="checkbox" aria-label="Selecionar ${escaparHtml(projeto.nome || 'elemento')}" ${elementoObraExpansaoSelecionado(projeto.id) ? 'checked' : ''} onclick="event.stopPropagation();toggleSelecaoElementoObraExpansao('${escaparHtml(projeto.id)}', this.checked)" /></td>`;
                 case 'elemento': return `<td class="atlas-exp-elemento-cell"><div class="atlas-exp-elemento-inline"><button class="atlas-exp-caret-btn" type="button" onclick="alternarProjetoExpansoes('${projeto.id}')">${aberto ? '⌄' : '›'}</button>${renderCampoEditavelExpansao('projeto', projeto.id, 'nome', projeto.nome || '', { placeholder: 'Elemento' })}<span class="atlas-exp-sub-count">${subs.length}</span></div></td>`;
-                case 'comentario': return `<td class="atlas-exp-comment-cell"><button type="button" title="Adicionar subitem" onclick="abrirCadastroSubitemExpansao('${projeto.id}')">＋</button></td>`;
+                case 'comentario': return `<td class="atlas-exp-comment-cell atlas-exp-mini-actions">${renderBotaoColaboracaoV142('expansao', projeto.id, projeto.nome || 'Elemento')}<button type="button" title="Adicionar subitem" onclick="abrirCadastroSubitemExpansao('${projeto.id}')">＋</button></td>`;
                 case 'total_projetado': return `<td>${renderCampoEditavelExpansao('projeto', projeto.id, 'total_projetado', projeto.total_projetado, { type: 'number' })}</td>`;
                 case 'total_lancado': return `<td>${renderCampoEditavelExpansao('projeto', projeto.id, 'total_lancado', projeto.total_lancado, { type: 'number' })}</td>`;
                 case 'status': return `<td>${renderCampoEditavelExpansao('projeto', projeto.id, 'status', projeto.status || '', { status: true })}</td>`;
@@ -7523,7 +7697,7 @@ Serão removidos ${projetos.length} elemento(s) e ${totalSub} subelemento(s). Os
             const aberto = !!state.expansoesProjetosAbertos[projeto.id];
             const colunas = obterColunasElementoObraExpansao(projeto.fase);
             const subitemsHtml = aberto ? renderSubitemsObraExpansao(projeto) : '';
-            return `<tr class="atlas-exp-row atlas-exp-obra-row ${elementoObraExpansaoSelecionado(projeto.id) ? 'is-selected' : ''}">${colunas.map(col => renderCelulaElementoObraExpansao(projeto, col, aberto)).join('')}</tr>${subitemsHtml}`;
+            return `<tr class="atlas-exp-row atlas-exp-obra-row atlas-hierarchy-parent ${elementoObraExpansaoSelecionado(projeto.id) ? 'is-selected' : ''}" data-atlas-entity-type="expansao" data-atlas-entity-id="${escaparHtml(projeto.id)}">${colunas.map(col => renderCelulaElementoObraExpansao(projeto, col, aberto)).join('')}</tr>${subitemsHtml}`;
         }
 
         function chaveFaseObraExpansao(nomeObra, faseId) {
@@ -8441,20 +8615,24 @@ Serão removidos ${projetos.length} elemento(s) e ${totalSub} subelemento(s). Os
 
         async function excluirProjetoPMO(id) {
             if (!id || !window.confirm('Excluir este projeto do PMO?')) return;
+            const item = (state.pmoProjetos || []).find(projeto => projeto.id === id);
+            if (!item) return;
             try {
                 if (!supabaseClient) throw new Error('Supabase indisponível');
+                await arquivarRegistroV142('pmo_projeto', item, ATLAS_PMO_TABELA_PROJETOS);
                 await supabaseClient.from(ATLAS_PMO_TABELA_UPDATES).delete().eq('projeto_id', id);
                 await supabaseClient.from(ATLAS_PMO_TABELA_SUBELEMENTOS).delete().eq('projeto_id', id);
                 const { error } = await supabaseClient.from(ATLAS_PMO_TABELA_PROJETOS).delete().eq('id', id);
                 if (error) throw error;
-            } catch (err) {
-                state.pmoErro = `Exclusão aplicada localmente. Detalhe: ${err.message || err}`;
-            } finally {
                 state.pmoProjetos = (state.pmoProjetos || []).filter(p => p.id !== id);
                 state.pmoSubelementos = (state.pmoSubelementos || []).filter(s => s.projeto_id !== id);
                 state.pmoUpdates = (state.pmoUpdates || []).filter(u => u.projeto_id !== id);
+                state.pmoErro = '';
                 pmoMarcarEdicaoLocal();
                 pmoSalvarLocal();
+            } catch (err) {
+                state.pmoErro = `Não foi possível excluir o projeto com segurança. Detalhe: ${err.message || err}`;
+            } finally {
                 renderPMO();
             }
         }
@@ -8515,16 +8693,20 @@ Serão removidos ${projetos.length} elemento(s) e ${totalSub} subelemento(s). Os
 
         async function excluirSubelementoPMO(id) {
             if (!id || !window.confirm('Excluir este subelemento do PMO?')) return;
+            const item = (state.pmoSubelementos || []).find(sub => sub.id === id);
+            if (!item) return;
             try {
                 if (!supabaseClient) throw new Error('Supabase indisponível');
+                await arquivarRegistroV142('pmo_subelemento', item, ATLAS_PMO_TABELA_SUBELEMENTOS);
                 const { error } = await supabaseClient.from(ATLAS_PMO_TABELA_SUBELEMENTOS).delete().eq('id', id);
                 if (error) throw error;
-            } catch (err) {
-                state.pmoErro = `Subelemento excluído localmente. Detalhe: ${err.message || err}`;
-            } finally {
                 state.pmoSubelementos = (state.pmoSubelementos || []).filter(s => s.id !== id);
+                state.pmoErro = '';
                 pmoMarcarEdicaoLocal();
                 pmoSalvarLocal();
+            } catch (err) {
+                state.pmoErro = `Não foi possível excluir o subelemento com segurança. Detalhe: ${err.message || err}`;
+            } finally {
                 renderPMO();
             }
         }
@@ -8556,16 +8738,20 @@ Serão removidos ${projetos.length} elemento(s) e ${totalSub} subelemento(s). Os
 
         async function excluirUpdatePMO(id) {
             if (!id || !window.confirm('Excluir este update do PMO?')) return;
+            const item = (state.pmoUpdates || []).find(update => update.id === id);
+            if (!item) return;
             try {
                 if (!supabaseClient) throw new Error('Supabase indisponível');
+                await arquivarRegistroV142('pmo_update', item, ATLAS_PMO_TABELA_UPDATES);
                 const { error } = await supabaseClient.from(ATLAS_PMO_TABELA_UPDATES).delete().eq('id', id);
                 if (error) throw error;
-            } catch (err) {
-                state.pmoErro = `Update excluído localmente. Detalhe: ${err.message || err}`;
-            } finally {
                 state.pmoUpdates = (state.pmoUpdates || []).filter(u => u.id !== id);
+                state.pmoErro = '';
                 pmoMarcarEdicaoLocal();
                 pmoSalvarLocal();
+            } catch (err) {
+                state.pmoErro = `Não foi possível excluir o update com segurança. Detalhe: ${err.message || err}`;
+            } finally {
                 renderPMO();
             }
         }
@@ -8682,9 +8868,9 @@ Serão removidos ${projetos.length} elemento(s) e ${totalSub} subelemento(s). Os
         function renderPMODetalhesProjeto(projeto) {
             const subs = (state.pmoSubelementos || []).filter(s => s.projeto_id === projeto.id);
             const updates = (state.pmoUpdates || []).filter(u => u.projeto_id === projeto.id);
-            const subRows = subs.length ? subs.map(sub => `<tr>
+            const subRows = subs.length ? subs.map(sub => `<tr class="atlas-hierarchy-child" data-atlas-entity-type="pmo_subelemento" data-atlas-entity-id="${escaparHtml(sub.id)}">
                 <td>${escaparHtml(sub.nome || '—')}</td><td>${escaparHtml(sub.responsavel || '—')}</td><td>${pmoStatusPill(sub.status)}</td><td>${pmoFormatarNumero(sub.portas_ftth)}</td><td>${pmoFormatarMoeda(sub.valor_projeto)}</td><td>${pmoValorCelula(sub, 'link')}</td>
-                <td><button class="atlas-pmo-mini-btn danger" onclick="excluirSubelementoPMO('${escaparAtributoJs(sub.id)}')">Excluir</button></td>
+                <td class="atlas-pmo-row-actions">${renderBotaoColaboracaoV142('pmo_subelemento', sub.id, sub.nome || 'Subelemento PMO')}<button class="atlas-pmo-mini-btn danger" onclick="excluirSubelementoPMO('${escaparAtributoJs(sub.id)}')">Excluir</button></td>
             </tr>`).join('') : `<tr><td colspan="7" class="atlas-module-empty-row">Nenhum subelemento cadastrado para este projeto.</td></tr>`;
             const updateCards = updates.length ? updates.map(upd => `<article class="atlas-pmo-update-card">
                 <div><strong>${escaparHtml(upd.usuario || 'Usuário não informado')}</strong><span>${escaparHtml(upd.tipo_conteudo || 'Update')} • ${upd.data_criacao ? formatarDataParaExibicao(upd.data_criacao) : 'Sem data'}</span></div>
@@ -8692,7 +8878,7 @@ Serão removidos ${projetos.length} elemento(s) e ${totalSub} subelemento(s). Os
                 <footer>Post ID: ${escaparHtml(upd.post_id || '—')} • Likes: ${pmoFormatarNumero(upd.likes_count)}</footer>
                 <button class="atlas-pmo-mini-btn danger" onclick="excluirUpdatePMO('${escaparAtributoJs(upd.id)}')">Excluir</button>
             </article>`).join('') : `<div class="atlas-module-empty-row">Nenhum update/comentário cadastrado para este projeto.</div>`;
-            return `<tr class="atlas-pmo-detail-row"><td colspan="${ATLAS_PMO_PROJETO_DEFS.length + 2}">
+            return `<tr class="atlas-pmo-detail-row atlas-hierarchy-children"><td colspan="${ATLAS_PMO_PROJETO_DEFS.length + 2}">
                 <div class="atlas-pmo-detail-card">
                     <div class="atlas-pmo-detail-actions">
                         <button class="atlas-action-btn" onclick="alternarFormularioSubPMO('${escaparAtributoJs(projeto.id)}')">+ Subelemento</button>
@@ -8711,10 +8897,10 @@ Serão removidos ${projetos.length} elemento(s) e ${totalSub} subelemento(s). Os
         function renderPMOProjetoLinha(projeto) {
             const aberto = state.pmoProjetoAberto === projeto.id;
             const cells = ATLAS_PMO_PROJETO_DEFS.map(def => `<td class="atlas-pmo-editable-cell atlas-pmo-col-${escaparHtml(def.key)}" style="min-width:${Number(def.width || 140)}px">${pmoRenderCampoProjeto(projeto, def)}</td>`).join('');
-            const row = `<tr class="atlas-pmo-project-row ${aberto ? 'is-open' : ''}">
+            const row = `<tr class="atlas-pmo-project-row atlas-hierarchy-parent ${aberto ? 'is-open' : ''}" data-atlas-entity-type="pmo_projeto" data-atlas-entity-id="${escaparHtml(projeto.id)}">
                 <td class="atlas-pmo-toggle-cell"><button class="atlas-pmo-mini-btn" onclick="alternarProjetoPMO('${escaparAtributoJs(projeto.id)}')">${aberto ? '−' : '+'}</button></td>
                 ${cells}
-                <td class="atlas-pmo-row-actions"><button class="atlas-pmo-mini-btn danger" onclick="excluirProjetoPMO('${escaparAtributoJs(projeto.id)}')">Excluir</button></td>
+                <td class="atlas-pmo-row-actions">${renderBotaoColaboracaoV142('pmo_projeto', projeto.id, projeto.nome || 'Projeto PMO')}<button class="atlas-pmo-mini-btn danger" onclick="excluirProjetoPMO('${escaparAtributoJs(projeto.id)}')">Excluir</button></td>
             </tr>`;
             return aberto ? row + renderPMODetalhesProjeto(projeto) : row;
         }
@@ -8979,6 +9165,7 @@ Serão removidos ${projetos.length} elemento(s) e ${totalSub} subelemento(s). Os
             if (!ok) return;
             try {
                 exibirStatusTemporario('Removendo chamado...', 'bg-[#0073ea]');
+                await arquivarRegistroV142('manutencao_rede', item, ATLAS_MANUTENCAO_TABELA);
                 if (supabaseClient && !state.manutencaoRedeErro) {
                     const { error } = await supabaseClient.from(ATLAS_MANUTENCAO_TABELA).delete().eq('id', id);
                     if (error) throw error;
@@ -9258,10 +9445,10 @@ Serão removidos ${projetos.length} elemento(s) e ${totalSub} subelemento(s). Os
             const opcoesDoc = ATLAS_MANUTENCAO_DOC_STATUS.map(op => `<option value="${escaparHtml(op)}" ${op === docStatus ? 'selected' : ''}>${escaparHtml(op)}</option>`).join('');
             const opcoesRegional = [''].concat(ATLAS_MANUTENCAO_REGIONAIS).map(op => `<option value="${escaparHtml(op)}" ${op === regional ? 'selected' : ''}>${escaparHtml(op || 'Sem regional')}</option>`).join('');
             const anexosHtml = renderAnexosManutencao(itemId, item.anexos);
-            return `<article class="atlas-maint-card ${finalizada ? 'is-finalizada' : ''}">
+            return `<article class="atlas-maint-card ${finalizada ? 'is-finalizada' : ''}" data-atlas-entity-type="manutencao_rede" data-atlas-entity-id="${escaparHtml(item.id)}">
                 <div class="atlas-maint-card-head">
                     <div><strong>${escaparHtml(item.cidade || item.localidade || 'Sem cidade')}</strong><span>${escaparHtml(item.tipo_manutencao || item.tipo_problema || 'Manutenção')}${ticket ? ` · Ticket ${escaparHtml(ticket)}` : ''}</span></div>
-                    <div class="atlas-maint-badge-wrap"><div class="atlas-maint-badges"><span class="atlas-maint-regional ${classeRegionalManutencao(regional)}">${escaparHtml(regional || 'Sem regional')}</span><span class="atlas-maint-doc ${classeDocumentacaoManutencao(docStatus)}">${escaparHtml(docStatus)}</span><span class="atlas-maint-status ${classeStatusManutencao(status)}">${escaparHtml(status)}</span><span class="atlas-maint-priority">${escaparHtml(prioridade)}</span></div>${podeExcluir ? `<button type="button" class="atlas-maint-danger-btn" onclick="excluirManutencaoRede('${itemId}')">Excluir</button>` : ''}</div>
+                    <div class="atlas-maint-badge-wrap"><div class="atlas-maint-badges"><span class="atlas-maint-regional ${classeRegionalManutencao(regional)}">${escaparHtml(regional || 'Sem regional')}</span><span class="atlas-maint-doc ${classeDocumentacaoManutencao(docStatus)}">${escaparHtml(docStatus)}</span><span class="atlas-maint-status ${classeStatusManutencao(status)}">${escaparHtml(status)}</span><span class="atlas-maint-priority">${escaparHtml(prioridade)}</span></div>${renderBotaoColaboracaoV142('manutencao_rede', item.id, item.cidade || item.localidade || 'Manutenção')}${podeExcluir ? `<button type="button" class="atlas-maint-danger-btn" onclick="excluirManutencaoRede('${itemId}')">Excluir</button>` : ''}</div>
                 </div>
                 <div class="atlas-maint-flow atlas-maint-flow-regional">
                     <label><span>Regional</span><select onchange="atualizarManutencaoRedeCampo('${itemId}', 'regional', this.value)" ${podeEditar ? '' : 'disabled'}>${opcoesRegional}</select></label>
@@ -9772,6 +9959,7 @@ Itens afetados: ${detalhe}.`,
             if (!confirmado) return;
             try {
                 exibirStatusTemporario('🗑️ Removendo expansão e limpando Google Drive...', 'bg-[#0073ea]');
+                await arquivarRegistroV142('expansao', item, 'atlas_expansoes');
                 await excluirEntidadeExpansaoNoGoogleDrive('projeto', item);
 
                 const { error } = await supabaseClient.from('atlas_expansoes').delete().eq('id', id);
@@ -9999,6 +10187,7 @@ Imagens afetadas: ${totalImagens}.`,
             if (!confirmado) return;
             try {
                 exibirStatusTemporario('🗑️ Removendo subelemento e limpando Google Drive...', 'bg-[#0073ea]');
+                await arquivarRegistroV142('expansao_subitem', item, 'atlas_expansoes_subitems');
                 await excluirEntidadeExpansaoNoGoogleDrive('subitem', item);
 
                 const { error } = await supabaseClient.from('atlas_expansoes_subitems').delete().eq('id', id);
@@ -10161,7 +10350,7 @@ Imagens afetadas: ${totalImagens}.`,
                 const classeSelecaoElemento = elSelecionado ? 'bg-[#0073ea]/10' : '';
                 
                 tbody.innerHTML += `
-                    <tr class="border-b border-[#2f314e] h-10 text-gray-300 hover:bg-[#242746]/10 ${classeSelecaoElemento}">
+                    <tr class="atlas-hierarchy-parent border-b border-[#2f314e] h-10 text-gray-300 hover:bg-[#242746]/10 ${classeSelecaoElemento}" data-atlas-entity-type="elemento_documentacao" data-atlas-entity-id="${escaparHtml(el.id)}">
                         <td class="text-center"><input type="checkbox" class="rounded accent-[#0073ea]" ${elSelecionado ? 'checked' : ''} onclick="event.stopPropagation(); toggleSelecaoElemento('${el.id}', this.checked)" title="Selecionar ativo e seus subelementos"></td>
                         <td class="px-2 font-medium text-white border-r border-[#2f314e]">
                             <div class="flex items-center gap-2">
@@ -10178,6 +10367,7 @@ Imagens afetadas: ${totalImagens}.`,
                         </td>
                         <td class="px-4 border-r border-[#2f314e] cursor-pointer hover:text-[#0073ea] font-medium" onclick="alterarTecnicoPai('${el.id}', '${el.tecnico}')">👤 ${el.tecnico} <span class="text-[9px] text-gray-500">✏️</span></td>
                         <td class="text-center">
+                            ${renderBotaoColaboracaoV142('elemento_documentacao', el.id, el.nome || 'Ativo principal')}
                             <button onclick="excluirElementoPai('${el.id}')" class="text-gray-500 hover:text-red-400 font-bold" title="Remover Ativo">🗑️</button>
                         </td>
                     </tr>`;
@@ -10196,10 +10386,10 @@ Imagens afetadas: ${totalImagens}.`,
                             const dHtml = renderizarMidias(sub.diagramas, 'border border-[#0073ea]', sub.id, 'diagramas');
 
                             subRows += `
-                            <tr class="border-b border-[#2f314e]/40 text-center h-9 hover:bg-[#242746]/20 ${classeSelecaoSub}">
+                            <tr class="atlas-hierarchy-child border-b border-[#2f314e]/40 text-center h-9 hover:bg-[#242746]/20 ${classeSelecaoSub}" data-atlas-entity-type="subelemento_documentacao" data-atlas-entity-id="${escaparHtml(sub.id)}">
                                 <td><input type="checkbox" class="rounded accent-[#0073ea]" ${subSelecionado ? 'checked' : ''} onclick="event.stopPropagation(); toggleSelecaoSubelemento('${el.id}', '${sub.id}', this.checked)" title="Selecionar subelemento"></td>
                                 <td class="px-4 text-left text-white font-medium"><span class="cursor-pointer hover:text-[#0073ea]" onclick="alterarNomeSubelemento('${sub.id}', event)" title="Editar nome da porta/subelemento">${escaparHtml(sub.nome)} <span class="text-[9px] text-gray-500">✏️</span></span></td>
-                                <td class="text-gray-500">💬</td>
+                                <td class="text-gray-500">${renderBotaoColaboracaoV142('subelemento_documentacao', sub.id, sub.nome || 'Subelemento')}</td>
                                 <td class="p-1">
                                     ${renderizarSelectStatus('sub', sub.id, statusSub, 'w-24')}
                                 </td>
@@ -10217,7 +10407,7 @@ Imagens afetadas: ${totalImagens}.`,
                         });
                     }
                     tbody.innerHTML += `
-                        <tr>
+                        <tr class="atlas-hierarchy-children">
                             <td colSpan="6" class="bg-[#141524] p-3">
                                 <table class="w-full text-left text-[11px] border border-[#2f314e]">
                                     <thead>

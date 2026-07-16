@@ -14,12 +14,13 @@
   <meta content="Atlas | Smart Field Management" property="og:title"/>
   <meta content="Plataforma inteligente para documenta&ccedil;&atilde;o e gest&atilde;o de opera&ccedil;&otilde;es em campo." property="og:description"/>
   <meta content="website" property="og:type"/>
-  <link href="assets/icons/favicon.ico?v=1.4.1.5" rel="icon" sizes="any"/>
-  <link href="assets/icons/icon-32.png?v=1.4.1.5" rel="icon" sizes="32x32" type="image/png"/>
-  <link href="assets/icons/icon-192.png?v=1.4.1.5" rel="apple-touch-icon"/>
-  <meta content="assets/icons/icon-192.png?v=1.4.1.5" property="og:image"/>
+  <link href="assets/icons/favicon.ico?v=1.4.2.0" rel="icon" sizes="any"/>
+  <link href="assets/icons/icon-32.png?v=1.4.2.0" rel="icon" sizes="32x32" type="image/png"/>
+  <link href="assets/icons/icon-192.png?v=1.4.2.0" rel="apple-touch-icon"/>
+  <meta content="assets/icons/icon-192.png?v=1.4.2.0" property="og:image"/>
   <link href="manifest.webmanifest" rel="manifest"/>
-  <link href="css/main.css?v=1.4.1.5" rel="stylesheet"/>
+  <link href="css/main.css?v=1.4.2.0" rel="stylesheet"/>
+  <link href="css/v1_4_2.css?v=1.4.2.0" rel="stylesheet"/>
  </head>
  <body class="bg-[#1c1d30] m-0 p-0 overflow-hidden text-gray-200 font-sans text-xs flex flex-col h-screen">
   <div id="atlas-auth-root" class="atlas-auth-root"></div>
@@ -114,6 +115,15 @@
        Buscando dados...
       </h1>
       <div class="flex gap-2">
+       <button class="atlas-v142-header-btn" id="btn-atlas-global-search" onclick="atlasV142AbrirBuscaGlobal()" title="Busca global" aria-label="Abrir busca global">
+        <i data-lucide="search" aria-hidden="true"></i><span>Buscar</span>
+       </button>
+       <button class="atlas-v142-header-btn" id="btn-atlas-notifications" onclick="atlasV142AbrirNotificacoes()" title="Notificações" aria-label="Abrir notificações">
+        <i data-lucide="bell" aria-hidden="true"></i><span>Alertas</span><b class="atlas-v142-notification-badge hidden" id="atlas-v142-notification-count">0</b>
+       </button>
+       <button class="atlas-v142-header-btn" id="btn-atlas-productivity" onclick="atlasV142AbrirCentral()" title="Ferramentas da V1.4.2" aria-label="Abrir ferramentas de produtividade">
+        <i data-lucide="layout-grid" aria-hidden="true"></i><span>Ferramentas</span>
+       </button>
        <button class="bg-[#0073ea] hover:bg-[#0073ea] text-white px-4 py-2 rounded text-xs font-medium flex items-center gap-1.5 shadow-md" id="btn-adicionar-ativo" onclick="criarElementoPai()">
         Adicionar ativo
        </button>
@@ -197,6 +207,9 @@
    </aside>
   </div>
 
+  <div id="atlas-v142-modal-root"></div>
+  <div id="atlas-v142-collaboration-root"></div>
+
   <!-- RODAPÉ DE COPYRIGHT -->
   <div id="atlas-footer" class="bg-[#141524] border-t border-[#2f314e] px-4 py-2 flex items-center justify-between text-gray-500 text-[10px] select-none shrink-0 z-50">
    <div>
@@ -217,13 +230,16 @@
     <button class="atlas-logout-btn hidden" id="btn-logout-atlas" onclick="sairAtlas()" title="Sair do Atlas">Sair</button>
     <button class="atnx-theme-toggle" id="btn-theme-atnx" onclick="alternarTemaAtnx()" title="Alternar tema">Escuro</button>
     <span class="atnx-version-badge">
-     V 1.4.1 Oficial
+     V 1.4.2
     </span>
    </div>
   </div>
   <script src="config/config.js">
   </script>
-  <script src="js/app.js?v=1.4.1.5">
+  <script src="https://cdn.jsdelivr.net/npm/lucide@0.468.0/dist/umd/lucide.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="js/app.js?v=1.4.2.0">
   </script>
+  <script src="js/v1_4_2.js?v=1.4.2.0"></script>
  </body>
 </html>
