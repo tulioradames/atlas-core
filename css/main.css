@@ -12259,6 +12259,65 @@ button {
     }
 }
 
+/* V1.4.2 - fechamento das grades sem cortar a ultima coluna. */
+:root {
+    --atlas-table-end-gutter: 36px;
+}
+
+#main-scroll-container {
+    scrollbar-gutter: stable !important;
+}
+
+/* Documentacao ganhou o botao de colaboracao e precisa de uma coluna de acoes real. */
+#painel-documentacao > table {
+    margin-right: var(--atlas-table-end-gutter) !important;
+}
+
+#painel-documentacao > table thead th:last-child,
+#painel-documentacao > table tbody tr:not(.atlas-hierarchy-children) > td:last-child {
+    box-sizing: border-box !important;
+    width: 112px !important;
+    min-width: 112px !important;
+    padding-left: 8px !important;
+    padding-right: 12px !important;
+    white-space: nowrap !important;
+}
+
+#painel-documentacao > table tbody tr:not(.atlas-hierarchy-children) > td:last-child > button {
+    margin-left: 3px;
+    margin-right: 3px;
+    vertical-align: middle;
+}
+
+/* O espaco passa a integrar o scrollWidth, permitindo chegar alem da ultima celula. */
+.atlas-module-table-wrap,
+.atlas-admin-table-wrap,
+.atlas-pmo-table-wrap,
+.atlas-pmo-detail-card .atlas-module-table-wrap,
+.atlas-exp-table-wrap,
+.atlas-exp-obra-table-wrap,
+.atlas-exp-obras-shell .atlas-exp-sub-table-wrap {
+    box-sizing: border-box !important;
+    padding-right: var(--atlas-table-end-gutter) !important;
+    scroll-padding-right: var(--atlas-table-end-gutter) !important;
+}
+
+#painel-expansoes .atlas-exp-board .atlas-exp-sub-table-wrap {
+    box-sizing: border-box !important;
+    padding-right: 52px !important;
+    scroll-padding-right: 52px !important;
+}
+
+.atlas-module-table thead th:last-child,
+.atlas-module-table tbody tr:not(.atlas-hierarchy-children) > td:last-child,
+.atlas-admin-table thead th:last-child,
+.atlas-admin-table tbody td:last-child,
+.atlas-pmo-table thead th:last-child,
+.atlas-pmo-table tbody tr:not(.atlas-hierarchy-children) > td:last-child {
+    min-width: 112px !important;
+    white-space: nowrap !important;
+}
+
 /* V1.4.1 - Ações dos subelementos contidas na própria coluna. */
 #painel-expansoes .atlas-exp-board .atlas-exp-sub-table th:nth-child(3),
 #painel-expansoes .atlas-exp-board .atlas-exp-sub-table td:nth-child(3),
@@ -13290,7 +13349,8 @@ table > tbody > tr.atlas-hierarchy-child > td:first-child {
 #painel-expansoes .atlas-exp-board .atlas-exp-table-wrap,
 #painel-expansoes .atlas-exp-board .atlas-exp-sub-table-wrap {
     overflow-x: auto !important;
-    scroll-padding-inline: 0 !important;
+    scroll-padding-left: 0 !important;
+    scroll-padding-right: var(--atlas-table-end-gutter) !important;
 }
 
 #painel-expansoes .atlas-exp-board .atlas-exp-sub-table-wrap {
