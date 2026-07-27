@@ -1,7 +1,0 @@
-<svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Atlas">
-  <rect x="112" y="112" width="800" height="800" rx="220" fill="#FFFFFF"/>
-  <g stroke="#0073EA" stroke-width="78" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M300 748L512 276L724 748"/>
-    <path d="M398 592H626"/>
-  </g>
-</svg>

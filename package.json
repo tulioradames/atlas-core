@@ -1,0 +1,11 @@
+{
+  "name": "atlas-core",
+  "version": "2.0.19",
+  "private": true,
+  "description": "Atlas Smart Field Management",
+  "scripts": {
+    "check:js": "node --check js/v2.js",
+    "test": "node tests/static-audit.cjs",
+    "test:browser": "node tests/browser-smoke.cjs"
+  }
+}

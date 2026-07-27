@@ -1,0 +1,28 @@
+ATLAS V2.0.19 HOTFIX
+
+ORDEM OBRIGATORIA
+1. Faça backup do site e do Supabase.
+2. Execute supabase/ATLAS_V2_0_19_HOTFIX.sql.
+3. Execute supabase/ATLAS_V2_0_19_VALIDAR.sql e confirme APROVADO.
+4. Publique todos os arquivos deste pacote.
+5. Substitua o codigo de cada Apps Script pelo arquivo da pasta appscript.
+6. Ative e substitua o manifesto appsscript.json pelo arquivo fornecido.
+7. Configure ALLOWED_ROOT_FOLDER_IDS.
+8. Execute autorizarConectorAtlas e aceite as permissoes solicitadas.
+9. Implante uma nova versao do Web App.
+10. Feche as abas antigas, abra novamente e pressione Ctrl + F5.
+11. Confirme no rodape: V2.0.19 Hotfix.
+
+BANCO NOVO
+- Use somente supabase/ATLAS_V2_0_19_SCHEMA_COMPLETO.sql.
+- Nao execute o schema completo em seguida ao hotfix.
+
+AUTH
+- Senha minima: 8 caracteres.
+- Ative a protecao contra senhas vazadas no painel do Supabase, se disponivel.
+
+IMPORTANTE
+- Nao use service_role no frontend ou no Apps Script.
+- O conector antigo deve ser substituido.
+- Arquivos novos permanecem privados por padrao no Google Drive.
+- Compartilhe a pasta raiz com os usuarios/grupos que precisarem visualizar os anexos.

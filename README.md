@@ -1,106 +1,81 @@
-# Atlas Core V1.4.2 Beta
+# Atlas V2.0.19 Hotfix
 
-Plataforma web de gestão operacional para documentação de redes, expansões, obras, projetos, manutenção e acompanhamento de atividades.
+## Edição pública
 
-Esta é a edição pública do Atlas. O repositório não contém registros empresariais, credenciais, IDs de pastas, contas operacionais nem endpoints de produção.
+Este repositório não contém credenciais, URLs de produção, IDs de pastas do
+Google Drive nem dados operacionais. Antes de executar:
 
-## Novidades da V1.4.2
+1. configure `SUPABASE_URL` e `SUPABASE_KEY` em `config/config.js`;
+2. execute o schema adequado da pasta `supabase/`;
+3. configure as mesmas credenciais e o ID da pasta permitida no conector em
+   `appscript/GoogleDriveUpload_AppsScript_V2_CONECTOR_SETOR.gs`;
+4. publique uma cópia do conector em cada conta setorial do Google Drive.
 
-1. Comentários e menções vinculados aos registros.
-2. Busca global entre os módulos operacionais.
-3. Visualizações salvas por usuário.
-4. Atualizações em massa com confirmação.
-5. Histórico individual por registro.
-6. Notificações internas de menções, atribuições e prazos.
-7. Importação assistida de arquivos CSV e XLSX.
-8. Central administrativa de erros.
-9. Lixeira com restauração por 30 dias.
-10. Modelos reutilizáveis sem cópia de anexos ou históricos.
+Use somente uma chave publicável do Supabase. Nunca coloque `service_role`,
+senhas, tokens de sessão ou identificadores internos no repositório.
 
-A tela de login apresenta o resumo completo desta versão.
+Pacote de correção da V2.0.18, preservando o Gantt sem campos de progresso.
 
-## Recursos existentes
+## Correções
 
-- Login com Supabase Auth e liberação de novos usuários por administradores.
-- Perfis Admin, Supervisor, Operador e Visualizador.
-- Documentação de Rede Geral com cidades, categorias, elementos e subelementos.
-- Expansões com Projetos, Obras, fases, movimentação de itens e Gantt.
-- PMO para análise e acompanhamento de novos projetos.
-- Manutenção de Redes com regionais, chamados, filtros e anexos.
-- Campos personalizados, auditoria e administração de usuários.
-- Modo claro e escuro, layout responsivo e navegação mobile.
-- Integração opcional com Google Drive por Apps Script.
-- Implantação estática compatível com Cloudflare Pages.
+- anexos de imagem e arquivo armazenados e visualizados dentro do Atlas;
+- galeria com navegação entre anexos do mesmo campo;
+- lixeira persistente no Supabase, com restauração de estruturas e anexos;
+- auditoria persistente associada ao usuário autenticado;
+- conector do Google Drive protegido por sessão e permissão do quadro;
+- arquivos novos privados por padrão no Drive;
+- sincronização autenticada sem Broadcast público;
+- carregamento sob demanda dos valores e anexos de cada quadro;
+- importação de planilhas com limites e validação;
+- dependências JavaScript incluídas no pacote, sem CDN;
+- índices adicionais para consultas e relacionamentos.
+- autoria protegida no banco e funções internas de automação não expostas como RPC;
+- validação pós-instalação por SQL somente leitura.
 
-## Tecnologias
+## Atualização
 
-- HTML5
-- CSS3
-- JavaScript
-- Supabase Auth, PostgreSQL, RLS e Realtime
-- Google Apps Script e Google Drive, opcionais
-- Cloudflare Pages e Pages Functions
+1. Faça backup da publicação e do banco.
+2. Execute `supabase/ATLAS_V2_0_19_HOTFIX.sql` no SQL Editor.
+3. Execute `supabase/ATLAS_V2_0_19_VALIDAR.sql` e confirme `APROVADO`.
+4. Substitua os arquivos do site pelo conteúdo deste pacote.
+5. Atualize o Apps Script de cada setor com o arquivo de `appscript/`.
+6. Ative a exibição do manifesto e substitua `appsscript.json` pelo arquivo fornecido.
+7. Em cada Apps Script, configure `ALLOWED_ROOT_FOLDER_IDS`.
+8. Execute manualmente `autorizarConectorAtlas` e conceda as permissões.
+9. Implante uma nova versão do Web App.
+10. Feche as abas antigas, abra novamente e pressione `Ctrl + F5`.
+11. Confirme **V2.0.19 Hotfix** no rodapé.
 
-## Instalação
+O novo conector exige o SQL da V2.0.19. O Apps Script antigo não oferece a mesma proteção e deve ser substituído.
 
-### 1. Configure o Supabase
+Para uma instalação vazia, use somente `supabase/ATLAS_V2_0_19_SCHEMA_COMPLETO.sql`.
+Não execute o schema completo depois do hotfix.
 
-Para uma instalação nova, execute no SQL Editor:
+## Supabase Auth
 
-```text
-supabase/ATLAS_V1_4_SCHEMA_OFICIAL.sql
-```
+No painel do Supabase, abra **Authentication > Sign In / Providers > Password**:
 
-Para atualizar um banco que já utiliza a V1.4.1, execute apenas:
+- mantenha o mínimo de senha em 8 caracteres ou mais;
+- ative a proteção contra senhas vazadas, quando disponível no plano.
 
-```text
-supabase/ATLAS_V1_4_2_COLABORACAO_PRODUTIVIDADE.sql
-```
+O frontend usa somente a chave publicável. Nunca use `service_role` no navegador ou no Apps Script.
 
-O SQL incremental da V1.4.2 já está incorporado ao arquivo unificado.
+## Dependências incluídas
 
-### 2. Configure o frontend
+- `@supabase/supabase-js` 2.110.8;
+- Lucide 0.468.0;
+- SheetJS 0.20.3.
 
-Preencha em `config/config.js`:
-
-```js
-SUPABASE_URL: "https://SEU-PROJETO.supabase.co",
-SUPABASE_KEY: "SUA_CHAVE_PUBLICA"
-```
-
-Use somente a chave pública do Supabase no navegador. Nunca publique a `service_role`.
-
-### 3. Configure o Google Drive, se necessário
-
-Os exemplos em `appscript/` usam identificadores vazios. Preencha as pastas na sua cópia do Apps Script e publique os Web Apps com as permissões adequadas ao seu ambiente.
-
-Depois, informe as URLs e pastas em `config/config.js`. Nenhuma alteração de Apps Script é exigida especificamente pela V1.4.2.
-
-### 4. Publique
-
-O projeto é estático. Envie o conteúdo da raiz para o provedor escolhido. No Cloudflare Pages, mantenha `index.html` e `_worker.js` na raiz do pacote.
-
-## Estrutura principal
+## Estrutura
 
 ```text
-appscript/   Integrações opcionais com Google Drive
-assets/      Identidade visual e ícones
-config/      Configuração pública do ambiente
-css/         Estilos da aplicação
-docs/        Marca e notas de versão
-js/          Aplicação e módulos da interface
-supabase/    Schema unificado e migrações incrementais
+appscript/   Conector seguro do Google Drive
+assets/      Marca, ícones e bibliotecas locais
+config/      Configuração pública do Supabase
+css/         Estilos
+docs/        Manual e notas técnicas
+js/          Aplicação Atlas
+supabase/    SQL de atualização
+tests/       Verificações automatizadas
 index.html   Entrada da aplicação
-_worker.js   Proxy opcional para Cloudflare Pages
 ```
-
-## Segurança
-
-- Mantenha RLS habilitado no Supabase.
-- Revise as permissões dos perfis antes de liberar usuários.
-- Não envie chaves privadas, tokens, dados operacionais ou IDs internos para o repositório.
-- Leia `SECURITY.md` antes de publicar uma implantação própria.
-
-## Estado da versão
-
-A V1.4.2 está identificada como Beta para validação funcional antes de ser promovida a Oficial.

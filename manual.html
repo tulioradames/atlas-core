@@ -1,0 +1,507 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Manual Interativo | Atlas V2.0.19 Hotfix</title>
+<meta name="description" content="Manual simplificado e interativo de utilização do Atlas V2.0.19 Hotfix.">
+  <meta name="author" content="Túlio Radamés">
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg:#07111c; --panel:#0d1b29; --panel-2:#112537; --line:#28465b;
+      --text:#edf8ff; --muted:#9ab2c2; --cyan:#23d5ee; --lime:#c8f31d;
+      --blue:#4ba6ff; --pink:#ff4c9d; --green:#37d996; --yellow:#ffd84d;
+      --danger:#ff647c; --shadow:0 20px 60px rgba(0,0,0,.3); --radius:18px;
+    }
+    html[data-theme="light"] {
+      color-scheme: light;
+      --bg:#eef7fa; --panel:#ffffff; --panel-2:#f3f9fb; --line:#bfd5df;
+      --text:#0b2231; --muted:#567181; --shadow:0 18px 50px rgba(20,75,100,.13);
+    }
+    * { box-sizing:border-box; }
+    html { scroll-behavior:smooth; }
+    body { margin:0; min-height:100vh; background:
+      linear-gradient(rgba(35,213,238,.045) 1px,transparent 1px),
+      linear-gradient(90deg,rgba(35,213,238,.045) 1px,transparent 1px),var(--bg);
+      background-size:42px 42px; color:var(--text); font:15px/1.55 Inter,Segoe UI,Arial,sans-serif; }
+    button,input,select { font:inherit; }
+    a { color:var(--cyan); }
+    .skip { position:fixed; left:12px; top:-50px; z-index:99; padding:10px 14px; background:var(--cyan); color:#00131b; border-radius:8px; font-weight:800; }
+    .skip:focus { top:12px; }
+    .shell { display:grid; grid-template-columns:290px minmax(0,1fr); min-height:100vh; }
+    .sidebar { position:sticky; top:0; height:100vh; overflow:auto; border-right:1px solid var(--line); background:color-mix(in srgb,var(--panel) 94%,transparent); backdrop-filter:blur(18px); padding:22px 18px; z-index:10; }
+    .brand { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:18px; }
+    .brand-mark { display:flex; align-items:center; gap:10px; text-decoration:none; color:var(--text); }
+    .brand-a { font-size:32px; line-height:1; color:var(--cyan); transform:skew(-7deg); }
+    .brand strong { letter-spacing:.18em; font-size:15px; }
+    .version { display:inline-flex; padding:4px 8px; border:1px solid color-mix(in srgb,var(--lime) 55%,var(--line)); border-radius:7px; color:var(--lime); font:800 10px/1 monospace; }
+    .side-actions { display:grid; grid-template-columns:1fr auto auto; gap:8px; margin-bottom:14px; }
+    .search { width:100%; min-width:0; border:1px solid var(--line); border-radius:11px; background:var(--panel-2); color:var(--text); padding:10px 12px; outline:none; }
+    .search:focus { border-color:var(--cyan); box-shadow:0 0 0 3px rgba(35,213,238,.14); }
+    .icon-btn { width:42px; height:42px; display:grid; place-items:center; border:1px solid var(--line); border-radius:11px; background:var(--panel-2); color:var(--text); cursor:pointer; }
+    .icon-btn:hover { border-color:var(--cyan); color:var(--cyan); }
+    .role-box { display:grid; gap:6px; margin:10px 0 16px; }
+    .role-box label { color:var(--muted); font-size:12px; font-weight:800; letter-spacing:.05em; text-transform:uppercase; }
+    .role-box select { width:100%; padding:9px 11px; background:var(--panel-2); color:var(--text); border:1px solid var(--line); border-radius:10px; }
+    .progress-card { padding:13px; border:1px solid var(--line); border-radius:13px; background:var(--panel-2); margin-bottom:15px; }
+    .progress-card small { color:var(--muted); }
+    .progress-track { height:7px; background:color-mix(in srgb,var(--line) 65%,transparent); border-radius:99px; overflow:hidden; margin:8px 0 5px; }
+    .progress-track span { display:block; height:100%; width:0; background:linear-gradient(90deg,var(--cyan),var(--lime)); transition:width .25s; }
+    nav { display:grid; gap:3px; }
+    nav a { text-decoration:none; color:var(--muted); padding:8px 10px; border-radius:9px; font-size:13px; }
+    nav a:hover,nav a.is-active { color:var(--text); background:var(--panel-2); }
+    nav a.is-active { box-shadow:inset 3px 0 var(--cyan); }
+    .sidebar-foot { margin-top:18px; color:var(--muted); font-size:12px; border-top:1px solid var(--line); padding-top:14px; }
+    main { min-width:0; }
+    .hero { padding:62px clamp(24px,6vw,90px) 32px; border-bottom:1px solid var(--line); background:linear-gradient(135deg,rgba(35,213,238,.08),transparent 46%,rgba(200,243,29,.06)); }
+    .eyebrow { color:var(--cyan); font-size:12px; font-weight:900; letter-spacing:.13em; text-transform:uppercase; }
+    h1 { margin:8px 0 12px; font-size:clamp(38px,6vw,72px); line-height:.98; max-width:980px; }
+    h1 em { color:var(--lime); font-style:normal; }
+    .lead { max-width:850px; color:var(--muted); font-size:18px; }
+    .hero-actions { display:flex; flex-wrap:wrap; gap:10px; margin-top:24px; }
+    .btn { border:1px solid var(--line); border-radius:11px; background:var(--panel-2); color:var(--text); padding:11px 15px; cursor:pointer; font-weight:800; text-decoration:none; display:inline-flex; align-items:center; gap:8px; }
+    .btn.primary { background:var(--cyan); color:#00151c; border-color:var(--cyan); }
+    .btn:hover { transform:translateY(-1px); box-shadow:0 8px 20px rgba(0,0,0,.13); }
+    .content { padding:32px clamp(20px,5vw,72px) 80px; max-width:1400px; }
+    .quick-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; margin:0 0 28px; }
+    .quick-card { border:1px solid var(--line); background:var(--panel); border-radius:15px; padding:16px; box-shadow:var(--shadow); }
+    .quick-card b { display:block; font-size:24px; color:var(--cyan); margin-bottom:5px; }
+    .quick-card strong { display:block; margin-bottom:4px; }
+    .quick-card small { color:var(--muted); }
+    .section { scroll-margin-top:24px; margin:24px 0; border:1px solid var(--line); border-radius:var(--radius); background:var(--panel); box-shadow:var(--shadow); overflow:hidden; }
+    .section-head { display:flex; gap:15px; align-items:flex-start; padding:22px 24px 16px; border-bottom:1px solid var(--line); }
+    .section-num { flex:0 0 auto; width:36px; height:36px; display:grid; place-items:center; border-radius:50%; background:var(--cyan); color:#00141b; font-weight:900; }
+    .section h2 { margin:0; font-size:25px; }
+    .section-head p { margin:4px 0 0; color:var(--muted); }
+    .section-body { padding:22px 24px 26px; }
+    .cards { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; }
+    .card { border:1px solid var(--line); border-radius:14px; padding:16px; background:var(--panel-2); }
+    .card h3 { margin:0 0 7px; font-size:17px; }
+    .card p,.card li { color:var(--muted); }
+    .card ul,.card ol { padding-left:20px; margin:8px 0 0; }
+    .tip { margin:14px 0; padding:13px 15px; border-left:4px solid var(--cyan); border-radius:8px; background:color-mix(in srgb,var(--cyan) 8%,var(--panel-2)); }
+    .tip.warning { border-color:var(--yellow); background:color-mix(in srgb,var(--yellow) 8%,var(--panel-2)); }
+    .tip.success { border-color:var(--green); background:color-mix(in srgb,var(--green) 8%,var(--panel-2)); }
+    .tip.danger { border-color:var(--danger); background:color-mix(in srgb,var(--danger) 8%,var(--panel-2)); }
+    .steps { counter-reset:steps; display:grid; gap:10px; }
+    .step { counter-increment:steps; display:grid; grid-template-columns:34px 1fr auto; gap:12px; align-items:start; border:1px solid var(--line); border-radius:12px; padding:12px; background:var(--panel-2); }
+    .step::before { content:counter(steps); width:30px; height:30px; display:grid; place-items:center; border-radius:50%; background:color-mix(in srgb,var(--cyan) 18%,var(--panel)); color:var(--cyan); font-weight:900; }
+    .step strong { display:block; }
+    .step small { color:var(--muted); }
+    .check { display:flex; align-items:center; gap:8px; color:var(--muted); cursor:pointer; white-space:nowrap; }
+    .check input { width:18px; height:18px; accent-color:var(--green); }
+    .tabs { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px; }
+    .tab { border:1px solid var(--line); background:var(--panel-2); color:var(--muted); border-radius:999px; padding:8px 12px; cursor:pointer; }
+    .tab.is-active { color:#00151c; background:var(--cyan); border-color:var(--cyan); font-weight:900; }
+    .tab-panel { display:none; }
+    .tab-panel.is-active { display:block; animation:fade .18s ease; }
+    @keyframes fade { from{opacity:.3;transform:translateY(3px)} }
+    details { border:1px solid var(--line); border-radius:12px; background:var(--panel-2); margin:9px 0; }
+    summary { cursor:pointer; padding:13px 15px; font-weight:800; }
+    details > div { padding:0 15px 15px; color:var(--muted); }
+    kbd { border:1px solid var(--line); border-bottom-width:3px; background:var(--panel); border-radius:6px; padding:2px 6px; font:700 12px monospace; }
+    .shortcut-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
+    .shortcut { display:flex; justify-content:space-between; gap:12px; border:1px solid var(--line); padding:10px 12px; border-radius:10px; background:var(--panel-2); }
+    .status { display:inline-flex; align-items:center; gap:7px; font-weight:800; }
+    .status::before { content:""; width:9px; height:9px; border-radius:50%; background:currentColor; box-shadow:0 0 13px currentColor; }
+    .connected { color:var(--green); } .waiting { color:var(--yellow); } .error { color:var(--danger); }
+    .role-only { display:none; }
+    body[data-role="admin"] .role-admin,
+    body[data-role="supervisor"] .role-supervisor,
+    body[data-role="operador"] .role-operador,
+    body[data-role="visualizador"] .role-visualizador { display:block; }
+    .copy-btn { border:0; background:transparent; color:var(--cyan); cursor:pointer; font-weight:800; padding:4px; }
+    .quiz { display:grid; gap:12px; }
+    .question { border:1px solid var(--line); border-radius:12px; padding:15px; background:var(--panel-2); }
+    .question p { margin:0 0 10px; font-weight:800; }
+    .choices { display:grid; gap:7px; }
+    .choice { text-align:left; border:1px solid var(--line); border-radius:9px; background:var(--panel); color:var(--text); padding:9px 11px; cursor:pointer; }
+    .choice.correct { border-color:var(--green); background:color-mix(in srgb,var(--green) 12%,var(--panel)); }
+    .choice.wrong { border-color:var(--danger); background:color-mix(in srgb,var(--danger) 12%,var(--panel)); }
+    .quiz-result { font-weight:900; color:var(--lime); }
+    .empty-search { display:none; margin:22px 0; padding:20px; border:1px dashed var(--line); border-radius:14px; color:var(--muted); text-align:center; }
+    mark { background:var(--yellow); color:#241d00; padding:0 2px; border-radius:3px; }
+    .tour { position:fixed; inset:0; z-index:100; display:none; background:rgba(0,9,15,.84); backdrop-filter:blur(8px); padding:20px; place-items:center; }
+    .tour.is-open { display:grid; }
+    .tour-card { width:min(680px,100%); border:1px solid var(--cyan); border-radius:20px; background:var(--panel); box-shadow:0 30px 100px rgba(0,0,0,.55); padding:26px; }
+    .tour-card h2 { margin:6px 0; font-size:30px; }
+    .tour-card p { color:var(--muted); font-size:17px; }
+    .tour-visual { min-height:150px; display:grid; place-items:center; border:1px dashed var(--line); border-radius:14px; margin:18px 0; background:var(--panel-2); padding:20px; font-size:20px; text-align:center; }
+    .tour-foot { display:flex; justify-content:space-between; gap:10px; align-items:center; }
+    .tour-dots { display:flex; gap:6px; }
+    .tour-dots i { width:8px; height:8px; border-radius:50%; background:var(--line); }
+    .tour-dots i.is-active { background:var(--cyan); }
+    .toast { position:fixed; right:18px; bottom:18px; z-index:120; background:var(--panel); border:1px solid var(--cyan); box-shadow:var(--shadow); border-radius:12px; padding:11px 14px; opacity:0; transform:translateY(10px); pointer-events:none; transition:.2s; }
+    .toast.show { opacity:1; transform:none; }
+    @media (max-width:1050px) { .shell{grid-template-columns:1fr}.sidebar{position:static;height:auto;border-right:0;border-bottom:1px solid var(--line)}nav{grid-template-columns:repeat(3,minmax(0,1fr))}.quick-grid{grid-template-columns:repeat(2,1fr)}.cards{grid-template-columns:1fr 1fr} }
+    @media (max-width:680px) { .hero{padding:36px 20px 24px}.content{padding:20px 14px 55px}.quick-grid,.cards,.shortcut-grid{grid-template-columns:1fr}nav{grid-template-columns:1fr 1fr}.section-head,.section-body{padding-left:16px;padding-right:16px}.step{grid-template-columns:30px 1fr}.step .check{grid-column:2}.side-actions{grid-template-columns:1fr auto auto} }
+    @media print { .sidebar,.hero-actions,.check,.copy-btn,.quiz,.tour,.toast{display:none!important}.shell{display:block}.section{break-inside:avoid;box-shadow:none}.hero,.content{padding:20px}.section-body{display:block!important} }
+  </style>
+</head>
+<body data-role="operador">
+<a class="skip" href="#conteudo">Ir para o conteúdo</a>
+<div class="shell">
+  <aside class="sidebar">
+    <div class="brand">
+      <a class="brand-mark" href="index.html" title="Voltar ao Atlas"><span class="brand-a">A</span><strong>ATLAS</strong></a>
+<span class="version">V2.0.19 HOTFIX</span>
+    </div>
+    <div class="side-actions">
+      <input class="search" id="guide-search" type="search" placeholder="Pesquisar no manual" aria-label="Pesquisar no manual">
+      <button class="icon-btn" id="theme-toggle" title="Alternar tema" aria-label="Alternar tema">◐</button>
+      <button class="icon-btn" id="print-guide" title="Imprimir ou salvar PDF" aria-label="Imprimir manual">⎙</button>
+    </div>
+    <div class="role-box">
+      <label for="role-select">Mostrar dicas para</label>
+      <select id="role-select">
+        <option value="admin">Administrador</option>
+        <option value="supervisor">Supervisor</option>
+        <option value="operador" selected>Operador</option>
+        <option value="visualizador">Visualizador</option>
+      </select>
+    </div>
+    <div class="progress-card">
+      <strong>Seu progresso</strong>
+      <div class="progress-track"><span id="progress-bar"></span></div>
+      <small id="progress-label">0 de 8 passos concluídos</small>
+    </div>
+    <nav id="guide-nav" aria-label="Seções do manual"></nav>
+    <div class="sidebar-foot">Manual simplificado · Criado por Túlio Radamés<br>Atalho: pressione <kbd>/</kbd> para pesquisar.</div>
+  </aside>
+
+  <main id="conteudo">
+    <header class="hero">
+      <div class="eyebrow">Manual interativo de utilização</div>
+      <h1>Use o Atlas com <em>segurança e agilidade.</em></h1>
+<p class="lead">Aprenda o essencial da V2.0.19 Hotfix em poucos minutos. Marque os passos concluídos, pesquise qualquer função e consulte os procedimentos quando precisar.</p>
+      <div class="hero-actions">
+        <button class="btn primary" id="start-tour">▶ Iniciar tour de 2 minutos</button>
+        <a class="btn" href="#inicio">✓ Começar pelo básico</a>
+        <a class="btn" href="index.html">↩ Voltar ao Atlas</a>
+      </div>
+    </header>
+
+    <div class="content">
+      <div class="quick-grid" aria-label="Resumo rápido">
+        <div class="quick-card"><b>1</b><strong>Escolha o módulo</strong><small>Use o menu lateral para entrar no quadro correto.</small></div>
+        <div class="quick-card"><b>2</b><strong>Localize o registro</strong><small>Filtre itens ou use <kbd>Ctrl K</kbd> para buscar em todo o Atlas.</small></div>
+        <div class="quick-card"><b>3</b><strong>Atualize os campos</strong><small>Edite a célula e aguarde “Alterações salvas”.</small></div>
+<div class="quick-card"><b>4</b><strong>Confirme a sincronização</strong><small>A sincronização autenticada deve aparecer como conectada.</small></div>
+      </div>
+
+      <div class="empty-search" id="empty-search">Nenhuma seção encontrada. Tente termos como “imagem”, “Gantt”, “automação”, “obras” ou “permissão”.</div>
+
+      <section class="section" id="inicio" data-title="Comece em 3 minutos">
+        <div class="section-head"><span class="section-num">1</span><div><h2>Comece em 3 minutos</h2><p>O fluxo mínimo para trabalhar sem se perder.</p></div></div>
+        <div class="section-body">
+          <div class="steps">
+            <div class="step"><div><strong>Entre com sua conta</strong><small>O acesso depende do perfil liberado por um administrador.</small></div><label class="check"><input type="checkbox" data-check="login"> Concluído</label></div>
+            <div class="step"><div><strong>Abra o módulo e o quadro</strong><small>Ex.: Documentação Rede Geral → Obras ou Expansões → Projetos.</small></div><label class="check"><input type="checkbox" data-check="board"> Concluído</label></div>
+            <div class="step"><div><strong>Localize o item</strong><small>Use “Filtrar itens” para pesquisar setores, itens e subitens; em Obras, digitar a cidade abre a obra correspondente.</small></div><label class="check"><input type="checkbox" data-check="find"> Concluído</label></div>
+            <div class="step"><div><strong>Edite e confirme</strong><small>Depois de editar, observe o rodapé até aparecer “Alterações salvas”.</small></div><label class="check"><input type="checkbox" data-check="save"> Concluído</label></div>
+          </div>
+          <div class="tip success"><strong>Regra de ouro:</strong> antes de fechar a página, confirme que o rodapé não está mostrando “Sincronizando”.</div>
+        </div>
+      </section>
+
+      <section class="section" id="interface" data-title="Entenda a tela">
+        <div class="section-head"><span class="section-num">2</span><div><h2>Entenda a tela</h2><p>Onde estão as principais funções.</p></div></div>
+        <div class="section-body">
+          <div class="cards">
+            <div class="card"><h3>Menu lateral</h3><p>Organiza área, módulos e quadros. Os módulos iniciam fechados para deixar a navegação leve.</p></div>
+            <div class="card"><h3>Barra superior</h3><p>Busca global, notificações, tema claro/escuro e acesso rápido a este manual.</p></div>
+            <div class="card"><h3>Cabeçalho do quadro</h3><p>Mostra o nome, código, tipo de acesso, visualizações, compartilhamento e configurações.</p></div>
+            <div class="card"><h3>Barra de ferramentas</h3><p>Novo item, novo grupo, nova coluna, filtro, ordenação, automações, importação e tela cheia.</p></div>
+            <div class="card"><h3>Área de dados</h3><p>Exibe Tabela, Obras, Kanban ou Gantt. Elementos e setores iniciam recolhidos.</p></div>
+            <div class="card"><h3>Rodapé</h3><p>Confirma o salvamento. Use este indicador para saber quando a edição chegou ao Supabase.</p></div>
+          </div>
+          <div class="role-only role-admin tip"><strong>Administrador:</strong> você também controla usuários, permissões, integrações, modelos, lixeira e auditoria.</div>
+          <div class="role-only role-visualizador tip warning"><strong>Visualizador:</strong> alguns botões de criação ou edição não aparecem porque seu perfil é somente leitura.</div>
+        </div>
+      </section>
+
+      <section class="section" id="quadros" data-title="Itens grupos e colunas">
+        <div class="section-head"><span class="section-num">3</span><div><h2>Itens, grupos e colunas</h2><p>As operações mais frequentes nos quadros.</p></div></div>
+        <div class="section-body">
+          <div class="tabs" data-tabs="records">
+            <button class="tab is-active" data-tab="editar">Editar</button>
+            <button class="tab" data-tab="criar">Criar</button>
+            <button class="tab" data-tab="organizar">Organizar</button>
+            <button class="tab" data-tab="massa">Ações em massa</button>
+          </div>
+          <div class="tab-panel is-active" data-panel="editar"><div class="cards"><div class="card"><h3>Editar célula</h3><p>Clique no campo e informe o valor. Status, datas, números, listas, textos e imagens possuem controles próprios.</p></div><div class="card"><h3>Abrir subelementos</h3><p>Clique na seta ao lado do elemento. Para recolher, clique novamente.</p></div><div class="card"><h3>Salvar</h3><p>O envio é automático. Não precisa procurar um botão “Salvar”.</p></div></div></div>
+          <div class="tab-panel" data-panel="criar"><div class="steps"><div class="step"><div><strong>Novo item</strong><small>Cria um elemento dentro do setor atual.</small></div></div><div class="step"><div><strong>Novo grupo</strong><small>Cria um novo setor no quadro, se o seu perfil permitir.</small></div></div><div class="step"><div><strong>Nova coluna</strong><small>Adiciona um campo, como texto, status, data, número, lista ou imagem.</small></div></div></div></div>
+          <div class="tab-panel" data-panel="organizar"><div class="cards"><div class="card"><h3>Arrastar item</h3><p>Segure o item e solte no setor de destino.</p></div><div class="card"><h3>Arrastar setor</h3><p>Use o ponto de arraste do setor para reorganizar os grupos.</p></div><div class="card"><h3>Arrastar coluna</h3><p>Segure o cabeçalho da coluna e solte na posição desejada.</p></div></div></div>
+          <div class="tab-panel" data-panel="massa"><div class="steps"><div class="step"><div><strong>Marque as caixas</strong><small>Selecione um ou mais itens.</small></div></div><div class="step"><div><strong>Use a barra de seleção</strong><small>Mova para outro setor ou envie os itens para a lixeira.</small></div></div></div></div>
+          <div class="tip"><strong>Rolagem horizontal rápida:</strong> mantenha o <strong>botão direito do mouse</strong> pressionado e arraste para os lados nas tabelas, na faixa de obras e no Gantt.</div>
+        </div>
+      </section>
+
+      <section class="section" id="visualizacoes" data-title="Tabela Obras Kanban e Gantt">
+        <div class="section-head"><span class="section-num">4</span><div><h2>Tabela, Obras, Kanban e Gantt</h2><p>Escolha a visualização que melhor responde à sua tarefa.</p></div></div>
+        <div class="section-body">
+          <div class="tabs" data-tabs="views">
+            <button class="tab is-active" data-tab="table">Tabela</button><button class="tab" data-tab="works">Obras</button><button class="tab" data-tab="kanban">Kanban</button><button class="tab" data-tab="gantt">Gantt</button>
+          </div>
+          <div class="tab-panel is-active" data-panel="table"><div class="card"><h3>Tabela</h3><p>Ideal para preencher muitos campos, comparar registros e editar dados com precisão.</p><ul><li>Setores e elementos iniciam fechados.</li><li>Use o botão direito + arraste para ver colunas ocultas.</li><li>O filtro atua no quadro atual.</li></ul></div></div>
+          <div class="tab-panel" data-panel="works"><div class="card"><h3>Obras</h3><p>Ideal para navegar por cidades ou obras e visualizar os setores internos.</p><ul><li>Digite a cidade em “Filtrar itens” para ir direto a ela.</li><li>A faixa de obras aceita botão direito + arraste.</li><li>Os setores internos podem representar POP, CEO, CTO ou fases operacionais.</li></ul></div></div>
+          <div class="tab-panel" data-panel="kanban"><div class="card"><h3>Kanban</h3><p>Ideal para acompanhar etapas e mover cartões entre setores.</p><ul><li>Arraste o cartão para mudar o setor.</li><li>Use o status para indicar a situação do item.</li><li>Filtros e permissões do quadro continuam válidos.</li></ul></div></div>
+          <div class="tab-panel" data-panel="gantt"><div class="card"><h3>Gantt</h3><p>Ideal para visualizar cronogramas, dependências e períodos.</p><ul><li>As barras usam a cor configurada no status.</li><li>Use Hoje, Ajuste automático e os botões de zoom.</li><li>Botão direito + arraste movimenta a linha do tempo.</li><li>Elementos aparecem com seus subelementos logo abaixo.</li></ul></div></div>
+        </div>
+      </section>
+
+      <section class="section" id="busca" data-title="Busca e filtros">
+        <div class="section-head"><span class="section-num">5</span><div><h2>Busca e filtros</h2><p>Encontre o que precisa sem percorrer o quadro inteiro.</p></div></div>
+        <div class="section-body">
+          <div class="cards">
+            <div class="card"><h3>Filtrar itens</h3><p>Pesquisa setores/grupos, itens, subitens e valores dentro do quadro atual. Ao digitar o nome de um setor, o Atlas exibe e abre esse setor com seus registros. Em Obras, também localiza a cidade/obra e abre a aba correspondente.</p></div>
+            <div class="card"><h3>Busca global</h3><p>Pressione <kbd>Ctrl K</kbd> ou clique em Buscar para procurar rotas e registros em todo o Atlas.</p></div>
+            <div class="card"><h3>Localizar rota</h3><p>O campo no menu lateral filtra módulos e quadros pelo nome.</p></div>
+          </div>
+      <div class="tip"><strong>Acentos não atrapalham:</strong> “cidade modelo” pode localizar “Cidade Modelo”.</div>
+        </div>
+      </section>
+
+<section class="section" id="imagens" data-title="Imagens arquivos e Google Drive">
+<div class="section-head"><span class="section-num">6</span><div><h2>Imagens, arquivos e Google Drive</h2><p>Anexe, visualize e remova evidências sem sair do Atlas.</p></div></div>
+        <div class="section-body">
+          <div class="steps">
+<div class="step"><div><strong>Abra a célula de imagem ou arquivo</strong><small>Clique no campo configurado como Imagens, Fotos, Diagramas, Planilhas ou Arquivos.</small></div><label class="check"><input type="checkbox" data-check="image-open"> Concluído</label></div>
+            <div class="step"><div><strong>Selecione o arquivo</strong><small>Respeite o limite definido pelo ambiente. O padrão da V2 é até 15 MB.</small></div><label class="check"><input type="checkbox" data-check="image-upload"> Concluído</label></div>
+            <div class="step"><div><strong>Aguarde o envio</strong><small>O arquivo é armazenado na conexão do Google Drive associada ao setor.</small></div><label class="check"><input type="checkbox" data-check="image-wait"> Concluído</label></div>
+<div class="step"><div><strong>Abra o visualizador</strong><small>Use as setas ou as teclas ← e → para navegar entre anexos do mesmo campo.</small></div><label class="check"><input type="checkbox" data-check="image-view"> Concluído</label></div>
+          </div>
+          <details><summary>A imagem não abriu. O que fazer?</summary><div>Use “Abrir original”. Se o original também falhar, confirme se o arquivo ainda existe no Drive e se o compartilhamento permite visualização. Atualize a página com <kbd>Ctrl F5</kbd> depois de corrigir a conexão.</div></details>
+          <details><summary>Posso remover uma imagem?</summary><div>Sim, se o seu perfil tiver permissão de edição. A remoção envia a referência para atualização e solicita a exclusão no Drive configurado.</div></details>
+        </div>
+      </section>
+
+      <section class="section" id="automacoes" data-title="Automações">
+        <div class="section-head"><span class="section-num">7</span><div><h2>Automações</h2><p>Transforme regras repetitivas em ações automáticas.</p></div></div>
+        <div class="section-body">
+          <div class="cards">
+            <div class="card"><h3>Gatilho</h3><p>Define quando a regra começa: campo alterado, item criado, setor alterado ou data atingida.</p></div>
+            <div class="card"><h3>Condição</h3><p>É opcional. Restringe a regra, por exemplo: somente quando o Status for “Concluído”.</p></div>
+            <div class="card"><h3>Ação</h3><p>Move o item, preenche um campo, cria subitem, renomeia, arquiva ou envia notificação.</p></div>
+          </div>
+          <div class="steps">
+            <div class="step"><div><strong>Abra Automações</strong><small>Clique no ícone de fluxo na barra do quadro.</small></div></div>
+            <div class="step"><div><strong>Defina “Quando”</strong><small>Escolha o gatilho e, quando necessário, o campo e o valor.</small></div></div>
+            <div class="step"><div><strong>Defina “Somente se”</strong><small>Ative apenas se precisar de uma condição adicional.</small></div></div>
+            <div class="step"><div><strong>Defina “Então”</strong><small>Escolha a ação e os parâmetros de destino.</small></div></div>
+            <div class="step"><div><strong>Salve e teste</strong><small>Altere o item para disparar o gatilho ou use a execução manual.</small></div></div>
+          </div>
+          <div class="tip success"><strong>Exemplo:</strong> quando Status mudar para “Concluído”, mover o item para o setor “Concluídas”.</div>
+          <div class="tip warning"><strong>Importante:</strong> a automação dispara somente quando há uma mudança real. Alterar “Concluído” para “Concluído” não cria um novo evento.</div>
+        </div>
+      </section>
+
+      <section class="section" id="permissoes" data-title="Permissões e compartilhamento">
+        <div class="section-head"><span class="section-num">8</span><div><h2>Permissões e compartilhamento</h2><p>Cada usuário vê e altera apenas o que seu nível permite.</p></div></div>
+        <div class="section-body">
+          <div class="cards">
+            <div class="card"><h3>Administrador</h3><p>Controle total do Atlas, usuários, integrações, configurações e quadros.</p></div>
+            <div class="card"><h3>Supervisor</h3><p>Gerencia operações, cria, edita, exclui e compartilha conforme as regras do ambiente.</p></div>
+            <div class="card"><h3>Operador</h3><p>Cria e edita registros nos quadros liberados.</p></div>
+            <div class="card"><h3>Visualizador</h3><p>Acesso somente leitura aos quadros permitidos.</p></div>
+          </div>
+          <details><summary>Como compartilhar um quadro?</summary><div>Abra o quadro, clique em “Compartilhar”, selecione o usuário e defina o nível de acesso. Somente usuários com permissão de compartilhamento conseguem concluir a operação.</div></details>
+          <div class="role-only role-admin tip"><strong>Admin:</strong> revise usuários pendentes e mantenha ao menos um administrador ativo. O último administrador não pode ser excluído.</div>
+        </div>
+      </section>
+
+      <section class="section" id="importacao" data-title="Importação exportação modelos e lixeira">
+        <div class="section-head"><span class="section-num">9</span><div><h2>Importação, modelos e lixeira</h2><p>Recursos para acelerar atividades e recuperar erros.</p></div></div>
+        <div class="section-body">
+          <div class="cards">
+<div class="card"><h3>Importar planilha</h3><p>Use o ícone de arquivo na barra do quadro. São aceitos até 8 MB, 5.000 linhas e 100 colunas por importação.</p></div>
+            <div class="card"><h3>Modelos</h3><p>Salve estruturas reutilizáveis de quadros e campos para padronizar novas operações.</p></div>
+<div class="card"><h3>Lixeira</h3><p>Itens, colunas, grupos e estruturas excluídos ficam persistidos no Supabase e podem ser restaurados com seus anexos durante a retenção.</p></div>
+          </div>
+          <div class="tip warning"><strong>Antes de importar:</strong> confira se a primeira linha contém os títulos e se datas e números estão formatados corretamente.</div>
+        </div>
+      </section>
+
+      <section class="section" id="realtime" data-title="Sincronização Realtime e salvamento">
+<div class="section-head"><span class="section-num">10</span><div><h2>Sincronização autenticada</h2><p>Como saber se os dados estão atualizados com segurança.</p></div></div>
+        <div class="section-body">
+          <div class="cards">
+            <div class="card"><h3><span class="status connected">Conectado</span></h3><p>O canal em tempo real está ativo. Alterações de outros usuários podem aparecer automaticamente.</p></div>
+            <div class="card"><h3><span class="status waiting">Aguardando</span></h3><p>A conexão ainda está iniciando ou tentando reconectar. Aguarde alguns segundos.</p></div>
+            <div class="card"><h3><span class="status error">Falha</span></h3><p>Verifique a internet, a sessão e a configuração do Supabase. Atualize com <kbd>Ctrl F5</kbd>.</p></div>
+          </div>
+          <div class="tip"><strong>Realtime não substitui o indicador de salvamento:</strong> acompanhe também o rodapé do quadro para confirmar que sua edição foi enviada.</div>
+        </div>
+      </section>
+
+      <section class="section" id="atalhos" data-title="Atalhos e gestos">
+        <div class="section-head"><span class="section-num">11</span><div><h2>Atalhos e gestos</h2><p>Trabalhe mais rápido com estes comandos.</p></div></div>
+        <div class="section-body">
+          <div class="shortcut-grid">
+            <div class="shortcut"><span>Busca global</span><kbd>Ctrl K</kbd></div>
+            <div class="shortcut"><span>Fechar janela ou menu</span><kbd>Esc</kbd></div>
+            <div class="shortcut"><span>Imagem anterior</span><kbd>←</kbd></div>
+            <div class="shortcut"><span>Próxima imagem</span><kbd>→</kbd></div>
+            <div class="shortcut"><span>Atualização completa</span><kbd>Ctrl F5</kbd></div>
+            <div class="shortcut"><span>Rolagem horizontal</span><span><strong>Botão direito</strong> + arrastar</span></div>
+            <div class="shortcut"><span>Pesquisar neste manual</span><kbd>/</kbd></div>
+            <div class="shortcut"><span>Imprimir este manual</span><kbd>Ctrl P</kbd></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="problemas" data-title="Solução de problemas">
+        <div class="section-head"><span class="section-num">12</span><div><h2>Solução rápida de problemas</h2><p>Resolva os casos mais comuns antes de solicitar suporte.</p></div></div>
+        <div class="section-body">
+          <details><summary>O site ficou muito tempo validando o acesso</summary><div>Confira a internet e aguarde alguns segundos. O Atlas usa um cache local para abrir mais rápido. Se persistir, faça <kbd>Ctrl F5</kbd> e entre novamente.</div></details>
+          <details><summary>Minha alteração não apareceu para outro usuário</summary><div>Confirme “Alterações salvas” no rodapé e o Realtime como Conectado. O outro usuário pode atualizar a página se a conexão tiver sido interrompida.</div></details>
+          <details><summary>O item não foi movido pela automação</summary><div>Confirme se a regra está ativa, se o campo e o valor do gatilho são os mesmos do item e se houve uma mudança real. Consulte o histórico de execuções da automação.</div></details>
+          <details><summary>Não consigo editar ou excluir</summary><div>Seu perfil ou a regra específica do quadro pode não permitir a ação. Solicite revisão ao administrador.</div></details>
+          <details><summary>A tabela está cortando colunas</summary><div>Use a barra inferior ou mantenha o botão direito pressionado e arraste a tabela lateralmente.</div></details>
+          <details><summary>Uma cidade não aparece em Obras</summary><div>Limpe o filtro, digite parte do nome da cidade e confirme se está no quadro correto. A busca ignora acentos e maiúsculas.</div></details>
+        </div>
+      </section>
+
+      <section class="section" id="quiz" data-title="Teste rápido">
+        <div class="section-head"><span class="section-num">✓</span><div><h2>Teste rápido</h2><p>Confirme se você já domina o essencial.</p></div></div>
+        <div class="section-body">
+          <div class="quiz" id="quiz-box">
+            <div class="question" data-answer="1"><p>1. Como mover horizontalmente uma tabela larga?</p><div class="choices"><button class="choice">Usar somente as setas do teclado</button><button class="choice">Botão direito pressionado + arrastar</button><button class="choice">Recarregar a página</button></div></div>
+            <div class="question" data-answer="0"><p>2. Onde confirmar que uma edição foi enviada?</p><div class="choices"><button class="choice">No indicador “Alterações salvas” do rodapé</button><button class="choice">No título do quadro</button><button class="choice">No nome do usuário</button></div></div>
+            <div class="question" data-answer="2"><p>3. Qual atalho abre a busca global?</p><div class="choices"><button class="choice">Ctrl P</button><button class="choice">Alt F4</button><button class="choice">Ctrl K</button></div></div>
+            <div class="question" data-answer="1"><p>4. Em Obras, o que acontece ao pesquisar uma cidade?</p><div class="choices"><button class="choice">A obra é excluída</button><button class="choice">A aba da cidade é localizada e aberta</button><button class="choice">O tema é alterado</button></div></div>
+          </div>
+          <p class="quiz-result" id="quiz-result">Responda às quatro perguntas.</p>
+        </div>
+      </section>
+    </div>
+  </main>
+</div>
+
+<div class="tour" id="tour" role="dialog" aria-modal="true" aria-labelledby="tour-title">
+  <div class="tour-card">
+    <div class="eyebrow">Tour rápido</div>
+    <h2 id="tour-title"></h2>
+    <p id="tour-text"></p>
+    <div class="tour-visual" id="tour-visual"></div>
+    <div class="tour-foot"><button class="btn" id="tour-close">Fechar</button><div class="tour-dots" id="tour-dots"></div><div><button class="btn" id="tour-prev">Anterior</button> <button class="btn primary" id="tour-next">Próximo</button></div></div>
+  </div>
+</div>
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+(() => {
+  const $ = (s, r=document) => r.querySelector(s);
+  const $$ = (s, r=document) => [...r.querySelectorAll(s)];
+  const sections = $$('.section');
+  const nav = $('#guide-nav');
+  const search = $('#guide-search');
+  const empty = $('#empty-search');
+  const storageKey = 'atlas-v2-manual-progress';
+  const themeKey = 'atlas-v2-manual-theme';
+  const roleKey = 'atlas-v2-manual-role';
+
+  function slugLabel(section) { return section.dataset.title || $('h2', section)?.textContent || section.id; }
+  sections.forEach(section => {
+    const a = document.createElement('a');
+    a.href = '#' + section.id;
+    a.textContent = slugLabel(section);
+    nav.appendChild(a);
+  });
+
+  const observer = new IntersectionObserver(entries => {
+    const visible = entries.filter(e => e.isIntersecting).sort((a,b) => b.intersectionRatio-a.intersectionRatio)[0];
+    if (!visible) return;
+    $$('a', nav).forEach(a => a.classList.toggle('is-active', a.hash === '#' + visible.target.id));
+  }, { rootMargin:'-20% 0px -65%', threshold:[.05,.3,.8] });
+  sections.forEach(s => observer.observe(s));
+
+  function normalize(value) { return value.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase(); }
+  function clearMarks(root) { $$('mark', root).forEach(mark => mark.replaceWith(document.createTextNode(mark.textContent))); }
+  function applySearch() {
+    const q = normalize(search.value.trim());
+    let count = 0;
+    sections.forEach(section => {
+      clearMarks(section);
+      const match = !q || normalize(section.textContent).includes(q);
+      section.hidden = !match;
+      if (match) count++;
+    });
+    empty.style.display = count ? 'none' : 'block';
+    if (q) {
+      sections.filter(s => !s.hidden).forEach(section => {
+        const walker = document.createTreeWalker(section, NodeFilter.SHOW_TEXT);
+        const nodes=[]; while(walker.nextNode()) nodes.push(walker.currentNode);
+        nodes.slice(0,120).forEach(node => {
+          if (!node.parentElement || ['SCRIPT','STYLE','MARK','BUTTON','KBD'].includes(node.parentElement.tagName)) return;
+          const raw=node.nodeValue, idx=normalize(raw).indexOf(q); if(idx<0) return;
+          const before=raw.slice(0,idx), hit=raw.slice(idx,idx+q.length), after=raw.slice(idx+q.length);
+          const frag=document.createDocumentFragment(); frag.append(before); const mark=document.createElement('mark'); mark.textContent=hit; frag.append(mark,after); node.replaceWith(frag);
+        });
+      });
+    }
+  }
+  search.addEventListener('input', applySearch);
+
+  const checks = $$('[data-check]');
+  function loadProgress() { try { return JSON.parse(localStorage.getItem(storageKey)||'{}'); } catch { return {}; } }
+  function updateProgress() {
+    const state={}; checks.forEach(c => state[c.dataset.check]=c.checked); localStorage.setItem(storageKey,JSON.stringify(state));
+    const done=checks.filter(c=>c.checked).length, total=checks.length;
+    $('#progress-bar').style.width = (total ? done/total*100 : 0)+'%';
+    $('#progress-label').textContent = `${done} de ${total} passos concluídos`;
+  }
+  const saved=loadProgress(); checks.forEach(c=>{c.checked=!!saved[c.dataset.check];c.addEventListener('change',updateProgress)}); updateProgress();
+
+  $$('.tabs').forEach(group => group.addEventListener('click', event => {
+    const tab=event.target.closest('.tab'); if(!tab) return;
+    const section=group.closest('.section-body');
+    $$('.tab',group).forEach(t=>t.classList.toggle('is-active',t===tab));
+    $$('.tab-panel',section).forEach(p=>p.classList.toggle('is-active',p.dataset.panel===tab.dataset.tab));
+  }));
+
+  const roleSelect=$('#role-select');
+  roleSelect.value=localStorage.getItem(roleKey)||'operador'; document.body.dataset.role=roleSelect.value;
+  roleSelect.addEventListener('change',()=>{document.body.dataset.role=roleSelect.value;localStorage.setItem(roleKey,roleSelect.value)});
+
+  const theme=localStorage.getItem(themeKey)||'dark'; document.documentElement.dataset.theme=theme;
+  $('#theme-toggle').addEventListener('click',()=>{const next=document.documentElement.dataset.theme==='light'?'dark':'light';document.documentElement.dataset.theme=next;localStorage.setItem(themeKey,next)});
+  $('#print-guide').addEventListener('click',()=>window.print());
+
+  document.addEventListener('keydown',e=>{
+    if(e.key==='/' && !/input|textarea|select/i.test(document.activeElement.tagName)){e.preventDefault();search.focus()}
+    if(e.key==='Escape' && document.activeElement===search){search.value='';applySearch();search.blur()}
+  });
+
+  const questions=$$('.question'); let answered=0, correct=0;
+  questions.forEach(q=>q.addEventListener('click',e=>{
+    const choice=e.target.closest('.choice'); if(!choice || q.dataset.done) return;
+    q.dataset.done='1'; answered++;
+    const options=$$('.choice',q), index=options.indexOf(choice), answer=Number(q.dataset.answer);
+    options[answer].classList.add('correct'); if(index===answer) correct++; else choice.classList.add('wrong');
+    $('#quiz-result').textContent=answered===questions.length?`Resultado: ${correct}/${questions.length}. ${correct===questions.length?'Excelente! Você está pronto para operar o Atlas.':'Revise as seções indicadas e tente novamente depois.'}`:`${answered} de ${questions.length} respondidas.`;
+  }));
+
+  const tourSteps=[
+    {title:'1. Navegue pelo menu',text:'Abra um módulo e escolha o quadro. Os módulos começam recolhidos para acelerar o carregamento.',visual:'☰  Área → Módulo → Quadro'},
+    {title:'2. Encontre o registro',text:'Use “Filtrar itens” para localizar setor, item ou subitem no quadro, ou Ctrl K para uma busca global.',visual:'⌕  Filtrar itens  ·  Ctrl K'},
+    {title:'3. Edite e organize',text:'Clique nas células, abra subelementos e arraste itens entre setores quando necessário.',visual:'Item  ⇢  Setor de destino'},
+    {title:'4. Use a melhor visão',text:'Tabela para preencher, Obras para cidades, Kanban para fluxo e Gantt para cronograma.',visual:'Tabela  ·  Obras  ·  Kanban  ·  Gantt'},
+    {title:'5. Confirme a sincronização',text:'Espere “Alterações salvas” e mantenha o Realtime conectado.',visual:'● Conectado   ☁ Alterações salvas'}
+  ];
+  let tourIndex=0;
+  const tour=$('#tour');
+  function renderTour(){const step=tourSteps[tourIndex];$('#tour-title').textContent=step.title;$('#tour-text').textContent=step.text;$('#tour-visual').textContent=step.visual;$('#tour-prev').disabled=tourIndex===0;$('#tour-next').textContent=tourIndex===tourSteps.length-1?'Concluir':'Próximo';$('#tour-dots').innerHTML=tourSteps.map((_,i)=>`<i class="${i===tourIndex?'is-active':''}"></i>`).join('')}
+  $('#start-tour').addEventListener('click',()=>{tourIndex=0;renderTour();tour.classList.add('is-open')});
+  $('#tour-close').addEventListener('click',()=>tour.classList.remove('is-open'));
+  $('#tour-prev').addEventListener('click',()=>{if(tourIndex>0){tourIndex--;renderTour()}});
+  $('#tour-next').addEventListener('click',()=>{if(tourIndex<tourSteps.length-1){tourIndex++;renderTour()}else{tour.classList.remove('is-open');showToast('Tour concluído. Bom trabalho!')}});
+  tour.addEventListener('click',e=>{if(e.target===tour)tour.classList.remove('is-open')});
+
+  function showToast(text){const t=$('#toast');t.textContent=text;t.classList.add('show');clearTimeout(showToast.timer);showToast.timer=setTimeout(()=>t.classList.remove('show'),2200)}
+  $$('.copy-btn').forEach(btn=>btn.addEventListener('click',async()=>{await navigator.clipboard.writeText(btn.dataset.copy||'');showToast('Passo a passo copiado.')}));
+})();
+</script>
+</body>
+</html>
