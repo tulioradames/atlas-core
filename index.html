@@ -6,13 +6,13 @@
   <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate">
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
-  <title>Atlas 2.0 Oficial | Smart Field Management</title>
-  <meta name="description" content="Atlas 2.0 Oficial — plataforma de gestão operacional configurável.">
+  <title>Atlas 2.1 | Smart Field Management</title>
+  <meta name="description" content="Atlas 2.1 — plataforma configurável de gestão operacional, campo e arquivos.">
   <meta name="author" content="Túlio Radamés">
-  <meta name="application-name" content="Atlas 2.0 Oficial">
+  <meta name="application-name" content="Atlas 2.1">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="assets/icons/favicon.ico">
-  <link rel="stylesheet" href="css/v2.css?v=2.0.19">
+  <link rel="stylesheet" href="css/v2.css?v=2.1.0">
 </head>
 <body class="atlas-v2-auth-locked">
   <div class="atlas-v2-auth-root" id="atlas-v2-auth-root" aria-live="polite"></div>
@@ -20,7 +20,7 @@
   <div class="atlas-v2-app" id="atlas-v2-app" hidden>
     <aside class="atlas-v2-sidebar" id="atlas-v2-sidebar" aria-label="Navegação principal">
       <header class="atlas-v2-sidebar-head">
-        <a class="atlas-v2-brand" href="index.html" aria-label="Atlas 2.0">
+        <a class="atlas-v2-brand" href="index.html" aria-label="Atlas 2.1">
           <img src="assets/brand/atnx-logo-horizontal.svg" alt="Atlas">
         </a>
         <button class="atlas-v2-icon-button atlas-v2-sidebar-toggle" type="button" data-action="toggle-sidebar" title="Recolher menu" aria-label="Recolher menu">
@@ -107,6 +107,8 @@
       <section class="atlas-v2-board-toolbar" aria-label="Ferramentas do quadro">
         <div class="atlas-v2-toolbar-main">
           <button class="atlas-v2-button atlas-v2-button-primary" type="button" data-action="add-item"><i data-lucide="plus"></i><span>Novo item</span></button>
+          <button class="atlas-v2-button atlas-v2-button-quiet atlas-v2-mobile-field-action" type="button" data-action="field-mode-toggle"><i data-lucide="smartphone"></i><span>Campo</span></button>
+          <button class="atlas-v2-button atlas-v2-button-quiet atlas-v2-mobile-field-action" type="button" data-action="import"><i data-lucide="file-up"></i><span>Importar</span></button>
           <button class="atlas-v2-button atlas-v2-button-quiet" type="button" data-action="add-group"><i data-lucide="rows-3"></i><span>Novo grupo</span></button>
           <button class="atlas-v2-button atlas-v2-button-quiet" type="button" data-action="add-column"><i data-lucide="columns-3"></i><span>Nova coluna</span></button>
           <span class="atlas-v2-toolbar-divider"></span>
@@ -120,6 +122,7 @@
         <div class="atlas-v2-toolbar-secondary">
           <button class="atlas-v2-icon-button" type="button" data-action="automations" title="Automações" aria-label="Automações"><i data-lucide="workflow"></i></button>
           <button class="atlas-v2-icon-button" type="button" data-action="import" title="Importar planilha" aria-label="Importar planilha"><i data-lucide="file-up"></i></button>
+          <button class="atlas-v2-icon-button atlas-v2-field-mode-button" type="button" data-action="field-mode-toggle" title="Modo de campo" aria-label="Ativar modo de campo"><i data-lucide="smartphone"></i></button>
           <button class="atlas-v2-icon-button" type="button" data-action="fullscreen" title="Tela cheia" aria-label="Tela cheia"><i data-lucide="maximize-2"></i></button>
         </div>
       </section>
@@ -133,7 +136,7 @@
       <footer class="atlas-v2-footer">
         <span>Atlas · Smart Field Management · Criado por Túlio Radamés</span>
         <span id="atlas-v2-save-state"><i data-lucide="cloud-check"></i>Alterações salvas</span>
-          <span>V2.0.19 Hotfix</span>
+          <span>V2.1.0 Oficial</span>
       </footer>
     </main>
   </div>
@@ -141,10 +144,10 @@
   <div id="atlas-v2-overlay-root"></div>
   <div class="atlas-v2-toast-region" id="atlas-v2-toast-region" aria-live="polite"></div>
 
-  <script src="config/config.js?v=2.0.19"></script>
+  <script src="config/config.js?v=2.1.0"></script>
   <script src="assets/vendor/supabase.min.js"></script>
   <script src="assets/vendor/lucide.min.js"></script>
   <script src="assets/vendor/xlsx.full.min.js"></script>
-  <script src="js/v2.js?v=2.0.19"></script>
+  <script src="js/v2.js?v=2.1.0"></script>
 </body>
 </html>

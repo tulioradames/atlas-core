@@ -1,9 +1,9 @@
-// Atlas 2.0 Oficial — configuração pública
+// Atlas 2.1.0 Oficial — configuração pública
 window.ATNX_CONFIG = Object.freeze({
   APP_NAME: "Atlas",
   APP_TAGLINE: "Smart Field Management",
-  VERSION: "V2.0.19 Hotfix",
-  V2_VERSION: "V2.0.19 Hotfix",
+  VERSION: "V2.1.0 Oficial",
+  V2_VERSION: "V2.1.0 Oficial",
   CREATOR: "Túlio Radamés",
   SUPABASE_URL: "https://SEU-PROJETO.supabase.co",
   SUPABASE_KEY: "SUA_CHAVE_PUBLICAVEL",

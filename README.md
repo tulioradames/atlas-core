@@ -1,4 +1,4 @@
-# Atlas V2.0.19 Hotfix
+# Atlas V2.1.0 Oficial
 
 ## Edição pública
 
@@ -14,68 +14,80 @@ Google Drive nem dados operacionais. Antes de executar:
 Use somente uma chave publicável do Supabase. Nunca coloque `service_role`,
 senhas, tokens de sessão ou identificadores internos no repositório.
 
-Pacote de correção da V2.0.18, preservando o Gantt sem campos de progresso.
+Pacote oficial da evolução operacional do Atlas V2. A V2.1 mantém os quadros
+configuráveis da V2.0 e acrescenta recursos de análise, campo, segurança e
+automação.
 
-## Correções
+## Novidades
 
-- anexos de imagem e arquivo armazenados e visualizados dentro do Atlas;
-- galeria com navegação entre anexos do mesmo campo;
-- lixeira persistente no Supabase, com restauração de estruturas e anexos;
-- auditoria persistente associada ao usuário autenticado;
-- conector do Google Drive protegido por sessão e permissão do quadro;
-- arquivos novos privados por padrão no Drive;
-- sincronização autenticada sem Broadcast público;
-- carregamento sob demanda dos valores e anexos de cada quadro;
-- importação de planilhas com limites e validação;
-- dependências JavaScript incluídas no pacote, sem CDN;
-- índices adicionais para consultas e relacionamentos.
-- autoria protegida no banco e funções internas de automação não expostas como RPC;
-- validação pós-instalação por SQL somente leitura.
+- painel configurável com totais, médias, somas e distribuição por status;
+- visualização mensal em calendário;
+- colunas de fórmula com número, porcentagem e moeda;
+- SLA com alertas preventivos, atrasos e notificações;
+- histórico restaurável por registro e campo;
+- permissões por área, módulo, quadro, grupo e coluna;
+- importação com mapeamento, prévia, duplicados e reversão do último lote;
+- busca avançada, filtros por campo/data/anexo e pesquisas salvas;
+- automações com duas condições, duas ações e execução agendada;
+- central de saúde do navegador, Supabase, Realtime e Drives setoriais;
+- modelos operacionais para inspeção de campo, SLA e portfólio;
+- visualizador de imagens com zoom, rotação, tela cheia, arraste e navegação;
+- modo campo simplificado para celular, câmera e geolocalização;
+- navegação mobile totalmente vertical em Tabela, Obras, Kanban, Calendário e Gantt;
+- cache autenticado validado para nunca substituir os registros do Supabase por dados demonstrativos;
+- PWA com cache do aplicativo e fila local para alterações offline.
 
-## Atualização
+## Atualizar uma V2.0.19 existente
 
 1. Faça backup da publicação e do banco.
-2. Execute `supabase/ATLAS_V2_0_19_HOTFIX.sql` no SQL Editor.
-3. Execute `supabase/ATLAS_V2_0_19_VALIDAR.sql` e confirme `APROVADO`.
-4. Substitua os arquivos do site pelo conteúdo deste pacote.
-5. Atualize o Apps Script de cada setor com o arquivo de `appscript/`.
-6. Ative a exibição do manifesto e substitua `appsscript.json` pelo arquivo fornecido.
-7. Em cada Apps Script, configure `ALLOWED_ROOT_FOLDER_IDS`.
-8. Execute manualmente `autorizarConectorAtlas` e conceda as permissões.
-9. Implante uma nova versão do Web App.
-10. Feche as abas antigas, abra novamente e pressione `Ctrl + F5`.
-11. Confirme **V2.0.19 Hotfix** no rodapé.
+2. Execute `supabase/ATLAS_V2_1_0_ATUALIZACAO.sql`.
+3. Execute `supabase/ATLAS_V2_1_0_VALIDAR.sql`.
+4. Confirme o resultado `Atlas V2.1.0 validado`.
+5. Publique os arquivos deste pacote.
+6. Abra novamente o Atlas e pressione `Ctrl + F5`.
+7. Confirme `V2.1.0 Oficial` no rodapé.
 
-O novo conector exige o SQL da V2.0.19. O Apps Script antigo não oferece a mesma proteção e deve ser substituído.
+O SQL de atualização preserva os dados existentes. Não execute o schema completo
+em uma base já instalada.
 
-Para uma instalação vazia, use somente `supabase/ATLAS_V2_0_19_SCHEMA_COMPLETO.sql`.
-Não execute o schema completo depois do hotfix.
+## Instalação nova
 
-## Supabase Auth
+Em um banco vazio, execute somente:
 
-No painel do Supabase, abra **Authentication > Sign In / Providers > Password**:
+`supabase/ATLAS_V2_1_0_SCHEMA_COMPLETO.sql`
 
-- mantenha o mínimo de senha em 8 caracteres ou mais;
-- ative a proteção contra senhas vazadas, quando disponível no plano.
+Depois execute:
 
-O frontend usa somente a chave publicável. Nunca use `service_role` no navegador ou no Apps Script.
+`supabase/ATLAS_V2_1_0_VALIDAR.sql`
 
-## Dependências incluídas
+## Google Drive
 
-- `@supabase/supabase-js` 2.110.8;
-- Lucide 0.468.0;
-- SheetJS 0.20.3.
+O conector V2.0.19 continua compatível com a V2.1. Não é necessário criar uma
+nova implantação do Apps Script apenas por causa desta atualização.
+
+Cada setor continua usando sua própria conta, pasta raiz e conexão cadastrada na
+Administração. O frontend usa somente a chave publicável do Supabase. Nunca
+coloque `service_role` no navegador ou no Apps Script.
+
+## Testes
+
+```powershell
+npm test
+npm run test:browser
+```
 
 ## Estrutura
 
 ```text
-appscript/   Conector seguro do Google Drive
-assets/      Marca, ícones e bibliotecas locais
-config/      Configuração pública do Supabase
-css/         Estilos
-docs/        Manual e notas técnicas
-js/          Aplicação Atlas
-supabase/    SQL de atualização
-tests/       Verificações automatizadas
-index.html   Entrada da aplicação
+appscript/       Conector seguro do Google Drive
+assets/          Marca, ícones e bibliotecas locais
+config/          Configuração pública do Supabase
+css/             Estilos da aplicação
+docs/            Manual e notas da versão
+js/              Aplicação Atlas
+supabase/        Atualização, schema completo e validação
+tests/           Auditoria estática e smoke visual
+index.html       Entrada da aplicação
+manual.html      Manual interativo
+service-worker.js Cache PWA
 ```

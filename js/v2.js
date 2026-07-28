@@ -1,13 +1,15 @@
 (function atlasV2Official() {
   'use strict';
 
-  window.__ATLAS_VERSION__ = '2.0.19';
+window.__ATLAS_VERSION__ = '2.1.0 OFICIAL';
 
   const STORAGE_KEY = 'atlas-v2-official-data';
   const THEME_KEY = 'atlas-v2-theme';
   const SIDEBAR_KEY = 'atlas-v2-sidebar-collapsed';
   const GANTT_SCALE_KEY = 'atlas-v2-gantt-scale';
   const GANTT_ZOOM_KEY = 'atlas-v2-gantt-zoom';
+  const FIELD_MODE_KEY = 'atlas-v2-field-mode';
+  const SAVED_SEARCHES_KEY = 'atlas-v2-saved-searches';
   const BOOTSTRAP_CACHE_DB = 'atlas-v2-bootstrap-cache';
   const BOOTSTRAP_CACHE_STORE = 'snapshots';
   const BOOTSTRAP_CACHE_VERSION = 1;
@@ -57,6 +59,8 @@
     works: { label: 'Obras', icon: 'hard-hat' },
     kanban: { label: 'Kanban', icon: 'columns-3' },
     gantt: { label: 'Gantt', icon: 'chart-gantt' },
+    calendar: { label: 'Calendário', icon: 'calendar-days' },
+    dashboard: { label: 'Painel', icon: 'layout-dashboard' },
   };
 
   const COLUMN_TYPES = {
@@ -74,6 +78,7 @@
     image: { label: 'Imagem', icon: 'image', width: 210 },
     percentage: { label: 'Porcentagem', icon: 'percent', width: 135 },
     currency: { label: 'Moeda', icon: 'badge-dollar-sign', width: 140 },
+    formula: { label: 'Fórmula', icon: 'calculator', width: 160 },
   };
 
   const STATUS_OPTIONS = [
@@ -149,12 +154,15 @@
     pendingBoardUiState: null,
     boardUiRestoreToken: 0,
     notificationsLoading: false,
+    notificationFilter: 'all',
     dataRevision: 0,
     page: 'board',
     adminTab: 'overview',
     selectedItems: new Set(),
     boardSearch: '',
     navSearch: '',
+    searchFilters: {},
+    savedSearches: [],
     workFilter: '',
     expandedWorkSectors: new Set(),
     ganttZoom: Math.min(5, Math.max(1, Number(localStorage.getItem(GANTT_ZOOM_KEY)) || 1)),
@@ -164,6 +172,14 @@
     suppressContextMenuUntil: 0,
     resizeTimer: null,
     imageViewer: null,
+    imageViewerGesture: null,
+    fieldMode: localStorage.getItem(FIELD_MODE_KEY) === null
+      ? window.innerWidth <= 820
+      : localStorage.getItem(FIELD_MODE_KEY) === '1',
+    calendarCursor: new Map(),
+    importPreview: null,
+    offlineQueue: [],
+    healthChecks: [],
   };
 
   function id(prefix) {
@@ -302,6 +318,47 @@
     });
   }
 
+  function isRemoteBootstrapSnapshot(data) {
+    const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    const workspaces = Array.isArray(data?.workspaces) ? data.workspaces : [];
+    if (data?.schemaVersion !== 2 || !workspaces.length) return false;
+    const identifiers = [];
+    workspaces.forEach((workspace) => {
+      identifiers.push(workspace?.id);
+      (workspace?.modules || []).forEach((moduleEntry) => {
+        identifiers.push(moduleEntry?.id);
+        (moduleEntry?.boards || []).forEach((boardEntry) => {
+          identifiers.push(boardEntry?.id);
+          (boardEntry?.groups || []).forEach((groupEntry) => {
+            identifiers.push(groupEntry?.id);
+            const visit = (items = []) => items.forEach((itemEntry) => {
+              identifiers.push(itemEntry?.id);
+              visit(itemEntry?.subitems || []);
+            });
+            visit(groupEntry?.items || []);
+          });
+        });
+      });
+    });
+    return identifiers.length > 0
+      && identifiers.every((value) => uuidPattern.test(String(value || '')))
+      && !identifiers.some((value) => /(?:^|-)demo(?:-|$)/i.test(String(value || '')));
+  }
+
+  async function deleteBootstrapCache(userId) {
+    if (!userId) return;
+    const database = await openBootstrapCache();
+    if (!database) return;
+    await new Promise((resolve) => {
+      const transaction = database.transaction(BOOTSTRAP_CACHE_STORE, 'readwrite');
+      transaction.objectStore(BOOTSTRAP_CACHE_STORE).delete(userId);
+      transaction.oncomplete = resolve;
+      transaction.onerror = resolve;
+      transaction.onabort = resolve;
+    });
+    database.close();
+  }
+
   async function readBootstrapCache(userId) {
     if (!userId) return null;
     const database = await openBootstrapCache();
@@ -311,7 +368,12 @@
       const request = transaction.objectStore(BOOTSTRAP_CACHE_STORE).get(userId);
       request.onsuccess = () => {
         const cached = request.result?.data;
-        resolve(cached?.schemaVersion === 2 && cached?.workspaces?.length ? cached : null);
+        if (isRemoteBootstrapSnapshot(cached)) {
+          resolve(cached);
+          return;
+        }
+        if (cached) void deleteBootstrapCache(userId);
+        resolve(null);
       };
       request.onerror = () => resolve(null);
       transaction.oncomplete = () => database.close();
@@ -320,7 +382,7 @@
   }
 
   async function writeBootstrapCache(userId, data) {
-    if (!userId || !data?.workspaces?.length) return;
+    if (!userId || !isRemoteBootstrapSnapshot(data)) return;
     const database = await openBootstrapCache();
     if (!database) return;
     await new Promise((resolve) => {
@@ -335,7 +397,7 @@
 
   function scheduleBootstrapCacheWrite(data = runtime.data) {
     const userId = runtime.authSession?.user?.id;
-    if (!userId || !data?.workspaces?.length) return;
+    if (!userId || !isRemoteBootstrapSnapshot(data)) return;
     clearTimeout(runtime.bootstrapCacheTimer);
     runtime.bootstrapCacheTimer = setTimeout(() => {
       writeBootstrapCache(userId, data).catch((error) => console.warn('Atlas V2: cache local indisponível.', error));
@@ -355,6 +417,9 @@
       width: extra.width || COLUMN_TYPES[type]?.width || 160,
       required: Boolean(extra.required),
       options: type === 'status' ? normalizeStatusOptions(rawOptions) : rawOptions,
+      formula: type === 'formula' ? String(extra.formula || '') : '',
+      format: type === 'formula' ? String(extra.format || 'number') : '',
+      decimals: type === 'formula' ? Number(extra.decimals ?? 2) : 0,
     };
   }
 
@@ -387,7 +452,7 @@
   }
 
   function cityWorksGroups() {
-    const demoCityA = item('obra-demo-cidade-a', 'doc-execucao', 'Cidade Modelo A', {
+    const campinaGrande = item('obra-demo-campina', 'doc-execucao', 'Campina Grande - PB', {
       'obra-tipo': '',
       'obra-status': 'Em andamento',
       'obra-responsavel': 'Equipe de documentação',
@@ -397,29 +462,29 @@
       'obra-evidencias': '',
       'obra-diagrama': '',
     });
-    demoCityA.subitems = [
-      item('obra-demo-cto-01', 'doc-execucao', 'CTO-A-001 · Setor Central', {
+    campinaGrande.subitems = [
+      item('obra-demo-cto-01', 'doc-execucao', 'CTO-CG-001 · Centro', {
         'obra-tipo': 'CTO', 'obra-status': 'Concluído', 'obra-responsavel': 'Equipe A',
         'obra-inicio': '2026-07-01', 'obra-final': '2026-07-10', 'obra-progresso': 100,
         'obra-evidencias': 'Fotos_CTO_001.zip', 'obra-diagrama': 'Diagrama_CTO_001.pdf',
       }),
-      item('obra-demo-cto-02', 'doc-execucao', 'CTO-A-002 · Setor Norte', {
+      item('obra-demo-cto-02', 'doc-execucao', 'CTO-CG-002 · Malvinas', {
         'obra-tipo': 'CTO', 'obra-status': 'Em andamento', 'obra-responsavel': 'Equipe B',
         'obra-inicio': '2026-07-08', 'obra-final': '2026-07-20', 'obra-progresso': 60,
         'obra-evidencias': 'Fotos_CTO_002.zip', 'obra-diagrama': '',
       }),
-      item('obra-demo-ceo-01', 'doc-execucao', 'CEO-A-001 · Setor Central', {
+      item('obra-demo-ceo-01', 'doc-execucao', 'CEO-CG-001 · Centro', {
         'obra-tipo': 'CEO', 'obra-status': 'Em análise', 'obra-responsavel': 'Equipe de fusão',
         'obra-inicio': '2026-07-10', 'obra-final': '2026-07-25', 'obra-progresso': 30,
         'obra-evidencias': 'Fotos_CEO_001.zip', 'obra-diagrama': 'Diagrama_CEO_001.pdf',
       }),
-      item('obra-demo-pop-01', 'doc-execucao', 'POP-A-Principal', {
+      item('obra-demo-pop-01', 'doc-execucao', 'POP-CG-Principal', {
         'obra-tipo': 'POP', 'obra-status': 'Não iniciado', 'obra-responsavel': 'Equipe POP',
         'obra-inicio': '2026-07-22', 'obra-final': '2026-07-31', 'obra-progresso': 0,
         'obra-evidencias': '', 'obra-diagrama': '',
       }),
     ];
-    const demoCityB = item('obra-demo-cidade-b', 'doc-planejamento', 'Cidade Modelo B', {
+    const joaoPessoa = item('obra-demo-joao-pessoa', 'doc-planejamento', 'João Pessoa - PB', {
       'obra-tipo': '',
       'obra-status': 'Em análise',
       'obra-responsavel': 'Equipe de planejamento',
@@ -429,26 +494,26 @@
       'obra-evidencias': '',
       'obra-diagrama': '',
     });
-    demoCityB.subitems = [
-      item('obra-demo-b-cto-01', 'doc-planejamento', 'CTO-B-001 · Setor Sul', {
+    joaoPessoa.subitems = [
+      item('obra-demo-jp-cto-01', 'doc-planejamento', 'CTO-JP-001 · Bancários', {
         'obra-tipo': 'CTO', 'obra-status': 'Em análise', 'obra-responsavel': 'Equipe A',
         'obra-inicio': '2026-08-01', 'obra-final': '2026-08-12', 'obra-progresso': 25,
         'obra-evidencias': '', 'obra-diagrama': '',
       }),
-      item('obra-demo-b-ceo-01', 'doc-planejamento', 'CEO-B-001 · Setor Central', {
+      item('obra-demo-jp-ceo-01', 'doc-planejamento', 'CEO-JP-001 · Centro', {
         'obra-tipo': 'CEO', 'obra-status': 'Não iniciado', 'obra-responsavel': 'Equipe de fusão',
         'obra-inicio': '2026-08-10', 'obra-final': '2026-08-22', 'obra-progresso': 0,
         'obra-evidencias': '', 'obra-diagrama': '',
       }),
-      item('obra-demo-b-pop-01', 'doc-planejamento', 'POP-B-Sul', {
+      item('obra-demo-jp-pop-01', 'doc-planejamento', 'POP-JP-Sul', {
         'obra-tipo': 'POP', 'obra-status': 'Não iniciado', 'obra-responsavel': 'Equipe POP',
         'obra-inicio': '2026-08-20', 'obra-final': '2026-08-31', 'obra-progresso': 0,
         'obra-evidencias': '', 'obra-diagrama': '',
       }),
     ];
     return [
-      group('doc-planejamento', 'A realizar', '#7554a3', [demoCityB]),
-      group('doc-execucao', 'Em andamento', '#0f6cbd', [demoCityA]),
+      group('doc-planejamento', 'A realizar', '#7554a3', [joaoPessoa]),
+      group('doc-execucao', 'Em andamento', '#0f6cbd', [campinaGrande]),
       group('doc-parada', 'Parada', '#bf4652', []),
       group('doc-finalizado', 'Concluídas', '#168a5b', []),
     ];
@@ -465,6 +530,7 @@
       views: config.views || ['table', 'kanban', 'gantt'],
       activeView: config.activeView || 'table',
       exampleVersion: Number(config.exampleVersion || 0),
+      settings: config.settings || {},
       columns: config.columns || [],
       groups: config.groups || [],
     };
@@ -526,9 +592,11 @@
       auditLog: [
         { id: 'audit-initial', userId: 'user-admin', action: 'Estrutura inicial do Atlas criada', scope: 'system', createdAt: '2026-07-20T09:00:00.000Z' },
       ],
+      itemHistory: [],
       trash: [],
       errors: [],
       system: {
+        storageHistory: [],
         integrations: [
           { id: 'supabase', name: 'Supabase', status: 'connected', detail: 'Persistência, autenticação e políticas conectadas.' },
           { id: 'drive', name: 'Google Drive', status: 'connected', detail: 'Arquivos e imagens ligados às conexões dos setores.' },
@@ -676,6 +744,16 @@
     };
   }
 
+  function authenticatedShellData() {
+    const data = seedData();
+    (data.workspaces || []).forEach((workspace) => (workspace.modules || []).forEach((moduleEntry) => {
+      (moduleEntry.boards || []).forEach((boardEntry) => {
+        (boardEntry.groups || []).forEach((groupEntry) => { groupEntry.items = []; });
+      });
+    }));
+    return data;
+  }
+
   function loadData() {
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
@@ -722,11 +800,11 @@
             boardEntry.description = 'Cidades como elementos e estruturas de rede como subelementos.';
             boardEntry.columns = cityWorksColumns();
             boardEntry.groups = cityWorksGroups();
-        } else if (currentItems.some((entry) => entry.id === 'obra-demo-cidade-a') && !currentItems.some((entry) => entry.id === 'obra-demo-cidade-b')) {
+          } else if (currentItems.some((entry) => entry.id === 'obra-demo-campina') && !currentItems.some((entry) => entry.id === 'obra-demo-joao-pessoa')) {
             const demoGroups = cityWorksGroups();
-          const demoCityB = demoGroups.flatMap((groupEntry) => groupEntry.items).find((entry) => entry.id === 'obra-demo-cidade-b');
+            const joaoPessoa = demoGroups.flatMap((groupEntry) => groupEntry.items).find((entry) => entry.id === 'obra-demo-joao-pessoa');
             const targetGroup = boardEntry.groups.find((groupEntry) => groupEntry.id === 'doc-planejamento') || boardEntry.groups[0];
-          if (demoCityB && targetGroup) targetGroup.items.push(demoCityB);
+            if (joaoPessoa && targetGroup) targetGroup.items.push(joaoPessoa);
           }
           const groupNames = {
             'doc-planejamento': 'A realizar',
@@ -806,6 +884,27 @@
     return rows;
   }
 
+  async function readRemoteAccessRules() {
+    const commonOptions = { order: ['user_id', 'id'] };
+    try {
+      const rows = await readRemoteTable('atlas_v2_access_rules', {
+        ...commonOptions,
+        select: 'id,user_id,workspace_id,module_id,board_id,group_id,column_id,nivel',
+      });
+      runtime.accessRuleScopeColumnsSupported = true;
+      return rows;
+    } catch (error) {
+      const message = `${error?.code || ''} ${error?.message || ''} ${error?.details || ''}`;
+      if (!/42703|group_id|column_id/i.test(message)) throw error;
+      runtime.accessRuleScopeColumnsSupported = false;
+      console.warn('Atlas V2: permissões por grupo/coluna ainda não estão no banco; usando compatibilidade por área, módulo e quadro.');
+      return readRemoteTable('atlas_v2_access_rules', {
+        ...commonOptions,
+        select: 'id,user_id,workspace_id,module_id,board_id,nivel',
+      });
+    }
+  }
+
   async function readRemoteTableByIds(table, itemIds, options = {}) {
     const ids = [...new Set((itemIds || []).filter(Boolean))];
     if (!ids.length) return [];
@@ -849,6 +948,9 @@
       options: entry.tipo === 'status'
         ? normalizeStatusOptions(Array.isArray(settings.options) ? settings.options : [])
         : (Array.isArray(settings.options) ? settings.options : []),
+      formula: String(settings.formula || ''),
+      format: String(settings.format || 'number'),
+      decimals: Number(settings.decimals ?? 2),
       settings,
       order: Number(entry.ordem || 0),
       active: entry.ativo !== false,
@@ -1661,7 +1763,7 @@
       readRemoteTable('atlas_v2_items', { select: 'id,board_id,group_id,parent_item_id,nome,ordem,arquivado,criado_por,created_at,updated_at', order: ['board_id', 'group_id', 'parent_item_id', 'ordem', 'id'] }),
       readRemoteTable('atlas_v2_views', { select: 'id,board_id,nome,tipo,configuracoes,padrao,ordem', order: ['board_id', 'ordem', 'id'] }),
       readRemoteTable('atlas_v2_storage_connections', { order: ['nome', 'id'] }),
-      readRemoteTable('atlas_v2_access_rules', { select: 'id,user_id,workspace_id,module_id,board_id,nivel', order: ['user_id', 'id'] }),
+      readRemoteAccessRules(),
       readRemoteTable('atlas_v2_board_members', { select: 'board_id,user_id,role', order: ['board_id', 'user_id'] }),
       readRemoteTable('atlas_v2_automations', { order: ['board_id', 'created_at', 'id'] }),
       includeExtras ? readRemoteTable('atlas_v2_field_templates', { order: ['nome', 'id'] }) : Promise.resolve([]),
@@ -1803,8 +1905,8 @@
       accessRules: accessRows.map((entry) => ({
         id: entry.id,
         userId: entry.user_id,
-        scopeType: entry.board_id ? 'board' : entry.module_id ? 'module' : 'workspace',
-        scopeId: entry.board_id || entry.module_id || entry.workspace_id,
+        scopeType: entry.column_id ? 'column' : entry.group_id ? 'group' : entry.board_id ? 'board' : entry.module_id ? 'module' : 'workspace',
+        scopeId: entry.column_id || entry.group_id || entry.board_id || entry.module_id || entry.workspace_id,
         level: entry.nivel,
       })),
       boardMembers: memberRows.map((entry) => ({ boardId: entry.board_id, userId: entry.user_id, role: entry.role })),
@@ -1920,7 +2022,7 @@
         (module.boards || []).forEach((boardEntry, boardOrder) => {
           rows.atlas_v2_boards.push({ id: boardEntry.id, module_id: module.id, nome: boardEntry.name, descricao: boardEntry.description || '', icone: boardEntry.icon || 'table-2', tipo_acesso: boardEntry.access || 'main', origem: boardEntry.origin || (boardEntry.official ? 'official' : 'custom'), configuracoes: boardEntry.settings || {}, oficial: Boolean(boardEntry.official), ativo: boardEntry.active !== false, ordem: boardEntry.order ?? boardOrder, storage_connection_id: boardEntry.storageConnectionId || null });
           (boardEntry.groups || []).forEach((groupEntry, groupOrder) => rows.atlas_v2_groups.push({ id: groupEntry.id, board_id: boardEntry.id, nome: groupEntry.name, cor: groupEntry.color || '#0f6cbd', recolhido: Boolean(groupEntry.collapsed), ordem: groupEntry.order ?? groupOrder }));
-          (boardEntry.columns || []).forEach((columnEntry, columnOrder) => rows.atlas_v2_columns.push({ id: columnEntry.id, board_id: boardEntry.id, nome: columnEntry.name, tipo: columnEntry.type, configuracoes: { ...(columnEntry.settings || {}), options: columnEntry.options || [] }, largura: Number(columnEntry.width || 160), obrigatorio: Boolean(columnEntry.required), ativo: columnEntry.active !== false, ordem: columnEntry.order ?? columnOrder }));
+          (boardEntry.columns || []).forEach((columnEntry, columnOrder) => rows.atlas_v2_columns.push({ id: columnEntry.id, board_id: boardEntry.id, nome: columnEntry.name, tipo: columnEntry.type, configuracoes: { ...(columnEntry.settings || {}), options: columnEntry.options || [], formula: columnEntry.formula || '', format: columnEntry.format || 'number', decimals: Number(columnEntry.decimals ?? 2) }, largura: Number(columnEntry.width || 160), obrigatorio: Boolean(columnEntry.required), ativo: columnEntry.active !== false, ordem: columnEntry.order ?? columnOrder }));
           const columnTypes = new Map((boardEntry.columns || []).map((columnEntry) => [columnEntry.id, columnEntry.type]));
           flattenRemoteItems(boardEntry).forEach(({ item: itemEntry, parentId, groupId, order }) => {
             rows.atlas_v2_items.push({ id: itemEntry.id, board_id: boardEntry.id, group_id: groupId || null, parent_item_id: parentId, nome: itemEntry.name || 'Novo item', ordem: itemEntry.order ?? order, arquivado: Boolean(itemEntry.archived) });
@@ -1944,7 +2046,22 @@
         });
       });
     });
-    (data.accessRules || []).forEach((entry) => rows.atlas_v2_access_rules.push({ id: entry.id, user_id: entry.userId, workspace_id: entry.scopeType === 'workspace' ? entry.scopeId : null, module_id: entry.scopeType === 'module' ? entry.scopeId : null, board_id: entry.scopeType === 'board' ? entry.scopeId : null, nivel: entry.level }));
+    (data.accessRules || []).forEach((entry) => {
+      if (runtime.accessRuleScopeColumnsSupported === false && ['group', 'column'].includes(entry.scopeType)) return;
+      const rule = {
+        id: entry.id,
+        user_id: entry.userId,
+        workspace_id: entry.scopeType === 'workspace' ? entry.scopeId : null,
+        module_id: entry.scopeType === 'module' ? entry.scopeId : null,
+        board_id: entry.scopeType === 'board' ? entry.scopeId : null,
+        nivel: entry.level,
+      };
+      if (runtime.accessRuleScopeColumnsSupported !== false) {
+        rule.group_id = entry.scopeType === 'group' ? entry.scopeId : null;
+        rule.column_id = entry.scopeType === 'column' ? entry.scopeId : null;
+      }
+      rows.atlas_v2_access_rules.push(rule);
+    });
     (data.boardMembers || []).forEach((entry) => rows.atlas_v2_board_members.push({ board_id: entry.boardId, user_id: entry.userId, role: entry.role }));
     (data.automations || []).forEach((entry) => rows.atlas_v2_automations.push({ id: entry.id, board_id: entry.boardId, nome: entry.name || 'Automação', gatilho: entry.trigger || {}, condicoes: Array.isArray(entry.conditions) ? entry.conditions : [], acoes: Array.isArray(entry.actions) ? entry.actions : [], ativo: entry.active !== false, criado_por: entry.createdBy || runtime.data.currentUserId || null }));
     (data.fieldTemplates || []).filter((entry) => /^[0-9a-f-]{36}$/i.test(entry.id)).forEach((entry) => rows.atlas_v2_field_templates.push({ id: entry.id, nome: entry.name, tipo: entry.type, categoria: entry.source || 'Geral', configuracoes: { ...(entry.settings || {}), options: entry.options || [] }, largura: Number(entry.width || 160), publico: true, ativo: true }));
@@ -2419,6 +2536,90 @@
     return entry;
   }
 
+  function captureItemHistory(boardEntry, itemEntry, columnId, beforeValue, afterValue, label = 'Campo atualizado') {
+    if (!runtime.data || !boardEntry || !itemEntry || stableRemoteString(beforeValue) === stableRemoteString(afterValue)) return null;
+    runtime.data.itemHistory = Array.isArray(runtime.data.itemHistory) ? runtime.data.itemHistory : [];
+    const entry = {
+      id: id('history'),
+      boardId: boardEntry.id,
+      itemId: itemEntry.id,
+      columnId: columnId || '__name__',
+      beforeValue: deepClone(beforeValue ?? null),
+      afterValue: deepClone(afterValue ?? null),
+      label,
+      userId: currentUser()?.id || '',
+      createdAt: new Date().toISOString(),
+    };
+    runtime.data.itemHistory.unshift(entry);
+    runtime.data.itemHistory = runtime.data.itemHistory.slice(0, 1000);
+    if (runtime.remoteMode && runtime.authClient && isUuid(boardEntry.id) && isUuid(itemEntry.id)) {
+      void runtime.authClient.from('atlas_v2_item_history').insert({
+        id: isUuid(entry.id) ? entry.id : undefined,
+        board_id: boardEntry.id,
+        item_id: itemEntry.id,
+        column_id: isUuid(columnId) ? columnId : null,
+        field_key: columnId || '__name__',
+        before_value: beforeValue ?? null,
+        after_value: afterValue ?? null,
+        action_label: label,
+      }).then(({ data, error }) => {
+        if (error) console.warn('Atlas V2.1: histórico remoto pendente.', error);
+        return data;
+      });
+    }
+    return entry;
+  }
+
+  async function openItemHistory(itemId) {
+    const context = findBoard();
+    const found = context && findItem(context.board, itemId);
+    if (!context || !found) return;
+    let entries = (runtime.data.itemHistory || []).filter((entry) => entry.itemId === itemId);
+    if (runtime.remoteMode && runtime.authClient && isUuid(itemId)) {
+      const { data, error } = await runtime.authClient.from('atlas_v2_item_history').select('*').eq('item_id', itemId).order('created_at', { ascending: false }).limit(100);
+      if (!error && data) {
+        const remoteEntries = data.map((entry) => ({
+          id: entry.id,
+          boardId: entry.board_id,
+          itemId: entry.item_id,
+          columnId: entry.field_key || entry.column_id || '__name__',
+          beforeValue: entry.before_value,
+          afterValue: entry.after_value,
+          label: entry.action_label || 'Campo atualizado',
+          userId: entry.changed_by || '',
+          createdAt: entry.created_at,
+        }));
+        const byId = new Map([...remoteEntries, ...entries].map((entry) => [entry.id, entry]));
+        entries = [...byId.values()].sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+        runtime.data.itemHistory = [...entries.filter((entry) => !runtime.data.itemHistory.some((existing) => existing.id === entry.id)), ...runtime.data.itemHistory];
+      }
+    }
+    openDrawer({
+      title: 'Histórico do registro',
+      subtitle: found.item.name,
+      body: `<div class="atlas-v2-item-history">${entries.map((entry) => {
+        const columnEntry = context.board.columns.find((column) => column.id === entry.columnId);
+        const user = runtime.data.users.find((candidate) => candidate.id === entry.userId);
+        return `<article><span><i data-lucide="history"></i></span><div><strong>${escapeHtml(columnEntry?.name || (entry.columnId === '__name__' ? 'Nome do registro' : entry.label))}</strong><small>${formatDateTime(entry.createdAt)} · ${escapeHtml(user?.name || 'Usuário')}</small><p><del>${escapeHtml(typeof entry.beforeValue === 'object' ? JSON.stringify(entry.beforeValue) : String(entry.beforeValue ?? ''))}</del><i data-lucide="arrow-right"></i><ins>${escapeHtml(typeof entry.afterValue === 'object' ? JSON.stringify(entry.afterValue) : String(entry.afterValue ?? ''))}</ins></p></div>${hasPermission('edit', context) ? `<button type="button" data-action="history-restore" data-history-id="${attr(entry.id)}" title="Restaurar valor anterior"><i data-lucide="undo-2"></i></button>` : ''}</article>`;
+      }).join('') || '<div class="atlas-v2-empty-view"><div><i data-lucide="history"></i><strong>Nenhuma alteração registrada</strong></div></div>'}</div>`,
+      actions: '<button class="atlas-v2-button atlas-v2-button-quiet" type="button" data-action="close-overlay">Fechar</button>',
+    });
+  }
+
+  function restoreItemHistory(historyId) {
+    const context = findBoard();
+    const entry = (runtime.data.itemHistory || []).find((candidate) => candidate.id === historyId);
+    const found = entry && context ? findItem(context.board, entry.itemId) : null;
+    if (!context || !entry || !found || !requirePermission('edit', context, 'restaurar este valor')) return;
+    const current = entry.columnId === '__name__' ? found.item.name : found.item.values?.[entry.columnId];
+    if (entry.columnId === '__name__') found.item.name = String(entry.beforeValue || 'Item sem nome');
+    else found.item.values[entry.columnId] = deepClone(entry.beforeValue);
+    captureItemHistory(context.board, found.item, entry.columnId, current, entry.beforeValue, 'Valor restaurado');
+    closeOverlay();
+    saveData('Valor anterior restaurado', { itemId: found.item.id });
+    render();
+  }
+
   function saveData(message = '', options = {}) {
     if (options.revision !== false) runtime.dataRevision += 1;
     if (message && options.audit !== false) recordAudit(message, options);
@@ -2440,6 +2641,11 @@
     if (indicator) {
       indicator.innerHTML = '<i data-lucide="loader-circle"></i>Salvando';
       setTimeout(() => {
+        if (navigator.onLine === false) {
+          indicator.innerHTML = '<i data-lucide="cloud-off"></i>Offline · alterações na fila';
+          refreshIcons(indicator);
+          return;
+        }
         indicator.innerHTML = `<i data-lucide="${runtime.remoteMode ? 'cloud-check' : 'hard-drive'}"></i>${runtime.remoteMode ? 'Alterações enviadas para sincronização' : 'Alterações salvas'}`;
         refreshIcons(indicator);
       }, 240);
@@ -2474,11 +2680,13 @@
     if (rule.scopeType === 'workspace') return rule.scopeId === context.workspace?.id;
     if (rule.scopeType === 'module') return rule.scopeId === context.module?.id;
     if (rule.scopeType === 'board') return rule.scopeId === context.board?.id;
+    if (rule.scopeType === 'group') return rule.scopeId === context.groupId;
+    if (rule.scopeType === 'column') return rule.scopeId === context.columnId;
     return false;
   }
 
   function ruleSpecificity(rule) {
-    return { workspace: 1, module: 2, board: 3 }[rule?.scopeType] || 0;
+    return { workspace: 1, module: 2, board: 3, group: 4, column: 5 }[rule?.scopeType] || 0;
   }
 
   function permissionRule(userId, context) {
@@ -2546,19 +2754,19 @@
   }
 
   function authVersion() {
-    return window.ATNX_CONFIG?.V2_VERSION || 'V2.0 Oficial';
+    return window.ATNX_CONFIG?.V2_VERSION || 'V2.1.0 Oficial';
   }
 
   function authFeatureList() {
     return [
-      ['layout-dashboard', 'Quadros configuráveis', 'Campos, grupos e visualizações definidos pela própria equipe.'],
-      ['panels-top-left', 'Tabela, Obras, Kanban e Gantt', 'A mesma operação organizada em diferentes perspectivas.'],
-      ['files', 'Arquivos e imagens no Atlas', 'Galeria, documentos e navegação entre anexos dentro do sistema.'],
-      ['hard-drive-upload', 'Google Drive seguro por setor', 'Cada área usa sua conta com validação da sessão e das permissões.'],
-      ['shield-check', 'Administração central', 'Perfis, aprovações e acesso granular por área, módulo e quadro.'],
-      ['history', 'Lixeira e auditoria persistentes', 'Exclusões restauráveis e histórico associado ao usuário real.'],
-      ['refresh-cw', 'Sincronização autenticada', 'Atualizações entre usuários sem exposição em canal público.'],
-      ['file-spreadsheet', 'Importação protegida', 'Planilhas validadas com limites de tamanho, linhas e colunas.'],
+      ['layout-dashboard', 'Painéis configuráveis', 'Indicadores, totais, médias e distribuições criados pela própria equipe.'],
+      ['calendar-days', 'Calendário e SLA', 'Prazos organizados por mês, alertas preventivos e registros vencidos.'],
+      ['sigma', 'Fórmulas operacionais', 'Colunas calculadas automaticamente a partir dos dados do quadro.'],
+      ['history', 'Histórico restaurável', 'Consulte alterações e recupere valores anteriores de cada registro.'],
+      ['shield-check', 'Permissões granulares', 'Controle de acesso por área, módulo, quadro, grupo e coluna.'],
+      ['file-search-2', 'Importação inteligente', 'Mapeamento, prévia, duplicados e reversão do último lote importado.'],
+      ['image', 'Imagens com controle completo', 'Zoom, rotação, tela cheia e navegação entre anexos no Atlas.'],
+      ['smartphone', 'Modo campo e PWA', 'Experiência direta no celular, câmera, localização e trabalho offline.'],
     ];
   }
 
@@ -2768,10 +2976,11 @@
     const baselineBeforeRefresh = runtime.remoteRows;
     const revisionBeforeRefresh = runtime.dataRevision;
     try {
-      await loadRemoteData({
+      const remoteData = await loadRemoteData({
         includeAttachments: options.full === true,
         includeExtras: options.full === true,
       });
+      if (!remoteData) throw new Error('O Supabase não retornou a estrutura operacional do Atlas.');
       if (runtime.dataRevision !== revisionBeforeRefresh && localBeforeRefresh?.workspaces?.length) {
         // Uma edição ocorreu enquanto a leitura do Supabase estava em andamento.
         // Preservamos o estado local e a linha de base anterior. Nunca usamos a
@@ -2804,10 +3013,27 @@
     }
   }
 
+  function updateOnlineState() {
+    const offline = navigator.onLine === false;
+    document.body.classList.toggle('atlas-v2-offline', offline);
+    const indicator = document.getElementById('atlas-v2-save-state');
+    if (indicator && offline) {
+      indicator.innerHTML = '<i data-lucide="cloud-off"></i>Offline · alterações na fila';
+      refreshIcons(indicator);
+    }
+  }
+
+  function registerAtlasPwa() {
+    if (!('serviceWorker' in navigator) || !/^https?:$/.test(window.location.protocol)) return;
+    navigator.serviceWorker.register('./service-worker.js?v=2.1.0-oficial-2', { scope: './' }).catch((error) => {
+      console.warn('Atlas V2.1: PWA indisponível.', error);
+    });
+  }
+
 
   async function initializeApplication(profile = null, authUser = null) {
     if (!runtime.appInitialized) {
-      runtime.data = profile ? seedData() : loadData();
+      runtime.data = profile ? authenticatedShellData() : loadData();
       document.body.classList.toggle('atlas-v2-sidebar-collapsed', localStorage.getItem(SIDEBAR_KEY) === 'true');
       document.addEventListener('click', handleClick);
       document.addEventListener('change', handleChange);
@@ -2818,6 +3044,7 @@
       document.addEventListener('pointermove', handlePointerMove, { passive: false });
       document.addEventListener('pointerup', finishHorizontalDrag);
       document.addEventListener('pointercancel', finishHorizontalDrag);
+      document.addEventListener('wheel', handleWheel, { passive: false });
       document.addEventListener('contextmenu', handleContextMenu);
       document.addEventListener('dragstart', handleDragStart);
       document.addEventListener('dragover', handleDragOver);
@@ -2827,15 +3054,20 @@
       document.addEventListener('error', handleImageLoadError, true);
       window.addEventListener('resize', handleResize);
       window.addEventListener('online', () => {
+        updateOnlineState();
         if (runtime.authSession?.user) {
           startRealtime();
           void pollGlobalRealtimeChanges();
+          if (runtime.remoteSyncQueued) scheduleRemoteSync();
         }
       });
+      window.addEventListener('offline', updateOnlineState);
       document.addEventListener('visibilitychange', () => {
         if (!document.hidden && runtime.authSession?.user) void pollGlobalRealtimeChanges();
       });
       runtime.appInitialized = true;
+      updateOnlineState();
+      registerAtlasPwa();
     }
     if (profile) upsertAuthenticatedUser(profile, authUser);
 
@@ -2861,7 +3093,8 @@
         return;
       }
       try {
-        await loadRemoteData({ includeAttachments: false, includeExtras: false });
+        const remoteData = await loadRemoteData({ includeAttachments: false, includeExtras: false });
+        if (!remoteData) throw new Error('O Supabase não retornou a estrutura operacional do Atlas.');
         runtime.remoteReady = true;
         upsertAuthenticatedUser(profile, authUser);
       } catch (error) {
@@ -3313,7 +3546,11 @@
       options.push({ value: `workspace:${workspace.id}`, label: `Área · ${workspace.name}` });
       workspace.modules.forEach((module) => {
         options.push({ value: `module:${module.id}`, label: `Módulo · ${module.name}` });
-        module.boards.forEach((boardEntry) => options.push({ value: `board:${boardEntry.id}`, label: `Quadro · ${boardEntry.name}` }));
+        module.boards.forEach((boardEntry) => {
+          options.push({ value: `board:${boardEntry.id}`, label: `Quadro · ${boardEntry.name}` });
+          boardEntry.groups.forEach((groupEntry) => options.push({ value: `group:${groupEntry.id}`, label: `Grupo · ${boardEntry.name} / ${groupEntry.name}` }));
+          boardEntry.columns.forEach((columnEntry) => options.push({ value: `column:${columnEntry.id}`, label: `Coluna · ${boardEntry.name} / ${columnEntry.name}` }));
+        });
       });
     });
     return options;
@@ -3327,6 +3564,12 @@
       for (const moduleEntry of workspace.modules) {
         const boardEntry = moduleEntry.boards.find((entry) => entry.id === scopeId);
         if (scopeType === 'board' && boardEntry) return boardEntry.name;
+        for (const candidateBoard of moduleEntry.boards) {
+          const groupEntry = candidateBoard.groups.find((entry) => entry.id === scopeId);
+          if (scopeType === 'group' && groupEntry) return `${candidateBoard.name} / ${groupEntry.name}`;
+          const columnEntry = candidateBoard.columns.find((entry) => entry.id === scopeId);
+          if (scopeType === 'column' && columnEntry) return `${candidateBoard.name} / ${columnEntry.name}`;
+        }
       }
     }
     return 'Estrutura removida';
@@ -3372,6 +3615,30 @@
     </section>`;
   }
 
+  async function openAdminTab(tab) {
+    runtime.adminTab = tab || 'overview';
+    if (runtime.adminTab === 'system' && runtime.remoteMode && runtime.authClient) {
+      const { data, error } = await runtime.authClient
+        .from('atlas_v2_storage_health')
+        .select('id,connection_id,status,latency_ms,detail,created_at')
+        .order('created_at', { ascending: false })
+        .limit(60);
+      if (!error && data) {
+        runtime.data.system = runtime.data.system || {};
+        runtime.data.system.storageHistory = data.map((entry) => ({
+          id: entry.id,
+          connectionId: entry.connection_id,
+          name: storageConnection(entry.connection_id)?.name || 'Drive removido',
+          status: entry.status === 'healthy' ? 'success' : 'error',
+          latency: entry.latency_ms,
+          detail: entry.detail || '',
+          createdAt: entry.created_at,
+        }));
+      }
+    }
+    render();
+  }
+
 
   function renderAdminOverview() {
     const activeUsers = runtime.data.users.filter((entry) => entry.status === 'active').length;
@@ -3413,7 +3680,7 @@
     const matrix = Object.entries(ROLE_DEFINITIONS).map(([key, role]) => `<tr><td><strong>${role.label}</strong><small>${role.description}</small></td>${permissions.map(([permission]) => `<td>${role.permissions.includes(permission) ? '<i class="is-allowed" data-lucide="check"></i>' : '<i class="is-denied" data-lucide="minus"></i>'}</td>`).join('')}</tr>`).join('');
     const userOptions = runtime.data.users.filter((entry) => entry.status !== 'blocked').map((entry) => `<option value="${attr(entry.id)}">${escapeHtml(entry.name)} · ${roleLabel(entry.role)}</option>`).join('');
     const scopes = scopeOptions().map((entry) => `<option value="${attr(entry.value)}">${escapeHtml(entry.label)}</option>`).join('');
-    const rules = runtime.data.accessRules.map((rule) => { const user = runtime.data.users.find((entry) => entry.id === rule.userId); return `<tr><td>${escapeHtml(user?.name || 'Usuário removido')}</td><td>${escapeHtml({ workspace: 'Área', module: 'Módulo', board: 'Quadro' }[rule.scopeType] || rule.scopeType)}</td><td>${escapeHtml(scopeName(rule.scopeType, rule.scopeId))}</td><td><span class="atlas-v2-admin-level is-${attr(rule.level)}">${escapeHtml(ACCESS_LEVELS[rule.level]?.label || rule.level)}</span></td><td><button class="atlas-v2-admin-icon-danger" type="button" data-action="admin-delete-rule" data-rule-id="${attr(rule.id)}" title="Remover regra"><i data-lucide="x"></i></button></td></tr>`; }).join('');
+    const rules = runtime.data.accessRules.map((rule) => { const user = runtime.data.users.find((entry) => entry.id === rule.userId); return `<tr><td>${escapeHtml(user?.name || 'Usuário removido')}</td><td>${escapeHtml({ workspace: 'Área', module: 'Módulo', board: 'Quadro', group: 'Grupo', column: 'Coluna' }[rule.scopeType] || rule.scopeType)}</td><td>${escapeHtml(scopeName(rule.scopeType, rule.scopeId))}</td><td><span class="atlas-v2-admin-level is-${attr(rule.level)}">${escapeHtml(ACCESS_LEVELS[rule.level]?.label || rule.level)}</span></td><td><button class="atlas-v2-admin-icon-danger" type="button" data-action="admin-delete-rule" data-rule-id="${attr(rule.id)}" title="Remover regra"><i data-lucide="x"></i></button></td></tr>`; }).join('');
     return `<div class="atlas-v2-admin-section-head"><div><span>AUTORIZAÇÃO</span><h2>Perfis e permissões</h2><p>O perfil define a base; regras específicas ajustam uma área, módulo ou quadro.</p></div></div>
       <section class="atlas-v2-admin-block"><header><div><span>MATRIZ</span><h3>Permissões por perfil</h3></div></header><div class="atlas-v2-admin-table-wrap"><table class="atlas-v2-admin-table atlas-v2-permission-matrix"><thead><tr><th>Perfil</th>${permissions.map(([, label]) => `<th>${label}</th>`).join('')}</tr></thead><tbody>${matrix}</tbody></table></div></section>
       <section class="atlas-v2-admin-block"><header><div><span>EXCEÇÕES</span><h3>Acesso granular</h3></div></header><form id="atlas-v2-admin-permission-form" class="atlas-v2-admin-rule-form"><label><span>Usuário</span><select name="userId">${userOptions}</select></label><label><span>Estrutura</span><select name="scope">${scopes}</select></label><label><span>Nível</span><select name="level">${Object.entries(ACCESS_LEVELS).map(([key, value]) => `<option value="${key}">${value.label}</option>`).join('')}</select></label><button class="atlas-v2-button atlas-v2-button-primary" type="submit"><i data-lucide="plus"></i>Aplicar regra</button></form><div class="atlas-v2-admin-table-wrap"><table class="atlas-v2-admin-table"><thead><tr><th>Usuário</th><th>Escopo</th><th>Destino</th><th>Nível</th><th></th></tr></thead><tbody>${rules || '<tr><td colspan="5">Nenhuma regra específica. Os perfis padrão estão sendo utilizados.</td></tr>'}</tbody></table></div></section>`;
@@ -3453,19 +3720,82 @@
     return `<div class="atlas-v2-admin-section-head"><div><span>RASTREABILIDADE</span><h2>Auditoria</h2><p>Histórico das alterações realizadas nesta estrutura oficial.</p></div><span class="atlas-v2-admin-count">${runtime.data.auditLog.length} evento(s)</span></div><div class="atlas-v2-admin-table-wrap"><table class="atlas-v2-admin-table"><thead><tr><th>Data e hora</th><th>Usuário</th><th>Ação</th><th>Contexto</th></tr></thead><tbody>${rows || '<tr><td colspan="4">Nenhuma atividade registrada.</td></tr>'}</tbody></table></div>`;
   }
 
+  function storageUsageCount(connectionId) {
+    let count = 0;
+    runtime.data.workspaces.forEach((workspace) => {
+      if (workspace.storageConnectionId === connectionId) count += 1;
+      workspace.modules.forEach((module) => {
+        if (module.storageConnectionId === connectionId) count += 1;
+        module.boards.forEach((boardEntry) => { if (boardEntry.storageConnectionId === connectionId) count += 1; });
+      });
+    });
+    return count;
+  }
+
   function renderAdminSystem() {
     const statusLabels = { prepared: 'Preparado', inherited: 'Herdado', waiting: 'Aguardando', connected: 'Conectado' };
     const integrations = (runtime.data.system?.integrations || []).map((entry) => `<div class="atlas-v2-admin-integration"><span class="is-${attr(entry.status)}"><i data-lucide="${entry.id === 'supabase' ? 'database' : entry.id === 'drive' ? 'hard-drive' : 'radio'}"></i></span><span><strong>${escapeHtml(entry.name)}</strong><small>${escapeHtml(entry.detail)}</small></span><b class="is-${attr(entry.status)}">${escapeHtml(statusLabels[entry.status] || entry.status)}</b></div>`).join('');
     const storageRows = (runtime.data.storageConnections || []).map((entry) => {
-      const usage = runtime.data.workspaces.filter((workspace) => workspace.storageConnectionId === entry.id).length;
+      const usage = storageUsageCount(entry.id);
+      const ageDays = entry.verifiedAt ? Math.floor((Date.now() - new Date(entry.verifiedAt).getTime()) / 86400000) : null;
+      const warning = entry.status !== 'connected' ? ' · ATENÇÃO: conexão não validada' : ageDays !== null && ageDays > 30 ? ` · Teste antigo (${ageDays} dias)` : '';
       const detail = entry.accountEmail || entry.folderId
         ? `${entry.accountEmail || 'Conta setorial'}${entry.folderId ? ` · Pasta ${entry.folderId.slice(0, 10)}...` : ''}`
         : 'Conexão existente; abra para revisar ou completar os dados.';
-      return `<div class="atlas-v2-admin-storage-row"><span><i data-lucide="hard-drive"></i></span><span><strong>${escapeHtml(entry.name)}</strong><small>${escapeHtml(entry.sector)} · ${escapeHtml(detail)} · ${usage} área(s)</small></span><b class="is-${attr(entry.status)}">${escapeHtml(storageStatusLabel(entry.status))}</b><button type="button" data-action="admin-edit-storage" data-storage-id="${attr(entry.id)}" title="Configurar conexão"><i data-lucide="settings-2"></i></button></div>`;
+      return `<div class="atlas-v2-admin-storage-row"><span><i data-lucide="hard-drive"></i></span><span><strong>${escapeHtml(entry.name)}</strong><small>${escapeHtml(entry.sector)} · ${escapeHtml(detail)} · ${usage} uso(s)${escapeHtml(warning)}</small></span><b class="is-${attr(entry.status)}">${escapeHtml(storageStatusLabel(entry.status))}</b><button type="button" data-action="admin-edit-storage" data-storage-id="${attr(entry.id)}" title="Configurar conexão"><i data-lucide="settings-2"></i></button></div>`;
     }).join('');
     const trash = (runtime.data.trash || []).map((entry) => `<div class="atlas-v2-admin-trash-row"><i data-lucide="trash-2"></i><span><strong>${escapeHtml(entry.name)}</strong><small>${escapeHtml(entry.type)} · ${formatDateTime(entry.deletedAt)}</small></span><button type="button" data-action="admin-restore-trash" data-trash-id="${attr(entry.id)}" title="Restaurar"><i data-lucide="undo-2"></i></button><button class="is-danger" type="button" data-action="admin-purge-trash" data-trash-id="${attr(entry.id)}" title="Excluir definitivamente"><i data-lucide="x"></i></button></div>`).join('');
     const errors = (runtime.data.errors || []).map((entry) => `<div class="atlas-v2-admin-trash-row"><i data-lucide="triangle-alert"></i><span><strong>${escapeHtml(entry.title)}</strong><small>${escapeHtml(entry.detail || '')}</small></span></div>`).join('');
-    return `<div class="atlas-v2-admin-section-head"><div><span>AMBIENTE</span><h2>Sistema e integrações</h2><p>Diagnóstico, armazenamento setorial, backup e recuperação do Atlas V2.</p></div><button class="atlas-v2-button atlas-v2-button-primary" type="button" data-action="admin-export"><i data-lucide="download"></i>Exportar backup</button></div><div class="atlas-v2-admin-split"><section class="atlas-v2-admin-block"><header><div><span>CONEXÕES</span><h3>Integrações</h3></div></header><div class="atlas-v2-admin-integrations">${integrations}</div></section><section class="atlas-v2-admin-block"><header><div><span>DIAGNÓSTICO</span><h3>Central de erros</h3></div></header>${errors || '<p class="atlas-v2-admin-empty">Nenhuma falha registrada.</p>'}</section></div><section class="atlas-v2-admin-block atlas-v2-admin-storage"><header><div><span>GOOGLE DRIVE POR SETOR</span><h3>Contas e pastas conectadas</h3></div><button type="button" data-action="admin-new-storage"><i data-lucide="plus"></i>Nova conexão</button></header><div>${storageRows || '<p class="atlas-v2-admin-empty">Nenhum Drive cadastrado.</p>'}</div></section><section class="atlas-v2-admin-block"><header><div><span>RECUPERAÇÃO</span><h3>Lixeira</h3></div><b>${runtime.data.trash.length} item(ns)</b></header><div class="atlas-v2-admin-trash">${trash || '<p class="atlas-v2-admin-empty">A lixeira está vazia.</p>'}</div></section>`;
+    const health = runtime.healthChecks.map((entry) => `<div class="atlas-v2-health-check is-${attr(entry.status)}"><i data-lucide="${entry.status === 'ok' ? 'circle-check-big' : entry.status === 'running' ? 'loader-circle' : 'circle-alert'}"></i><span><strong>${escapeHtml(entry.name)}</strong><small>${escapeHtml(entry.detail)}</small></span><b>${entry.latency === null ? '--' : `${entry.latency} ms`}</b></div>`).join('');
+    const storageHistory = (runtime.data.system?.storageHistory || []).slice(0, 12).map((entry) => `<tr><td>${formatDateTime(entry.createdAt)}</td><td>${escapeHtml(entry.name)}</td><td>${escapeHtml(entry.status === 'success' ? 'Sucesso' : 'Falha')}</td><td>${entry.latency ?? '--'} ms</td><td>${escapeHtml(entry.detail || '')}</td></tr>`).join('');
+    return `<div class="atlas-v2-admin-section-head"><div><span>AMBIENTE</span><h2>Sistema e integrações</h2><p>Diagnóstico, armazenamento setorial, backup e recuperação do Atlas V2.</p></div><div class="atlas-v2-admin-head-actions"><button class="atlas-v2-button atlas-v2-button-quiet" type="button" data-action="admin-health-check"><i data-lucide="activity"></i>Executar diagnóstico</button><button class="atlas-v2-button atlas-v2-button-primary" type="button" data-action="admin-export"><i data-lucide="download"></i>Exportar backup</button></div></div>${health ? `<section class="atlas-v2-admin-block"><header><div><span>SAÚDE DO SISTEMA</span><h3>Verificação em tempo real</h3></div></header><div class="atlas-v2-health-grid">${health}</div></section>` : ''}<div class="atlas-v2-admin-split"><section class="atlas-v2-admin-block"><header><div><span>CONEXÕES</span><h3>Integrações</h3></div></header><div class="atlas-v2-admin-integrations">${integrations}</div></section><section class="atlas-v2-admin-block"><header><div><span>DIAGNÓSTICO</span><h3>Central de erros</h3></div></header>${errors || '<p class="atlas-v2-admin-empty">Nenhuma falha registrada.</p>'}</section></div><section class="atlas-v2-admin-block atlas-v2-admin-storage"><header><div><span>GOOGLE DRIVE POR SETOR</span><h3>Contas e pastas conectadas</h3></div><button type="button" data-action="admin-new-storage"><i data-lucide="plus"></i>Nova conexão</button></header><div>${storageRows || '<p class="atlas-v2-admin-empty">Nenhum Drive cadastrado.</p>'}</div></section>${storageHistory ? `<section class="atlas-v2-admin-block"><header><div><span>HISTÓRICO DO DRIVE</span><h3>Últimos testes de conexão</h3></div></header><div class="atlas-v2-admin-table-wrap"><table class="atlas-v2-admin-table"><thead><tr><th>Data</th><th>Conexão</th><th>Resultado</th><th>Latência</th><th>Detalhe</th></tr></thead><tbody>${storageHistory}</tbody></table></div></section>` : ''}<section class="atlas-v2-admin-block"><header><div><span>RECUPERAÇÃO</span><h3>Lixeira</h3></div><b>${runtime.data.trash.length} item(ns)</b></header><div class="atlas-v2-admin-trash">${trash || '<p class="atlas-v2-admin-empty">A lixeira está vazia.</p>'}</div></section>`;
+  }
+
+  async function runSystemHealthCheck() {
+    if (!requirePermission('admin', null, 'executar o diagnóstico')) return;
+    const checks = [
+      { id: 'browser', name: 'Navegador e cache local', status: 'running', detail: 'Verificando armazenamento...', latency: null },
+      { id: 'supabase', name: 'Supabase e autenticação', status: 'running', detail: 'Consultando a base...', latency: null },
+      { id: 'realtime', name: 'Atualizações em tempo real', status: 'running', detail: 'Verificando o canal...', latency: null },
+      ...(runtime.data.storageConnections || []).map((entry) => ({ id: `drive:${entry.id}`, name: entry.name, connection: entry, status: 'running', detail: 'Testando o Drive setorial...', latency: null })),
+    ];
+    runtime.healthChecks = checks;
+    renderAdminPage();
+    refreshIcons(document.getElementById('atlas-v2-board-content'));
+    const measure = async (entry, operation) => {
+      const started = performance.now();
+      try {
+        const detail = await operation();
+        Object.assign(entry, { status: 'ok', detail: detail || 'Operação normal.', latency: Math.round(performance.now() - started) });
+      } catch (error) {
+        Object.assign(entry, { status: 'error', detail: error.message || String(error), latency: Math.round(performance.now() - started) });
+      }
+    };
+    await measure(checks[0], async () => {
+      localStorage.setItem('atlas-v2-health-probe', String(Date.now()));
+      localStorage.removeItem('atlas-v2-health-probe');
+      return navigator.onLine ? 'Cache disponível e navegador online.' : 'Cache disponível; navegador offline.';
+    });
+    await measure(checks[1], async () => {
+      if (!runtime.authClient || !runtime.authSession) throw new Error('Sessão do Supabase indisponível.');
+      const { error } = await runtime.authClient.from('atlas_profiles').select('id', { head: true, count: 'exact' }).limit(1);
+      if (error) throw error;
+      return 'Autenticação e Data API respondendo.';
+    });
+    await measure(checks[2], async () => {
+      if (runtime.realtimeStatus !== 'connected') throw new Error(`Canal em estado ${runtime.realtimeStatus}.`);
+      return 'Canal conectado e monitor ativo.';
+    });
+    for (const entry of checks.filter((candidate) => candidate.connection)) {
+      await measure(entry, async () => {
+        const connection = entry.connection;
+        if (!connection.appScriptUrl || !connection.folderId) throw new Error('Conexão incompleta.');
+        await testStorageEndpoint(connection.appScriptUrl, connection.folderId, storageModule(connection));
+        return `${connection.sector} disponível para gravação.`;
+      });
+    }
+    renderAdminPage();
+    refreshIcons(document.getElementById('atlas-v2-board-content'));
   }
 
   function openStorageConnectionModal(connectionId = '') {
@@ -3495,6 +3825,21 @@
     status.textContent = message;
   }
 
+  function recordStorageTest(connectionId, name, status, latency, detail) {
+    runtime.data.system = runtime.data.system || {};
+    runtime.data.system.storageHistory = runtime.data.system.storageHistory || [];
+    runtime.data.system.storageHistory.unshift({ id: id('storage-test'), connectionId, name, status, latency, detail, createdAt: new Date().toISOString() });
+    runtime.data.system.storageHistory = runtime.data.system.storageHistory.slice(0, 60);
+    if (runtime.remoteMode && runtime.authClient && isUuid(connectionId)) {
+      void runtime.authClient.from('atlas_v2_storage_health').insert({
+        connection_id: connectionId,
+        status: status === 'success' ? 'healthy' : 'error',
+        latency_ms: Number.isFinite(Number(latency)) ? Number(latency) : null,
+        detail: String(detail || ''),
+      });
+    }
+  }
+
   async function testAdminStorageConnection() {
     const form = document.getElementById('atlas-v2-storage-form');
     if (!form) return;
@@ -3504,13 +3849,19 @@
     form.elements.driveVerified.value = '0';
     if (error) return setAdminStorageStatus(error, 'error');
     setAdminStorageStatus('Testando acesso de escrita na pasta...', 'testing');
+    const started = performance.now();
     try {
       const result = await testStorageEndpoint(draft.appScriptUrl, draft.folderId, storageModule(draft));
       form.elements.driveVerified.value = '1';
+      const connection = storageConnection(connectionId);
+      if (connection) connection.verifiedAt = new Date().toISOString();
+      recordStorageTest(connectionId, draft.name, 'success', Math.round(performance.now() - started), result.folderName || 'Pasta validada para gravação.');
       setAdminStorageStatus(result.legacy ? 'Conector V1.4 compatível validado para este setor.' : `Conexão validada${result.folderName ? `: ${result.folderName}` : ''}.`, 'success');
     } catch (error) {
+      recordStorageTest(connectionId, draft.name, 'error', Math.round(performance.now() - started), error.message || 'Falha ao validar a conexão.');
       setAdminStorageStatus(error.message || 'Falha ao validar a conexão.', 'error');
     }
+    persistLocalBackup(runtime.data);
   }
 
   function submitStorageConnection(form) {
@@ -3964,15 +4315,25 @@
   function openSaveTemplateModal() {
     const context = findBoard();
     if (!context) return;
-    openModal({ title: 'Salvar modelo de quadro', subtitle: context.board.name, body: `<form id="atlas-v2-admin-template-form"><label class="atlas-v2-field"><span>Nome do modelo</span><input name="name" value="${attr(context.board.name)}" maxlength="80" required autofocus></label></form>`, actions: '<button class="atlas-v2-button atlas-v2-button-quiet" type="button" data-action="close-overlay">Cancelar</button><button class="atlas-v2-button atlas-v2-button-primary" type="submit" form="atlas-v2-admin-template-form"><i data-lucide="bookmark-plus"></i>Salvar modelo</button>' });
+    openModal({ title: 'Salvar pacote operacional', subtitle: context.board.name, body: `<form id="atlas-v2-admin-template-form" class="atlas-v2-form-grid"><label class="atlas-v2-field is-wide"><span>Nome do modelo</span><input name="name" value="${attr(context.board.name)}" maxlength="80" required autofocus></label><label class="atlas-v2-check-row"><input name="includeViews" type="checkbox" checked><span><strong>Incluir visualizações</strong><small>Tabela, Obras, Kanban, Gantt, Calendário e Painel.</small></span></label><label class="atlas-v2-check-row"><input name="includeAutomations" type="checkbox" checked><span><strong>Incluir automações</strong><small>As regras serão copiadas desativadas.</small></span></label></form>`, actions: '<button class="atlas-v2-button atlas-v2-button-quiet" type="button" data-action="close-overlay">Cancelar</button><button class="atlas-v2-button atlas-v2-button-primary" type="submit" form="atlas-v2-admin-template-form"><i data-lucide="bookmark-plus"></i>Salvar pacote</button>' });
   }
 
   function submitAdminTemplate(form) {
     if (!requirePermission('configure', findBoard(), 'criar modelos')) return;
     const context = findBoard();
-    const name = String(new FormData(form).get('name') || '').trim();
+    const formData = new FormData(form);
+    const name = String(formData.get('name') || '').trim();
     if (!context || !name) return;
-    runtime.data.templates.push({ id: id('template'), name, icon: context.board.icon, columns: deepClone(context.board.columns), groups: context.board.groups.map((entry) => ({ id: id('group-template'), name: entry.name, color: entry.color })) });
+    runtime.data.templates.push({
+      id: id('template'),
+      name,
+      icon: context.board.icon,
+      columns: deepClone(context.board.columns),
+      groups: context.board.groups.map((entry) => ({ id: id('group-template'), name: entry.name, color: entry.color })),
+      views: formData.get('includeViews') ? deepClone(context.board.views) : ['table'],
+      settings: deepClone(context.board.settings || {}),
+      automations: formData.get('includeAutomations') ? deepClone(boardAutomations(context.board.id)).map((entry) => ({ ...entry, id: '', boardId: '', active: false })) : [],
+    });
     closeOverlay();
     saveData(`Modelo ${name} criado`, { scope: 'system' });
     render();
@@ -4037,6 +4398,7 @@
     renderWorkspace(context.workspace);
     renderNavigation();
     if (runtime.page === 'admin') {
+      document.body.classList.remove('atlas-v2-mobile-card-view');
       renderAdminPage();
       refreshIcons();
       return;
@@ -4230,12 +4592,90 @@
     const sectorMatches = query && contextualSectorMatch(groupEntry.name, query);
     return groupEntry.items.filter((entry) => {
       if (boardEntry.activeView === 'works' && runtime.workFilter && entry.id !== runtime.workFilter) return false;
+      if (!itemMatchesAdvancedFilters(boardEntry, groupEntry, entry)) return false;
       const children = visibleSubitems(boardEntry, entry);
       if (!query || sectorMatches) return true;
       const ownText = normalizeSearchText(`${entry.name} ${Object.values(entry.values || {}).join(' ')}`);
       const subitemText = normalizeSearchText(children.map((subitem) => `${subitem.name} ${Object.values(subitem.values || {}).join(' ')}`).join(' '));
       return `${ownText} ${subitemText}`.includes(query);
     });
+  }
+
+  function itemMatchesAdvancedFilters(boardEntry, groupEntry, itemEntry) {
+    const filters = runtime.searchFilters?.[boardEntry.id] || {};
+    if (filters.groupId && groupEntry.id !== filters.groupId) return false;
+    if (filters.columnId && filters.value && String(itemEntry.values?.[filters.columnId] || '') !== String(filters.value)) return false;
+    if (filters.attachmentsOnly) {
+      const hasAttachment = boardEntry.columns.some((columnEntry) => ['image', 'file'].includes(columnEntry.type) && normalizeImageEntries(itemEntry.values?.[columnEntry.id]).length);
+      if (!hasAttachment) return false;
+    }
+    if (filters.dateColumnId && (filters.dateFrom || filters.dateTo)) {
+      const value = String(itemEntry.values?.[filters.dateColumnId] || '');
+      if (!value || (filters.dateFrom && value < filters.dateFrom) || (filters.dateTo && value > filters.dateTo)) return false;
+    }
+    return true;
+  }
+
+  function openAdvancedFilters() {
+    const context = findBoard();
+    if (!context) return;
+    const filters = runtime.searchFilters?.[context.board.id] || {};
+    const filterColumns = context.board.columns.filter((entry) => ['status', 'select', 'person'].includes(entry.type));
+    const selectedColumn = context.board.columns.find((entry) => entry.id === filters.columnId);
+    const values = selectedColumn?.options?.map((entry) => typeof entry === 'string' ? entry : entry.label) || [];
+    const saved = context.board.settings?.savedSearches || [];
+    openDrawer({
+      title: 'Filtros avançados',
+      subtitle: 'Combine critérios e salve consultas frequentes.',
+      body: `<form id="atlas-v2-filter-form" class="atlas-v2-form-grid"><label class="atlas-v2-field"><span>Grupo</span><select name="groupId"><option value="">Todos</option>${context.board.groups.map((entry) => `<option value="${attr(entry.id)}" ${filters.groupId === entry.id ? 'selected' : ''}>${escapeHtml(entry.name)}</option>`).join('')}</select></label><label class="atlas-v2-field"><span>Campo</span><select name="columnId"><option value="">Qualquer campo</option>${filterColumns.map((entry) => `<option value="${attr(entry.id)}" ${filters.columnId === entry.id ? 'selected' : ''}>${escapeHtml(entry.name)}</option>`).join('')}</select></label><label class="atlas-v2-field is-wide"><span>Valor exato</span><input name="value" list="atlas-v2-filter-values" value="${attr(filters.value || '')}" placeholder="Ex.: Em andamento"><datalist id="atlas-v2-filter-values">${values.map((entry) => `<option value="${attr(entry)}"></option>`).join('')}</datalist></label><label class="atlas-v2-field"><span>Coluna de data</span><select name="dateColumnId"><option value="">Sem período</option>${context.board.columns.filter((entry) => entry.type === 'date').map((entry) => `<option value="${attr(entry.id)}" ${filters.dateColumnId === entry.id ? 'selected' : ''}>${escapeHtml(entry.name)}</option>`).join('')}</select></label><label class="atlas-v2-field"><span>Data inicial</span><input name="dateFrom" type="date" value="${attr(filters.dateFrom || '')}"></label><label class="atlas-v2-field"><span>Data final</span><input name="dateTo" type="date" value="${attr(filters.dateTo || '')}"></label><label class="atlas-v2-check-row"><input name="attachmentsOnly" type="checkbox" ${filters.attachmentsOnly ? 'checked' : ''}><span><strong>Somente com anexos</strong><small>Imagens ou arquivos.</small></span></label><label class="atlas-v2-field is-wide"><span>Salvar esta pesquisa como</span><input name="saveName" maxlength="60" placeholder="Ex.: Atrasados com evidências"></label></form><div class="atlas-v2-saved-searches">${saved.map((entry) => `<button type="button" data-action="filter-use-saved" data-search-id="${attr(entry.id)}"><i data-lucide="bookmark"></i><span>${escapeHtml(entry.name)}</span><b>${escapeHtml(entry.query || '')}</b></button>`).join('') || '<p>Nenhuma pesquisa salva neste quadro.</p>'}</div>`,
+      actions: `<button class="atlas-v2-button atlas-v2-button-quiet" type="button" data-action="filter-clear"><i data-lucide="filter-x"></i>Limpar</button><button class="atlas-v2-button atlas-v2-button-primary" type="submit" form="atlas-v2-filter-form"><i data-lucide="list-filter"></i>Aplicar filtros</button>`,
+    });
+  }
+
+  function submitAdvancedFilters(form) {
+    const context = findBoard();
+    if (!context) return;
+    const data = new FormData(form);
+    const filters = {
+      groupId: String(data.get('groupId') || ''),
+      columnId: String(data.get('columnId') || ''),
+      value: String(data.get('value') || '').trim(),
+      dateColumnId: String(data.get('dateColumnId') || ''),
+      dateFrom: String(data.get('dateFrom') || ''),
+      dateTo: String(data.get('dateTo') || ''),
+      attachmentsOnly: Boolean(data.get('attachmentsOnly')),
+    };
+    runtime.searchFilters[context.board.id] = filters;
+    const saveName = String(data.get('saveName') || '').trim();
+    if (saveName) {
+      context.board.settings = context.board.settings || {};
+      context.board.settings.savedSearches = context.board.settings.savedSearches || [];
+      context.board.settings.savedSearches.push({ id: id('search'), name: saveName, query: runtime.boardSearch, filters: deepClone(filters) });
+      saveData('Pesquisa salva');
+    }
+    closeOverlay();
+    render();
+  }
+
+  function clearAdvancedFilters() {
+    const context = findBoard();
+    if (!context) return;
+    delete runtime.searchFilters[context.board.id];
+    runtime.boardSearch = '';
+    const input = document.getElementById('atlas-v2-board-search');
+    if (input) input.value = '';
+    closeOverlay();
+    render();
+  }
+
+  function useSavedSearch(searchId) {
+    const context = findBoard();
+    const saved = context?.board.settings?.savedSearches?.find((entry) => entry.id === searchId);
+    if (!context || !saved) return;
+    runtime.searchFilters[context.board.id] = deepClone(saved.filters || {});
+    runtime.boardSearch = saved.query || '';
+    closeOverlay();
+    render();
   }
 
   function renderWorkTabs(boardEntry) {
@@ -4436,21 +4876,39 @@
     const root = document.getElementById('atlas-v2-board-content');
     if (!root) return;
     root.dataset.boardId = targetBoardId;
-    root.classList.toggle('is-gantt-view', boardEntry.activeView === 'gantt');
+    const mobileVertical = window.innerWidth <= 820;
+    document.body.classList.toggle('atlas-v2-mobile-card-view', mobileVertical && ['table', 'works'].includes(boardEntry.activeView));
+    root.classList.toggle('is-mobile-vertical-view', mobileVertical);
+    root.classList.toggle('is-gantt-view', boardEntry.activeView === 'gantt' && !mobileVertical);
+    const fieldModeActive = mobileVertical && boardEntry.activeView === 'table';
+    root.classList.toggle('is-field-mode-view', fieldModeActive);
     if (boardEntry.activeView === 'works') {
       selectWorkFromContextSearch(boardEntry);
-      const content = boardEntry.settings?.works_mode === 'sectorized'
-        ? renderSectorizedWorks(boardEntry)
-        : (visibleGroups(boardEntry).map((groupEntry, groupIndex) => renderGroupTable(boardEntry, groupEntry, groupIndex)).join('') || renderEmptyBoard());
-      root.innerHTML = renderWorkTabs(boardEntry) + content;
+      if (mobileVertical) {
+        root.innerHTML = renderMobileWorks(boardEntry);
+      } else {
+        const content = boardEntry.settings?.works_mode === 'sectorized'
+          ? renderSectorizedWorks(boardEntry)
+          : (visibleGroups(boardEntry).map((groupEntry, groupIndex) => renderGroupTable(boardEntry, groupEntry, groupIndex)).join('') || renderEmptyBoard());
+        root.innerHTML = renderWorkTabs(boardEntry) + content;
+      }
       revealContextSearchWork(boardEntry, false);
     } else if (boardEntry.activeView === 'gantt') {
-      const labelWidth = window.innerWidth <= 560 ? 340 : window.innerWidth <= 820 ? 420 : 500;
-      const horizontalPadding = window.innerWidth <= 820 ? 28 : 48;
-      const availableTimelineWidth = Math.max(720, (root.clientWidth || 1098) - horizontalPadding - labelWidth);
-      root.innerHTML = renderGantt(boardEntry, availableTimelineWidth, labelWidth);
+      if (mobileVertical) {
+        root.innerHTML = renderMobileGantt(boardEntry);
+      } else {
+        const labelWidth = 500;
+        const availableTimelineWidth = Math.max(720, (root.clientWidth || 1098) - 48 - labelWidth);
+        root.innerHTML = renderGantt(boardEntry, availableTimelineWidth, labelWidth);
+      }
+    } else if (boardEntry.activeView === 'calendar') {
+      root.innerHTML = mobileVertical ? renderMobileCalendar(boardEntry) : renderCalendar(boardEntry);
+    } else if (boardEntry.activeView === 'dashboard') {
+      root.innerHTML = renderDashboard(boardEntry);
     } else if (boardEntry.activeView === 'kanban') {
       root.innerHTML = renderKanban(boardEntry);
+    } else if (fieldModeActive) {
+      root.innerHTML = renderFieldMode(boardEntry);
     } else {
       root.innerHTML = visibleGroups(boardEntry).map((groupEntry) => renderGroupTable(boardEntry, groupEntry, boardEntry.groups.indexOf(groupEntry))).join('') || `<div class="atlas-v2-empty-view"><div><i data-lucide="search-x"></i><strong>Nenhum setor, item ou subitem encontrado</strong></div></div>`;
     }
@@ -4505,20 +4963,49 @@
 
   function renderItemRow(boardEntry, itemEntry, parentItem = null, expanded = true, depth = 0) {
     const isSubitem = Boolean(parentItem);
+    const sla = boardSlaState(boardEntry, itemEntry);
     return `<tr class="atlas-v2-item-row ${isSubitem ? 'is-subitem' : ''} ${runtime.selectedItems.has(itemEntry.id) ? 'is-selected' : ''}" data-item-id="${attr(itemEntry.id)}" style="--item-depth:${Math.max(0, depth)}" draggable="true">
       <td class="atlas-v2-select-cell"><input class="atlas-v2-checkbox" type="checkbox" data-action="select-item" data-item-id="${attr(itemEntry.id)}" ${runtime.selectedItems.has(itemEntry.id) ? 'checked' : ''} aria-label="Selecionar item"></td>
       <td class="atlas-v2-item-cell"><div class="atlas-v2-item-name-wrap ${isSubitem ? 'is-subitem' : ''}">
         ${isSubitem ? '<span class="atlas-v2-subitem-branch" aria-hidden="true"></span>' : `<button class="atlas-v2-subitem-toggle" type="button" data-action="toggle-subitems" data-item-id="${attr(itemEntry.id)}" title="${expanded ? 'Recolher subitens' : 'Expandir subitens'}"><i data-lucide="${expanded ? 'chevron-down' : 'chevron-right'}"></i><span>${visibleSubitems(boardEntry, itemEntry).length}</span></button>`}
-        <span class="atlas-v2-drag-handle"><i data-lucide="grip-vertical"></i></span><input class="atlas-v2-cell-input" data-item-name="${attr(itemEntry.id)}" value="${attr(itemEntry.name)}" aria-label="Nome do ${isSubitem ? 'subitem' : 'item'}"></div></td>
+        <span class="atlas-v2-drag-handle"><i data-lucide="grip-vertical"></i></span><input class="atlas-v2-cell-input" data-item-name="${attr(itemEntry.id)}" value="${attr(itemEntry.name)}" aria-label="Nome do ${isSubitem ? 'subitem' : 'item'}">${sla ? `<span class="atlas-v2-sla-chip is-${sla.level}" title="SLA por ${attr(sla.dateColumn.name)}">${escapeHtml(sla.label)}</span>` : ''}</div></td>
       ${boardEntry.columns.map((columnEntry) => `<td style="width:${Number(columnEntry.width || 160)}px;min-width:${Number(columnEntry.width || 160)}px">${renderCell(columnEntry, itemEntry)}</td>`).join('')}
-      <td class="atlas-v2-actions-cell"><div class="atlas-v2-row-actions">${isSubitem ? '' : `<button type="button" data-action="add-subitem" data-item-id="${attr(itemEntry.id)}" title="Adicionar subitem"><i data-lucide="list-tree"></i></button>`}<button type="button" data-action="duplicate-item" data-item-id="${attr(itemEntry.id)}" title="Duplicar"><i data-lucide="copy"></i></button><button class="is-danger" type="button" data-action="delete-item" data-item-id="${attr(itemEntry.id)}" title="Excluir"><i data-lucide="trash-2"></i></button></div></td>
+      <td class="atlas-v2-actions-cell"><div class="atlas-v2-row-actions">${isSubitem ? '' : `<button type="button" data-action="add-subitem" data-item-id="${attr(itemEntry.id)}" title="Adicionar subitem"><i data-lucide="list-tree"></i></button>`}<button type="button" data-action="item-history" data-item-id="${attr(itemEntry.id)}" title="Histórico"><i data-lucide="history"></i></button><button type="button" data-action="duplicate-item" data-item-id="${attr(itemEntry.id)}" title="Duplicar"><i data-lucide="copy"></i></button><button class="is-danger" type="button" data-action="delete-item" data-item-id="${attr(itemEntry.id)}" title="Excluir"><i data-lucide="trash-2"></i></button></div></td>
       <td class="atlas-v2-end-spacer" aria-hidden="true"></td>
     </tr>`;
+  }
+
+  function formulaColumnValue(boardEntry, itemEntry, columnEntry) {
+    const expression = String(columnEntry.formula || '').trim();
+    if (!expression) return '';
+    const replaced = expression.replace(/\{([^}]+)\}/g, (_, rawName) => {
+      const name = String(rawName || '').trim().toLowerCase();
+      const source = boardEntry.columns.find((entry) => entry.id !== columnEntry.id && entry.name.toLowerCase() === name);
+      const value = source ? itemEntry.values?.[source.id] : 0;
+      const numeric = Number(String(value ?? '').replace(',', '.'));
+      return Number.isFinite(numeric) ? String(numeric) : '0';
+    });
+    if (!/^[\d+\-*/().%\s]+$/.test(replaced)) return 'Fórmula inválida';
+    try {
+      const result = Function(`"use strict"; return (${replaced});`)();
+      if (!Number.isFinite(Number(result))) return '';
+      const decimals = Math.min(6, Math.max(0, Number(columnEntry.decimals ?? 2)));
+      const number = Number(result);
+      if (columnEntry.format === 'currency') return number.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: decimals });
+      if (columnEntry.format === 'percentage') return `${number.toLocaleString('pt-BR', { maximumFractionDigits: decimals })}%`;
+      return number.toLocaleString('pt-BR', { maximumFractionDigits: decimals });
+    } catch (_) {
+      return 'Fórmula inválida';
+    }
   }
 
   function renderCell(columnEntry, itemEntry) {
     const value = itemEntry.values?.[columnEntry.id] ?? '';
     const common = `data-item-value="${attr(itemEntry.id)}" data-column-id="${attr(columnEntry.id)}"`;
+    if (columnEntry.type === 'formula') {
+      const context = findBoard();
+      return `<output class="atlas-v2-formula-cell" title="${attr(columnEntry.formula || '')}">${escapeHtml(formulaColumnValue(context?.board || { columns: [] }, itemEntry, columnEntry))}</output>`;
+    }
     if (columnEntry.type === 'status' || columnEntry.type === 'select') {
       const details = optionDetails(columnEntry, value);
       const style = details.background ? `--status-bg:${attr(details.background)};--status-color:${attr(details.color || '#171c26')}` : '';
@@ -4532,6 +5019,13 @@
     }
     if (columnEntry.type === 'date') {
       return `<input class="atlas-v2-cell-input" type="date" ${common} data-date-field="true" min="1000-01-01" max="9999-12-31" value="${attr(value)}">`;
+    }
+    if (columnEntry.type === 'period') {
+      const range = parseTimelinePeriod(value);
+      const periodValue = range
+        ? `${range.start.toISOString().slice(0, 10)} - ${range.end.toISOString().slice(0, 10)}`
+        : (typeof value === 'object' ? JSON.stringify(value) : value);
+      return `<input class="atlas-v2-cell-input" type="text" ${common} value="${attr(periodValue)}" placeholder="AAAA-MM-DD - AAAA-MM-DD">`;
     }
     if (['number', 'percentage', 'currency'].includes(columnEntry.type)) {
       return `<input class="atlas-v2-cell-input" type="number" ${common} value="${attr(value)}" step="${columnEntry.type === 'currency' ? '0.01' : '1'}">`;
@@ -4551,7 +5045,10 @@
         return `<button type="button" data-action="open-attachment-viewer" data-item-id="${attr(itemEntry.id)}" data-column-id="${attr(columnEntry.id)}" data-image-index="${index}" title="Abrir ${attr(entry.name || `imagem ${index + 1}`)}"><img src="${attr(source.src)}" data-image-fallbacks="${attr(source.fallbacks)}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer"></button>`;
       }).join('');
       const remaining = images.length > 3 ? `<button class="atlas-v2-image-more" type="button" data-action="open-attachment-viewer" data-item-id="${attr(itemEntry.id)}" data-column-id="${attr(columnEntry.id)}" data-image-index="3" title="Ver todas">+${images.length - 3}</button>` : '';
-      return `<div class="atlas-v2-image-cell">${previews}${remaining}<label title="Adicionar imagens"><i data-lucide="plus"></i><input type="file" accept="image/*" multiple ${common} hidden></label>${images.length ? `<span>${images.length}</span>` : '<small>Imagens</small>'}</div>`;
+      return `<div class="atlas-v2-image-cell">${previews}${remaining}${runtime.fieldMode && window.innerWidth <= 820 ? `<label title="Fotografar agora"><i data-lucide="camera"></i><input type="file" accept="image/*" capture="environment" ${common} hidden></label>` : ''}<label title="Adicionar imagens da galeria"><i data-lucide="plus"></i><input type="file" accept="image/*" multiple ${common} hidden></label>${images.length ? `<span>${images.length}</span>` : '<small>Imagens</small>'}</div>`;
+    }
+    if (columnEntry.type === 'location') {
+      return `<div class="atlas-v2-location-cell"><input class="atlas-v2-cell-input" type="text" ${common} value="${attr(value)}" placeholder="Local ou coordenadas">${runtime.fieldMode && window.innerWidth <= 820 ? `<button type="button" data-action="capture-location" data-item-id="${attr(itemEntry.id)}" data-column-id="${attr(columnEntry.id)}" title="Usar localização atual"><i data-lucide="locate-fixed"></i></button>` : ''}</div>`;
     }
     if (columnEntry.type === 'link') {
       return `<input class="atlas-v2-cell-input" type="url" ${common} value="${attr(value)}" placeholder="https://">`;
@@ -5057,7 +5554,7 @@
     const imageLike = column?.type === 'image' || mimeType.startsWith('image/') || /\.(png|jpe?g|webp|gif|bmp)$/i.test(entry?.name || '');
     if (imageLike) {
       const source = imageElementAttributes(entry, 2200);
-      return `<img src="${attr(source.src)}" data-image-fallbacks="${attr(source.fallbacks)}" alt="${attr(entry.name || 'Imagem anexada')}" decoding="async" referrerpolicy="no-referrer">`;
+      return `<img class="atlas-v2-viewer-image" src="${attr(source.src)}" data-image-fallbacks="${attr(source.fallbacks)}" alt="${attr(entry.name || 'Imagem anexada')}" decoding="async" referrerpolicy="no-referrer">`;
     }
     const previewUrl = entry?.dataUrl
       || (entry?.fileId ? `https://drive.google.com/file/d/${encodeURIComponent(entry.fileId)}/preview` : entry?.viewUrl || entry?.url || '');
@@ -5068,12 +5565,35 @@
   }
 
   function openAttachmentViewer(itemId, columnId, index = 0) {
-    runtime.imageViewer = { itemId, columnId, index: Number(index) || 0 };
+    const nextIndex = Number(index) || 0;
+    const sameAttachment = runtime.imageViewer
+      && runtime.imageViewer.itemId === itemId
+      && runtime.imageViewer.columnId === columnId
+      && runtime.imageViewer.index === nextIndex;
+    runtime.imageViewer = {
+      itemId,
+      columnId,
+      index: nextIndex,
+      zoom: sameAttachment ? runtime.imageViewer.zoom : 1,
+      rotation: sameAttachment ? runtime.imageViewer.rotation : 0,
+      x: sameAttachment ? runtime.imageViewer.x : 0,
+      y: sameAttachment ? runtime.imageViewer.y : 0,
+    };
     const data = viewerAttachment();
     if (!data) return;
     const { entry, attachments, column } = data;
+    const mimeType = String(entry?.mimeType || '').toLowerCase();
+    const imageLike = column?.type === 'image' || mimeType.startsWith('image/') || /\.(png|jpe?g|webp|gif|bmp)$/i.test(entry?.name || '');
+    const imageControls = imageLike ? `<div class="atlas-v2-viewer-tools" aria-label="Controles da imagem">
+      <button type="button" data-action="viewer-zoom-out" title="Diminuir zoom"><i data-lucide="zoom-out"></i></button>
+      <button class="atlas-v2-viewer-zoom-value" type="button" data-action="viewer-reset" title="Ajustar à tela">${Math.round(runtime.imageViewer.zoom * 100)}%</button>
+      <button type="button" data-action="viewer-zoom-in" title="Aumentar zoom"><i data-lucide="zoom-in"></i></button>
+      <button type="button" data-action="viewer-rotate" title="Girar imagem"><i data-lucide="rotate-cw"></i></button>
+      <button type="button" data-action="viewer-fullscreen" title="Tela cheia"><i data-lucide="maximize-2"></i></button>
+    </div>` : '';
     const root = document.getElementById('atlas-v2-overlay-root');
-    root.innerHTML = `<div class="atlas-v2-overlay atlas-v2-image-overlay" data-action="overlay-backdrop"><section class="atlas-v2-image-viewer" role="dialog" aria-modal="true" aria-label="Visualizador de anexos"><header><span><strong>${escapeHtml(entry.name || 'Arquivo')}</strong><small>${runtime.imageViewer.index + 1} de ${attachments.length}</small></span><button type="button" data-action="close-overlay" title="Fechar"><i data-lucide="x"></i></button></header><div class="atlas-v2-image-stage atlas-v2-attachment-stage"><button type="button" data-action="viewer-previous" title="Arquivo anterior" ${attachments.length < 2 ? 'disabled' : ''}><i data-lucide="chevron-left"></i></button>${attachmentPreviewMarkup(entry, column)}<button type="button" data-action="viewer-next" title="Próximo arquivo" ${attachments.length < 2 ? 'disabled' : ''}><i data-lucide="chevron-right"></i></button></div><footer><span>${entry.localOnly ? 'Prévia local · será enviada quando houver um Drive validado' : 'Armazenado no Google Drive do setor'}</span>${entry.viewUrl ? `<a class="atlas-v2-button atlas-v2-button-quiet" href="${attr(entry.viewUrl)}" target="_blank" rel="noopener noreferrer"><i data-lucide="external-link"></i>Abrir original</a>` : ''}${hasPermission('edit', data.context) ? '<button class="atlas-v2-button atlas-v2-button-danger" type="button" data-action="viewer-remove"><i data-lucide="trash-2"></i>Remover</button>' : ''}</footer></section></div>`;
+    root.innerHTML = `<div class="atlas-v2-overlay atlas-v2-image-overlay" data-action="overlay-backdrop"><section class="atlas-v2-image-viewer" role="dialog" aria-modal="true" aria-label="Visualizador de anexos"><header><span><strong>${escapeHtml(entry.name || 'Arquivo')}</strong><small>${runtime.imageViewer.index + 1} de ${attachments.length}</small></span>${imageControls}<button type="button" data-action="close-overlay" title="Fechar"><i data-lucide="x"></i></button></header><div class="atlas-v2-image-stage atlas-v2-attachment-stage ${imageLike ? 'is-image' : ''}"><button type="button" data-action="viewer-previous" title="Arquivo anterior" ${attachments.length < 2 ? 'disabled' : ''}><i data-lucide="chevron-left"></i></button><div class="atlas-v2-viewer-media">${attachmentPreviewMarkup(entry, column)}</div><button type="button" data-action="viewer-next" title="Próximo arquivo" ${attachments.length < 2 ? 'disabled' : ''}><i data-lucide="chevron-right"></i></button></div><footer><span>${entry.localOnly ? 'Prévia local · será enviada quando houver um Drive validado' : 'Armazenado no Google Drive do setor'}</span>${entry.viewUrl ? `<a class="atlas-v2-button atlas-v2-button-quiet" href="${attr(entry.viewUrl)}" target="_blank" rel="noopener noreferrer"><i data-lucide="external-link"></i>Abrir original</a>` : ''}${hasPermission('edit', data.context) ? '<button class="atlas-v2-button atlas-v2-button-danger" type="button" data-action="viewer-remove"><i data-lucide="trash-2"></i>Remover</button>' : ''}</footer></section></div>`;
+    applyImageViewerTransform();
     refreshIcons(root);
   }
 
@@ -5085,7 +5605,50 @@
     const data = viewerAttachment();
     if (!data || data.attachments.length < 2) return;
     runtime.imageViewer.index = (runtime.imageViewer.index + direction + data.attachments.length) % data.attachments.length;
+    runtime.imageViewer.zoom = 1;
+    runtime.imageViewer.rotation = 0;
+    runtime.imageViewer.x = 0;
+    runtime.imageViewer.y = 0;
     openAttachmentViewer(runtime.imageViewer.itemId, runtime.imageViewer.columnId, runtime.imageViewer.index);
+  }
+
+  function applyImageViewerTransform() {
+    const image = document.querySelector('.atlas-v2-viewer-image');
+    const state = runtime.imageViewer;
+    if (!image || !state) return;
+    image.style.transform = `translate3d(${Number(state.x || 0)}px, ${Number(state.y || 0)}px, 0) scale(${Number(state.zoom || 1)}) rotate(${Number(state.rotation || 0)}deg)`;
+    const output = document.querySelector('.atlas-v2-viewer-zoom-value');
+    if (output) output.textContent = `${Math.round(Number(state.zoom || 1) * 100)}%`;
+    image.closest('.atlas-v2-viewer-media')?.classList.toggle('is-zoomed', Number(state.zoom || 1) > 1.01);
+  }
+
+  function setImageViewerZoom(nextZoom) {
+    if (!runtime.imageViewer) return;
+    runtime.imageViewer.zoom = Math.min(5, Math.max(0.5, Number(nextZoom || 1)));
+    if (runtime.imageViewer.zoom <= 1) {
+      runtime.imageViewer.x = 0;
+      runtime.imageViewer.y = 0;
+    }
+    applyImageViewerTransform();
+  }
+
+  function resetImageViewer() {
+    if (!runtime.imageViewer) return;
+    Object.assign(runtime.imageViewer, { zoom: 1, rotation: 0, x: 0, y: 0 });
+    applyImageViewerTransform();
+  }
+
+  function rotateImageViewer() {
+    if (!runtime.imageViewer) return;
+    runtime.imageViewer.rotation = (Number(runtime.imageViewer.rotation || 0) + 90) % 360;
+    applyImageViewerTransform();
+  }
+
+  function toggleImageViewerFullscreen() {
+    const viewer = document.querySelector('.atlas-v2-image-viewer');
+    if (!viewer) return;
+    if (document.fullscreenElement === viewer) document.exitFullscreen?.();
+    else viewer.requestFullscreen?.();
   }
 
   async function removeViewerImage() {
@@ -5144,6 +5707,228 @@
     openAttachmentViewer(runtime.imageViewer.itemId, runtime.imageViewer.columnId, runtime.imageViewer.index);
   }
 
+  function flatBoardItems(boardEntry) {
+    const rows = [];
+    const visit = (entries, groupEntry, parent = null) => (entries || []).forEach((itemEntry) => {
+      rows.push({ item: itemEntry, group: groupEntry, parent });
+      visit(itemEntry.subitems, groupEntry, itemEntry);
+    });
+    (boardEntry.groups || []).forEach((groupEntry) => visit(groupEntry.items, groupEntry));
+    return rows;
+  }
+
+  function itemIsCompleted(boardEntry, itemEntry) {
+    const statusColumn = boardEntry.columns.find((entry) => entry.type === 'status');
+    const value = statusColumn ? String(itemEntry.values?.[statusColumn.id] || '') : '';
+    return /conclu|finaliz|documentado|feito/i.test(value);
+  }
+
+  function boardSlaState(boardEntry, itemEntry) {
+    const configured = boardEntry.settings?.slaDateColumnId;
+    const dateColumn = boardEntry.columns.find((entry) => entry.id === configured)
+      || boardEntry.columns.find((entry) => entry.type === 'date' && /prazo|previs|limite|venc/i.test(entry.name))
+      || boardEntry.columns.find((entry) => entry.type === 'date');
+    if (!dateColumn || itemIsCompleted(boardEntry, itemEntry)) return null;
+    const date = parseTimelineDate(itemEntry.values?.[dateColumn.id]);
+    if (!date) return null;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const days = Math.ceil((date.getTime() - today.getTime()) / 86400000);
+    if (days < 0) return { level: 'late', label: `${Math.abs(days)}d atrasado`, days, dateColumn };
+    if (days <= Number(boardEntry.settings?.slaWarningDays ?? 2)) return { level: 'warning', label: days === 0 ? 'Vence hoje' : `${days}d restante`, days, dateColumn };
+    return { level: 'ok', label: `${days}d restante`, days, dateColumn };
+  }
+
+  function dashboardWidgets(boardEntry) {
+    const configured = Array.isArray(boardEntry.settings?.dashboardWidgets) ? boardEntry.settings.dashboardWidgets : [];
+    if (configured.length) return configured;
+    const statusColumn = boardEntry.columns.find((entry) => entry.type === 'status');
+    return [
+      { id: 'default-total', type: 'total', title: 'Total de registros' },
+      { id: 'default-completed', type: 'completed', title: 'Concluídos' },
+      { id: 'default-overdue', type: 'overdue', title: 'Fora do prazo' },
+      ...(statusColumn ? [{ id: 'default-status', type: 'status_distribution', title: `Por ${statusColumn.name}`, columnId: statusColumn.id }] : []),
+    ];
+  }
+
+  function dashboardMetricValue(boardEntry, rows, widget) {
+    if (widget.type === 'total') return rows.length;
+    if (widget.type === 'completed') return rows.filter((entry) => itemIsCompleted(boardEntry, entry.item)).length;
+    if (widget.type === 'overdue') return rows.filter((entry) => boardSlaState(boardEntry, entry.item)?.level === 'late').length;
+    const columnEntry = boardEntry.columns.find((entry) => entry.id === widget.columnId);
+    const values = rows.map((entry) => {
+      const raw = columnEntry?.type === 'formula' ? formulaColumnValue(boardEntry, entry.item, columnEntry) : entry.item.values?.[widget.columnId];
+      return Number(String(raw ?? '').replace(/[^\d,.-]/g, '').replace(',', '.'));
+    }).filter(Number.isFinite);
+    const total = values.reduce((sum, value) => sum + value, 0);
+    if (widget.type === 'average') return values.length ? (total / values.length).toLocaleString('pt-BR', { maximumFractionDigits: 2 }) : '0';
+    if (widget.type === 'sum') return total.toLocaleString('pt-BR', { maximumFractionDigits: 2 });
+    return 0;
+  }
+
+  function renderDashboardWidget(boardEntry, rows, widget) {
+    if (widget.type === 'status_distribution') {
+      const columnEntry = boardEntry.columns.find((entry) => entry.id === widget.columnId);
+      const counts = new Map();
+      rows.forEach((entry) => {
+        const value = String(entry.item.values?.[widget.columnId] || 'Sem valor');
+        counts.set(value, (counts.get(value) || 0) + 1);
+      });
+      const maximum = Math.max(1, ...counts.values());
+      return `<article class="atlas-v2-dashboard-widget is-wide"><header><span><i data-lucide="chart-no-axes-column-increasing"></i></span><div><small>DISTRIBUIÇÃO</small><strong>${escapeHtml(widget.title || columnEntry?.name || 'Status')}</strong></div></header><div class="atlas-v2-dashboard-bars">${[...counts.entries()].map(([label, count]) => {
+        const details = optionDetails(columnEntry || {}, label);
+        return `<div><span>${escapeHtml(label)}</span><b>${count}</b><i style="--bar:${attr(details.background || '#20d6f2')};--size:${Math.round((count / maximum) * 100)}%"></i></div>`;
+      }).join('') || '<p>Nenhum dado disponível.</p>'}</div></article>`;
+    }
+    const icons = { total: 'rows-3', completed: 'circle-check-big', overdue: 'alarm-clock', sum: 'sigma', average: 'chart-no-axes-combined' };
+    return `<article class="atlas-v2-dashboard-widget"><header><span><i data-lucide="${icons[widget.type] || 'gauge'}"></i></span><div><small>INDICADOR</small><strong>${escapeHtml(widget.title || 'Indicador')}</strong></div></header><b class="atlas-v2-dashboard-number">${escapeHtml(dashboardMetricValue(boardEntry, rows, widget))}</b><small>${rows.length} registro(s) considerados</small></article>`;
+  }
+
+  function renderDashboard(boardEntry) {
+    const rows = flatBoardItems(boardEntry).filter((entry) => !entry.item.archived);
+    const widgets = dashboardWidgets(boardEntry);
+    return `<section class="atlas-v2-dashboard"><header class="atlas-v2-view-heading"><div><span>PAINEL OPERACIONAL</span><h2>${escapeHtml(boardEntry.name)}</h2><p>Indicadores atualizados com os dados do quadro.</p></div>${hasPermission('configure', findBoard()) ? '<button class="atlas-v2-button atlas-v2-button-quiet" type="button" data-action="dashboard-config"><i data-lucide="sliders-horizontal"></i>Configurar</button>' : ''}</header><div class="atlas-v2-dashboard-grid">${widgets.map((widget) => renderDashboardWidget(boardEntry, rows, widget)).join('')}</div></section>`;
+  }
+
+  function openDashboardBuilder() {
+    const context = findBoard();
+    if (!context) return;
+    const widgets = Array.isArray(context.board.settings?.dashboardWidgets) ? context.board.settings.dashboardWidgets : [];
+    const numericColumns = context.board.columns.filter((entry) => ['number', 'percentage', 'currency', 'formula'].includes(entry.type));
+    const statusColumns = context.board.columns.filter((entry) => ['status', 'select'].includes(entry.type));
+    openModal({
+      title: 'Configurar painel',
+      subtitle: 'Escolha os indicadores mais úteis para este quadro.',
+      body: `<form id="atlas-v2-dashboard-widget-form" class="atlas-v2-form-grid"><label class="atlas-v2-field is-wide"><span>Título</span><input name="title" maxlength="70" required placeholder="Ex.: Total projetado"></label><label class="atlas-v2-field"><span>Indicador</span><select name="type"><option value="total">Total de registros</option><option value="completed">Registros concluídos</option><option value="overdue">Registros fora do prazo</option><option value="sum">Soma de uma coluna</option><option value="average">Média de uma coluna</option><option value="status_distribution">Distribuição por status/lista</option></select></label><label class="atlas-v2-field"><span>Coluna</span><select name="columnId"><option value="">Automático</option><optgroup label="Numéricas">${numericColumns.map((entry) => `<option value="${attr(entry.id)}">${escapeHtml(entry.name)}</option>`).join('')}</optgroup><optgroup label="Status e listas">${statusColumns.map((entry) => `<option value="${attr(entry.id)}">${escapeHtml(entry.name)}</option>`).join('')}</optgroup></select></label></form><div class="atlas-v2-dashboard-builder-list">${widgets.map((widget) => `<div><i data-lucide="grip-vertical"></i><span><strong>${escapeHtml(widget.title)}</strong><small>${escapeHtml(widget.type)}</small></span><button type="button" data-action="dashboard-remove-widget" data-widget-id="${attr(widget.id)}" title="Remover"><i data-lucide="trash-2"></i></button></div>`).join('') || '<p>O painel está usando os indicadores automáticos. Adicione um para personalizar.</p>'}</div>`,
+      actions: `<button class="atlas-v2-button atlas-v2-button-quiet" type="button" data-action="close-overlay">Fechar</button><button class="atlas-v2-button atlas-v2-button-primary" type="submit" form="atlas-v2-dashboard-widget-form"><i data-lucide="plus"></i>Adicionar indicador</button>`,
+    });
+  }
+
+  function submitDashboardWidget(form) {
+    const context = findBoard();
+    if (!context) return;
+    const data = new FormData(form);
+    context.board.settings = context.board.settings || {};
+    context.board.settings.dashboardWidgets = Array.isArray(context.board.settings.dashboardWidgets) ? context.board.settings.dashboardWidgets : [];
+    context.board.settings.dashboardWidgets.push({
+      id: id('widget'),
+      title: String(data.get('title') || '').trim() || 'Indicador',
+      type: String(data.get('type') || 'total'),
+      columnId: String(data.get('columnId') || ''),
+    });
+    saveData('Indicador adicionado ao painel');
+    openDashboardBuilder();
+  }
+
+  function removeDashboardWidget(widgetId) {
+    const context = findBoard();
+    if (!context) return;
+    context.board.settings.dashboardWidgets = (context.board.settings?.dashboardWidgets || []).filter((entry) => entry.id !== widgetId);
+    saveData('Indicador removido do painel');
+    openDashboardBuilder();
+  }
+
+  function calendarMonth(boardEntry) {
+    const stored = runtime.calendarCursor.get(boardEntry.id);
+    const date = stored ? new Date(stored) : new Date();
+    return new Date(date.getFullYear(), date.getMonth(), 1);
+  }
+
+  function setCalendarMonth(offset = 0, reset = false) {
+    const context = findBoard();
+    if (!context) return;
+    const current = reset ? new Date() : calendarMonth(context.board);
+    runtime.calendarCursor.set(context.board.id, new Date(current.getFullYear(), current.getMonth() + Number(offset || 0), 1).toISOString());
+    renderBoardContent(context.board);
+    refreshIcons(document.getElementById('atlas-v2-board-content'));
+  }
+
+  function renderCalendar(boardEntry) {
+    const month = calendarMonth(boardEntry);
+    const first = new Date(month.getFullYear(), month.getMonth(), 1);
+    const last = new Date(month.getFullYear(), month.getMonth() + 1, 0);
+    const gridStart = new Date(first);
+    gridStart.setDate(first.getDate() - first.getDay());
+    const rows = flatBoardItems(boardEntry).map((entry) => ({ ...entry, range: itemTimelineRange(boardEntry, entry.item) })).filter((entry) => entry.range);
+    const days = Array.from({ length: 42 }, (_, index) => {
+      const date = new Date(gridStart);
+      date.setDate(gridStart.getDate() + index);
+      return date;
+    });
+    const todayKey = new Date().toISOString().slice(0, 10);
+    return `<section class="atlas-v2-calendar"><header class="atlas-v2-view-heading"><div><span>AGENDA DO QUADRO</span><h2>${month.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}</h2><p>${rows.length} registro(s) com data ou período.</p></div><div class="atlas-v2-calendar-controls"><button type="button" data-action="calendar-prev" title="Mês anterior"><i data-lucide="chevron-left"></i></button><button type="button" data-action="calendar-today">Hoje</button><button type="button" data-action="calendar-next" title="Próximo mês"><i data-lucide="chevron-right"></i></button></div></header><div class="atlas-v2-calendar-week">${['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'].map((day) => `<span>${day}</span>`).join('')}</div><div class="atlas-v2-calendar-grid">${days.map((date) => {
+      const key = date.toISOString().slice(0, 10);
+      const entries = rows.filter((entry) => entry.range.start <= date && entry.range.end >= date);
+      return `<article class="${date.getMonth() !== month.getMonth() ? 'is-outside' : ''} ${key === todayKey ? 'is-today' : ''}"><header><b>${date.getDate()}</b>${key === todayKey ? '<span>HOJE</span>' : ''}</header><div>${entries.slice(0, 4).map((entry) => `<button type="button" data-action="calendar-open-item" data-item-id="${attr(entry.item.id)}" style="--event-color:${attr(entry.group.color || '#20d6f2')}"><strong>${escapeHtml(entry.item.name)}</strong><small>${escapeHtml(entry.group.name)}</small></button>`).join('')}${entries.length > 4 ? `<span class="atlas-v2-calendar-more">+${entries.length - 4}</span>` : ''}</div></article>`;
+    }).join('')}</div></section>`;
+  }
+
+  function mobileRowsMatchingSearch(boardEntry, sourceRows) {
+    const query = normalizeSearchText(runtime.boardSearch);
+    return sourceRows.filter((entry) => {
+      if (!query) return true;
+      return normalizeSearchText(`${entry.item.name} ${entry.group.name} ${Object.values(entry.item.values || {}).join(' ')}`).includes(query);
+    });
+  }
+
+  function renderMobileCalendar(boardEntry) {
+    const month = calendarMonth(boardEntry);
+    const monthStart = new Date(Date.UTC(month.getFullYear(), month.getMonth(), 1));
+    const monthEnd = new Date(Date.UTC(month.getFullYear(), month.getMonth() + 1, 0));
+    const rows = mobileRowsMatchingSearch(boardEntry, flatBoardItems(boardEntry))
+      .map((entry) => ({ ...entry, range: itemTimelineRange(boardEntry, entry.item) }))
+      .filter((entry) => entry.range && entry.range.end >= monthStart && entry.range.start <= monthEnd)
+      .sort((a, b) => a.range.start - b.range.start || a.item.name.localeCompare(b.item.name, 'pt-BR'));
+    return `<section class="atlas-v2-mobile-agenda">
+      <header class="atlas-v2-mobile-view-head">
+        <div><small>AGENDA DO QUADRO</small><strong>${escapeHtml(month.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' }))}</strong><span>${rows.length} registro(s) neste mÃªs</span></div>
+        <div class="atlas-v2-calendar-controls"><button type="button" data-action="calendar-prev" title="MÃªs anterior"><i data-lucide="chevron-left"></i></button><button type="button" data-action="calendar-today">Hoje</button><button type="button" data-action="calendar-next" title="PrÃ³ximo mÃªs"><i data-lucide="chevron-right"></i></button></div>
+      </header>
+      <div class="atlas-v2-mobile-agenda-list">${rows.map((entry) => `<button type="button" data-action="calendar-open-item" data-item-id="${attr(entry.item.id)}" style="--event-color:${attr(entry.group.color || '#20d6f2')}">
+        <span class="atlas-v2-mobile-agenda-date">${escapeHtml(formatTimelineCompact(entry.range))}</span>
+        <span><strong>${escapeHtml(entry.item.name)}</strong><small>${escapeHtml(entry.parent?.name || entry.group.name)}</small></span>
+        <i data-lucide="chevron-right"></i>
+      </button>`).join('') || '<div class="atlas-v2-empty-view"><div><i data-lucide="calendar-x"></i><strong>Nenhum registro neste mÃªs</strong></div></div>'}</div>
+    </section>`;
+  }
+
+  function renderFieldMode(boardEntry, options = {}) {
+    const rows = mobileRowsMatchingSearch(boardEntry, options.rows || flatBoardItems(boardEntry));
+    const visibleColumns = (boardEntry.columns || []).filter((entry) => entry?.id);
+    return `<section class="atlas-v2-field-mode"><header><span><i data-lucide="${attr(options.icon || 'smartphone')}"></i></span><div><small>${escapeHtml(options.kicker || 'MODO DE CAMPO')}</small><strong>${rows.length} registro(s)</strong></div></header><div class="atlas-v2-field-list">${rows.map(({ item: itemEntry, group }) => {
+      const sla = boardSlaState(boardEntry, itemEntry);
+      return `<article class="atlas-v2-field-card" data-item-id="${attr(itemEntry.id)}"><header><span style="--field-color:${attr(group.color || '#20d6f2')}"></span><div><small>${escapeHtml(group.name)}</small><strong>${escapeHtml(itemEntry.name)}</strong></div>${sla ? `<b class="is-${sla.level}">${escapeHtml(sla.label)}</b>` : ''}</header><div class="atlas-v2-field-card-fields">${visibleColumns.map((columnEntry) => `<label class="is-${attr(columnEntry.type)}"><span>${escapeHtml(columnEntry.name)}</span>${renderCell(columnEntry, itemEntry)}</label>`).join('')}</div></article>`;
+    }).join('') || '<div class="atlas-v2-empty-view"><div><i data-lucide="search-x"></i><strong>Nenhum registro encontrado</strong></div></div>'}</div><nav class="atlas-v2-field-actions"><button type="button" data-action="add-item"><i data-lucide="plus"></i><span>Novo</span></button><button type="button" data-action="import"><i data-lucide="file-up"></i><span>Importar</span></button><button type="button" data-action="filter"><i data-lucide="search"></i><span>Buscar</span></button><button type="button" data-action="notifications"><i data-lucide="bell"></i><span>Avisos</span></button></nav></section>`;
+  }
+
+  function renderMobileWorks(boardEntry) {
+    const tabs = renderWorkTabs(boardEntry);
+    const selected = selectedWork(boardEntry);
+    if (!selected) return tabs + renderEmptyBoard();
+    const rows = [];
+    const visit = (entries, parent = selected.item) => (entries || []).forEach((itemEntry) => {
+      rows.push({ item: itemEntry, group: selected.group, parent });
+      visit(itemEntry.subitems, itemEntry);
+    });
+    visit(selected.item.subitems);
+    return tabs + renderFieldMode(boardEntry, { rows, kicker: selected.item.name, icon: 'hard-hat' });
+  }
+
+  function captureCurrentLocation(itemId, columnId) {
+    const context = findBoard();
+    const found = context && findItem(context.board, itemId);
+    if (!context || !found || !navigator.geolocation) return toast('A geolocalização não está disponível neste aparelho.', true);
+    toast('Obtendo localização...');
+    navigator.geolocation.getCurrentPosition((position) => {
+      const previous = found.item.values?.[columnId] || '';
+      const next = `${position.coords.latitude.toFixed(6)}, ${position.coords.longitude.toFixed(6)}`;
+      found.item.values[columnId] = next;
+      captureItemHistory(context.board, found.item, columnId, previous, next, 'Geolocalização capturada');
+      saveData('Localização adicionada', { itemId });
+      render();
+    }, (error) => toast(error.message || 'Não foi possível obter a localização.', true), { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 });
+  }
+
   function renderKanban(boardEntry) {
     return `<div class="atlas-v2-kanban">${visibleGroups(boardEntry).map((groupEntry) => {
       const items = filteredItems(boardEntry, groupEntry);
@@ -5153,6 +5938,18 @@
         <button class="atlas-v2-add-row" type="button" data-action="add-item-to-group" data-group-id="${attr(groupEntry.id)}"><i data-lucide="plus"></i><span>Adicionar item</span></button>
       </section>`;
     }).join('')}</div>`;
+  }
+
+  function renderMobileGantt(boardEntry) {
+    const blocks = timelineBlocks(boardEntry);
+    const childCount = blocks.reduce((total, block) => total + block.children.length, 0);
+    return `<section class="atlas-v2-mobile-timeline">
+      <header class="atlas-v2-mobile-view-head"><div><small>CRONOGRAMA VERTICAL</small><strong>Gantt operacional</strong><span>${blocks.length} elemento(s) Â· ${childCount} subelemento(s)</span></div><i data-lucide="chart-gantt"></i></header>
+      <div class="atlas-v2-mobile-timeline-list">${blocks.map((block) => `<article class="atlas-v2-mobile-timeline-block" style="--timeline-color:${attr(block.group.color || '#20d6f2')}">
+        <button type="button" data-action="calendar-open-item" data-item-id="${attr(block.item.id)}"><span><small>${escapeHtml(block.group.name)}</small><strong>${escapeHtml(block.item.name)}</strong></span><b>${escapeHtml(formatTimelineRange(block.range))}</b></button>
+        ${block.children.map((child) => `<button class="is-child" type="button" data-action="calendar-open-item" data-item-id="${attr(child.item.id)}"><i data-lucide="corner-down-right"></i><span><small>Subelemento</small><strong>${escapeHtml(child.item.name)}</strong></span><b>${escapeHtml(formatTimelineRange(child.range))}</b></button>`).join('')}
+      </article>`).join('') || '<div class="atlas-v2-empty-view"><div><i data-lucide="calendar-x"></i><strong>Nenhum item com cronograma</strong></div></div>'}</div>
+    </section>`;
   }
 
   const DAY_IN_MS = 24 * 60 * 60 * 1000;
@@ -5774,7 +6571,7 @@
         <label class="atlas-v2-field" data-create-parent="module"><span>Área de trabalho</span><select name="workspaceId">${runtime.data.workspaces.map((entry) => `<option value="${attr(entry.id)}" ${entry.id === workspace.id ? 'selected' : ''}>${escapeHtml(entry.name)}</option>`).join('')}</select></label>
         <label class="atlas-v2-field" data-create-parent="submodule"><span>Módulo principal</span><select name="parentModuleId">${moduleOptions}</select></label>
         <label class="atlas-v2-field" data-create-parent="board"><span>Módulo</span><select name="moduleId">${moduleOptions}</select></label>
-        <label class="atlas-v2-field" data-create-board><span>Modelo inicial</span><select name="template"><option value="blank">Em branco</option><option value="project">Gestão de projetos</option><option value="maintenance">Manutenção operacional</option>${customTemplates}</select></label>
+        <label class="atlas-v2-field" data-create-board><span>Modelo inicial</span><select name="template"><option value="blank">Em branco</option><option value="project">Gestão de projetos</option><option value="maintenance">Manutenção operacional</option><option value="field-inspection">Inspeção em campo</option><option value="sla-service">Chamados e SLA</option><option value="portfolio">Portfólio executivo</option>${customTemplates}</select></label>
         <label class="atlas-v2-field" data-create-access><span>Acesso</span><select name="access">${Object.entries(ACCESS).map(([key, value]) => `<option value="${key}">${escapeHtml(value.label)}</option>`).join('')}</select></label>
         <label class="atlas-v2-field is-wide" data-create-board><span>Descrição</span><textarea name="description" maxlength="180" placeholder="Objetivo deste quadro"></textarea></label>
         <section class="atlas-v2-storage-setup is-wide" data-create-storage>
@@ -5968,7 +6765,33 @@
     const boardId = id('board');
     if (String(template).startsWith('custom:')) {
       const saved = runtime.data.templates.find((entry) => entry.id === String(template).slice(7));
-      if (saved) return board({ id: boardId, name, description, access, icon: saved.icon || 'layout-template', columns: deepClone(saved.columns || []).map((entry) => ({ ...entry, id: id('col') })), groups: (saved.groups || []).map((entry) => group(id('group'), entry.name, entry.color || '#0f6cbd', [])) });
+      if (saved) {
+        const columnIds = new Map();
+        const groupIds = new Map();
+        const columns = deepClone(saved.columns || []).map((entry) => {
+          const nextId = id('col');
+          columnIds.set(entry.id, nextId);
+          return { ...entry, id: nextId };
+        });
+        const groups = (saved.groups || []).map((entry) => {
+          const nextId = id('group');
+          groupIds.set(entry.id, nextId);
+          return group(nextId, entry.name, entry.color || '#0f6cbd', []);
+        });
+        const created = board({ id: boardId, name, description, access, icon: saved.icon || 'layout-template', views: deepClone(saved.views || ['table']), settings: deepClone(saved.settings || {}), columns, groups });
+        created.settings.slaDateColumnId = columnIds.get(created.settings.slaDateColumnId) || created.settings.slaDateColumnId || '';
+        created.settings.dashboardWidgets = (created.settings.dashboardWidgets || []).map((entry) => ({ ...entry, id: id('widget'), columnId: columnIds.get(entry.columnId) || entry.columnId || '' }));
+        (saved.automations || []).forEach((automation) => runtime.data.automations.push({
+          ...deepClone(automation),
+          id: id('automation'),
+          boardId,
+          active: false,
+          trigger: { ...(automation.trigger || {}), columnId: columnIds.get(automation.trigger?.columnId) || automation.trigger?.columnId, groupId: groupIds.get(automation.trigger?.groupId) || automation.trigger?.groupId },
+          conditions: (automation.conditions || []).map((entry) => ({ ...entry, columnId: columnIds.get(entry.columnId) || entry.columnId })),
+          actions: (automation.actions || []).map((entry) => ({ ...entry, columnId: columnIds.get(entry.columnId) || entry.columnId, groupId: groupIds.get(entry.groupId) || entry.groupId })),
+        }));
+        return created;
+      }
     }
     if (template === 'project') {
       return board({
@@ -5989,6 +6812,71 @@
           column(id('col'), 'Abertura', 'date'),
           column(id('col'), 'Local', 'location'),
         ], groups: [group(id('group'), 'Abertas', '#c33d4b', []), group(id('group'), 'Em execução', '#d68a1f', []), group(id('group'), 'Concluídas', '#168a5b', [])],
+      });
+    }
+    if (template === 'field-inspection') {
+      const status = column(id('col'), 'Status', 'status', { options: STATUS_OPTIONS });
+      const date = column(id('col'), 'Data da visita', 'date');
+      return board({
+        id: boardId,
+        name,
+        description,
+        access,
+        icon: 'map-pinned',
+        views: ['table', 'calendar', 'dashboard'],
+        settings: { slaDateColumnId: date.id, slaWarningDays: 1 },
+        columns: [
+          status,
+          column(id('col'), 'Responsável', 'person'),
+          date,
+          column(id('col'), 'Geolocalização', 'location'),
+          column(id('col'), 'Imagens', 'image'),
+          column(id('col'), 'Arquivos', 'file'),
+        ],
+        groups: [group(id('group'), 'Programadas', '#7554a3', []), group(id('group'), 'Em campo', '#d68a1f', []), group(id('group'), 'Finalizadas', '#168a5b', [])],
+      });
+    }
+    if (template === 'sla-service') {
+      const due = column(id('col'), 'Prazo', 'date');
+      return board({
+        id: boardId,
+        name,
+        description,
+        access,
+        icon: 'timer-reset',
+        views: ['table', 'kanban', 'calendar', 'dashboard'],
+        settings: { slaDateColumnId: due.id, slaWarningDays: 2 },
+        columns: [
+          column(id('col'), 'Status', 'status', { options: STATUS_OPTIONS }),
+          column(id('col'), 'Prioridade', 'select', { options: PRIORITY_OPTIONS }),
+          column(id('col'), 'Responsável', 'person'),
+          column(id('col'), 'Abertura', 'date'),
+          due,
+          column(id('col'), 'Evidências', 'image'),
+        ],
+        groups: [group(id('group'), 'Entrada', '#7554a3', []), group(id('group'), 'Atendimento', '#0f6cbd', []), group(id('group'), 'Bloqueados', '#bf4652', []), group(id('group'), 'Resolvidos', '#168a5b', [])],
+      });
+    }
+    if (template === 'portfolio') {
+      const budget = column(id('col'), 'Orçamento', 'currency');
+      const realized = column(id('col'), 'Realizado', 'currency');
+      const variance = column(id('col'), 'Variação', 'formula', { formula: `{${budget.name}} - {${realized.name}}`, format: 'currency', decimals: 2 });
+      return board({
+        id: boardId,
+        name,
+        description,
+        access,
+        icon: 'chart-spline',
+        views: ['table', 'gantt', 'calendar', 'dashboard'],
+        columns: [
+          column(id('col'), 'Status', 'status', { options: STATUS_OPTIONS }),
+          column(id('col'), 'Responsável', 'person'),
+          column(id('col'), 'Período', 'period'),
+          budget,
+          realized,
+          variance,
+        ],
+        groups: [group(id('group'), 'Planejado', '#7554a3', []), group(id('group'), 'Em execução', '#0f6cbd', []), group(id('group'), 'Concluído', '#168a5b', [])],
       });
     }
     return board({
@@ -6028,12 +6916,25 @@
   function openColumnModal(columnId = '') {
     const context = findBoard();
     const existing = context?.board.columns.find((entry) => entry.id === columnId);
+    const formulaHelp = context?.board.columns
+      .filter((entry) => entry.id !== columnId && ['number', 'percentage', 'currency'].includes(entry.type))
+      .map((entry) => `{${entry.name}}`)
+      .join(', ');
     openModal({
       title: existing ? 'Editar coluna' : 'Nova coluna',
       subtitle: 'Escolha como o dado será preenchido e exibido.',
-      body: `<form id="atlas-v2-column-form" class="atlas-v2-form-grid"><input type="hidden" name="columnId" value="${attr(columnId)}"><label class="atlas-v2-field is-wide"><span>Nome</span><input name="name" maxlength="70" required autofocus value="${attr(existing?.name || '')}" placeholder="Ex.: Responsável"></label><label class="atlas-v2-field"><span>Tipo</span><select name="type">${Object.entries(COLUMN_TYPES).map(([key, value]) => `<option value="${key}" ${existing?.type === key ? 'selected' : ''}>${escapeHtml(value.label)}</option>`).join('')}</select></label><label class="atlas-v2-field"><span>Largura</span><input name="width" type="number" min="90" max="420" step="10" value="${Number(existing?.width || 160)}"></label><label class="atlas-v2-field is-wide"><span>Opções separadas por vírgula</span><input name="options" value="${attr((existing?.options || []).map((entry) => typeof entry === 'string' ? entry : entry.label).join(', '))}" placeholder="Ex.: Pendente, Em andamento, Concluído"></label></form>`,
+      body: `<form id="atlas-v2-column-form" class="atlas-v2-form-grid"><input type="hidden" name="columnId" value="${attr(columnId)}"><label class="atlas-v2-field is-wide"><span>Nome</span><input name="name" maxlength="70" required autofocus value="${attr(existing?.name || '')}" placeholder="Ex.: Responsável"></label><label class="atlas-v2-field"><span>Tipo</span><select name="type">${Object.entries(COLUMN_TYPES).map(([key, value]) => `<option value="${key}" ${existing?.type === key ? 'selected' : ''}>${escapeHtml(value.label)}</option>`).join('')}</select></label><label class="atlas-v2-field"><span>Largura</span><input name="width" type="number" min="90" max="420" step="10" value="${Number(existing?.width || 160)}"></label><label class="atlas-v2-field is-wide" data-column-options><span>Opções separadas por vírgula</span><input name="options" value="${attr((existing?.options || []).map((entry) => typeof entry === 'string' ? entry : entry.label).join(', '))}" placeholder="Ex.: Pendente, Em andamento, Concluído"></label><label class="atlas-v2-field is-wide" data-column-formula><span>Fórmula</span><input name="formula" value="${attr(existing?.formula || '')}" placeholder="Ex.: {Total lançado} / {Total projetado} * 100"><small>Utilize os nomes das colunas entre chaves. Disponíveis: ${escapeHtml(formulaHelp || 'crie primeiro uma coluna numérica')}.</small></label><label class="atlas-v2-field" data-column-formula><span>Formato do resultado</span><select name="format"><option value="number" ${existing?.format === 'number' || !existing?.format ? 'selected' : ''}>Número</option><option value="percentage" ${existing?.format === 'percentage' ? 'selected' : ''}>Porcentagem</option><option value="currency" ${existing?.format === 'currency' ? 'selected' : ''}>Moeda</option></select></label><label class="atlas-v2-field" data-column-formula><span>Casas decimais</span><input name="decimals" type="number" min="0" max="6" value="${Number(existing?.decimals ?? 2)}"></label></form>`,
       actions: `<button class="atlas-v2-button atlas-v2-button-quiet" type="button" data-action="close-overlay">Cancelar</button><button class="atlas-v2-button atlas-v2-button-primary" type="submit" form="atlas-v2-column-form">Salvar</button>`,
     });
+    requestAnimationFrame(updateColumnEditorVisibility);
+  }
+
+  function updateColumnEditorVisibility() {
+    const form = document.getElementById('atlas-v2-column-form');
+    if (!form) return;
+    const type = String(form.elements.type?.value || 'text');
+    form.querySelectorAll('[data-column-options]').forEach((entry) => { entry.hidden = !['status', 'select'].includes(type); });
+    form.querySelectorAll('[data-column-formula]').forEach((entry) => { entry.hidden = type !== 'formula'; });
   }
 
   function submitColumn(form) {
@@ -6046,7 +6947,15 @@
     const colors = ['#0f6cbd', '#7554a3', '#d68a1f', '#168a5b', '#c33d4b'];
     const backgrounds = ['#e3f1fc', '#eee8f7', '#fff0d7', '#ddf4e9', '#fbe4e7'];
     const options = labels.map((label, index) => option(label, colors[index % colors.length], backgrounds[index % backgrounds.length]));
-    const payload = { name: String(data.get('name') || '').trim(), type, width: Number(data.get('width') || COLUMN_TYPES[type]?.width || 160), options: ['status', 'select'].includes(type) ? (options.length ? options : deepClone(STATUS_OPTIONS)) : [] };
+    const payload = {
+      name: String(data.get('name') || '').trim(),
+      type,
+      width: Number(data.get('width') || COLUMN_TYPES[type]?.width || 160),
+      options: ['status', 'select'].includes(type) ? (options.length ? options : deepClone(STATUS_OPTIONS)) : [],
+      formula: type === 'formula' ? String(data.get('formula') || '').trim() : '',
+      format: type === 'formula' ? String(data.get('format') || 'number') : '',
+      decimals: type === 'formula' ? Math.min(6, Math.max(0, Number(data.get('decimals') || 0))) : 0,
+    };
     if (columnId) {
       const existing = context.board.columns.find((entry) => entry.id === columnId);
       if (existing) Object.assign(existing, payload);
@@ -6104,10 +7013,11 @@
     const context = findBoard();
     if (!context) return;
     const boardEntry = context.board;
+    const dateOptions = boardEntry.columns.filter((entry) => entry.type === 'date').map((entry) => `<option value="${attr(entry.id)}" ${boardEntry.settings?.slaDateColumnId === entry.id ? 'selected' : ''}>${escapeHtml(entry.name)}</option>`).join('');
     openDrawer({
       title: 'Configurar quadro',
       subtitle: boardEntry.name,
-      body: `<form id="atlas-v2-board-settings-form" class="atlas-v2-form-grid"><label class="atlas-v2-field is-wide"><span>Nome</span><input name="name" maxlength="80" required value="${attr(boardEntry.name)}"></label><label class="atlas-v2-field is-wide"><span>Descrição</span><textarea name="description" maxlength="180">${escapeHtml(boardEntry.description)}</textarea></label><label class="atlas-v2-field"><span>Acesso</span><select name="access">${Object.entries(ACCESS).map(([key, value]) => `<option value="${key}" ${boardEntry.access === key ? 'selected' : ''}>${escapeHtml(value.label)}</option>`).join('')}</select></label></form><h3>Colunas</h3><div class="atlas-v2-settings-list">${boardEntry.columns.map((entry, index) => `<div class="atlas-v2-settings-row"><i data-lucide="${attr(COLUMN_TYPES[entry.type]?.icon || 'type')}"></i><span><strong>${escapeHtml(entry.name)}</strong><small>${escapeHtml(COLUMN_TYPES[entry.type]?.label || entry.type)} · ${Number(entry.width || 160)} px</small></span><div class="atlas-v2-settings-actions"><button class="atlas-v2-icon-button" type="button" data-action="move-column" data-column-id="${attr(entry.id)}" data-direction="-1" title="Mover para esquerda" ${index === 0 ? 'disabled' : ''}><i data-lucide="arrow-left"></i></button><button class="atlas-v2-icon-button" type="button" data-action="move-column" data-column-id="${attr(entry.id)}" data-direction="1" title="Mover para direita" ${index === boardEntry.columns.length - 1 ? 'disabled' : ''}><i data-lucide="arrow-right"></i></button>${entry.type === 'status' ? `<button class="atlas-v2-icon-button" type="button" data-action="edit-status-colors" data-column-id="${attr(entry.id)}" title="Alterar cores dos status"><i data-lucide="palette"></i></button>` : ''}<button class="atlas-v2-icon-button" type="button" data-action="edit-column" data-column-id="${attr(entry.id)}" title="Editar"><i data-lucide="pencil"></i></button><button class="atlas-v2-icon-button" type="button" data-action="delete-column" data-column-id="${attr(entry.id)}" title="Excluir"><i data-lucide="trash-2"></i></button></div></div>`).join('')}</div>`,
+      body: `<form id="atlas-v2-board-settings-form" class="atlas-v2-form-grid"><label class="atlas-v2-field is-wide"><span>Nome</span><input name="name" maxlength="80" required value="${attr(boardEntry.name)}"></label><label class="atlas-v2-field is-wide"><span>Descrição</span><textarea name="description" maxlength="180">${escapeHtml(boardEntry.description)}</textarea></label><label class="atlas-v2-field"><span>Acesso</span><select name="access">${Object.entries(ACCESS).map(([key, value]) => `<option value="${key}" ${boardEntry.access === key ? 'selected' : ''}>${escapeHtml(value.label)}</option>`).join('')}</select></label><label class="atlas-v2-field"><span>Coluna de prazo/SLA</span><select name="slaDateColumnId"><option value="">Detecção automática</option>${dateOptions}</select></label><label class="atlas-v2-field"><span>Alerta antecipado</span><input name="slaWarningDays" type="number" min="0" max="90" value="${Number(boardEntry.settings?.slaWarningDays ?? 2)}"><small>Dias antes do vencimento.</small></label></form><h3>Colunas</h3><div class="atlas-v2-settings-list">${boardEntry.columns.map((entry, index) => `<div class="atlas-v2-settings-row"><i data-lucide="${attr(COLUMN_TYPES[entry.type]?.icon || 'type')}"></i><span><strong>${escapeHtml(entry.name)}</strong><small>${escapeHtml(COLUMN_TYPES[entry.type]?.label || entry.type)} · ${Number(entry.width || 160)} px</small></span><div class="atlas-v2-settings-actions"><button class="atlas-v2-icon-button" type="button" data-action="move-column" data-column-id="${attr(entry.id)}" data-direction="-1" title="Mover para esquerda" ${index === 0 ? 'disabled' : ''}><i data-lucide="arrow-left"></i></button><button class="atlas-v2-icon-button" type="button" data-action="move-column" data-column-id="${attr(entry.id)}" data-direction="1" title="Mover para direita" ${index === boardEntry.columns.length - 1 ? 'disabled' : ''}><i data-lucide="arrow-right"></i></button>${entry.type === 'status' ? `<button class="atlas-v2-icon-button" type="button" data-action="edit-status-colors" data-column-id="${attr(entry.id)}" title="Alterar cores dos status"><i data-lucide="palette"></i></button>` : ''}<button class="atlas-v2-icon-button" type="button" data-action="edit-column" data-column-id="${attr(entry.id)}" title="Editar"><i data-lucide="pencil"></i></button><button class="atlas-v2-icon-button" type="button" data-action="delete-column" data-column-id="${attr(entry.id)}" title="Excluir"><i data-lucide="trash-2"></i></button></div></div>`).join('')}</div>`,
       actions: `<button class="atlas-v2-button atlas-v2-button-quiet" type="button" data-action="close-overlay">Fechar</button><button class="atlas-v2-button atlas-v2-button-primary" type="submit" form="atlas-v2-board-settings-form">Salvar quadro</button>`,
     });
   }
@@ -6119,6 +7029,9 @@
     context.board.name = String(data.get('name') || context.board.name).trim();
     context.board.description = String(data.get('description') || '').trim();
     context.board.access = String(data.get('access') || 'main');
+    context.board.settings = context.board.settings || {};
+    context.board.settings.slaDateColumnId = String(data.get('slaDateColumnId') || '');
+    context.board.settings.slaWarningDays = Math.min(90, Math.max(0, Number(data.get('slaWarningDays') || 0)));
     closeOverlay();
     saveData('Quadro atualizado');
     render();
@@ -6302,26 +7215,32 @@
     runtime.data.workspaces.forEach((workspace) => workspace.modules.forEach((module) => module.boards.forEach((boardEntry) => {
       if (!hasPermission('view', { workspace, module, board: boardEntry })) return;
       if (!needle || `${workspace.name} ${module.name} ${boardEntry.name}`.toLowerCase().includes(needle)) results.push({ type: 'Quadro', title: boardEntry.name, subtitle: `${workspace.name} · ${module.name}`, boardId: boardEntry.id });
-      boardEntry.groups.forEach((groupEntry) => groupEntry.items.forEach((itemEntry) => {
-        if (needle && `${itemEntry.name} ${Object.values(itemEntry.values || {}).join(' ')}`.toLowerCase().includes(needle)) results.push({ type: 'Item', title: itemEntry.name, subtitle: `${boardEntry.name} · ${groupEntry.name}`, boardId: boardEntry.id });
-      }));
+      flatBoardItems(boardEntry).forEach(({ item: itemEntry, group: groupEntry, parent }) => {
+        const attachmentText = boardEntry.columns.filter((entry) => ['image', 'file'].includes(entry.type)).flatMap((entry) => normalizeImageEntries(itemEntry.values?.[entry.id]).map((file) => `${file.name || ''} ${file.mimeType || ''}`)).join(' ');
+        const valueText = Object.values(itemEntry.values || {}).map((value) => typeof value === 'object' ? JSON.stringify(value) : String(value ?? '')).join(' ');
+        if (needle && normalizeSearchText(`${itemEntry.name} ${valueText} ${attachmentText}`).includes(normalizeSearchText(needle))) results.push({ type: parent ? 'Subitem' : 'Item', title: itemEntry.name, subtitle: `${boardEntry.name} · ${groupEntry.name}${attachmentText ? ' · contém anexo' : ''}`, boardId: boardEntry.id });
+      });
     })));
     root.innerHTML = results.slice(0, 20).map((entry) => `<button class="atlas-v2-settings-row" type="button" data-action="search-open-board" data-board-id="${attr(entry.boardId)}"><i data-lucide="${entry.type === 'Quadro' ? 'table-2' : 'circle-dot'}"></i><span><strong>${escapeHtml(entry.title)}</strong><small>${escapeHtml(entry.type)} · ${escapeHtml(entry.subtitle)}</small></span><i data-lucide="arrow-up-right"></i></button>`).join('') || '<div class="atlas-v2-empty-view"><span>Nenhum resultado</span></div>';
     refreshIcons(root);
   }
 
   function openImportModal() {
+    const context = findBoard();
+    const batches = Array.isArray(context?.board?.settings?.import_batches) ? context.board.settings.import_batches : [];
+    const reversibleBatch = [...batches].reverse().find((entry) => !entry.rolledBackAt && Array.isArray(entry.itemIds) && entry.itemIds.length);
     openModal({
       title: 'Importar planilha',
       subtitle: 'Crie itens no grupo selecionado.',
-      body: `<form id="atlas-v2-import-form" class="atlas-v2-form-grid"><label class="atlas-v2-field is-wide"><span>Arquivo CSV ou Excel</span><input name="file" type="file" accept=".csv,.xlsx,.xls" required></label><label class="atlas-v2-field is-wide"><span>Grupo de destino</span><select name="groupId">${findBoard().board.groups.map((entry) => `<option value="${attr(entry.id)}">${escapeHtml(entry.name)}</option>`).join('')}</select></label></form>`,
-      actions: `<button class="atlas-v2-button atlas-v2-button-quiet" type="button" data-action="close-overlay">Cancelar</button><button class="atlas-v2-button atlas-v2-button-primary" type="submit" form="atlas-v2-import-form"><i data-lucide="file-up"></i>Importar</button>`,
+      body: `<form id="atlas-v2-import-form" class="atlas-v2-form-grid"><label class="atlas-v2-field is-wide"><span>Arquivo CSV ou Excel</span><input name="file" type="file" accept=".csv,.xlsx,.xls" required></label><label class="atlas-v2-field is-wide"><span>Grupo de destino</span><select name="groupId">${context.board.groups.map((entry) => `<option value="${attr(entry.id)}">${escapeHtml(entry.name)}</option>`).join('')}</select></label><label class="atlas-v2-check-row is-wide"><input name="skipDuplicates" type="checkbox" checked><span><strong>Ignorar possíveis duplicados</strong><small>Compara o nome do registro com os itens existentes no quadro.</small></span></label>${reversibleBatch ? `<div class="atlas-v2-import-rollback is-wide"><i data-lucide="history"></i><span><strong>Último lote: ${escapeHtml(reversibleBatch.fileName || 'Importação')}</strong><small>${reversibleBatch.itemIds.length} registro(s) importado(s) em ${formatDateTime(reversibleBatch.createdAt)}</small></span><button class="atlas-v2-button atlas-v2-button-danger" type="button" data-action="rollback-import" data-batch-id="${attr(reversibleBatch.id)}"><i data-lucide="undo-2"></i>Desfazer lote</button></div>` : ''}</form>`,
+      actions: `<button class="atlas-v2-button atlas-v2-button-quiet" type="button" data-action="close-overlay">Cancelar</button><button class="atlas-v2-button atlas-v2-button-primary" type="submit" form="atlas-v2-import-form"><i data-lucide="scan-search"></i>Analisar arquivo</button>`,
     });
   }
 
   async function submitImport(form) {
-    const file = new FormData(form).get('file');
-    const groupId = new FormData(form).get('groupId');
+    const formData = new FormData(form);
+    const file = formData.get('file');
+    const groupId = formData.get('groupId');
     if (!(file instanceof File) || !file.size) return;
     try {
       if (file.size > 8 * 1024 * 1024) throw new Error('A planilha ultrapassa o limite de 8 MB.');
@@ -6339,22 +7258,111 @@
       const context = findBoard();
       const target = context?.board?.groups.find((entry) => entry.id === groupId);
       if (!target) throw new Error('O grupo de destino não está mais disponível.');
-      rows.forEach((row) => {
-        const keys = Object.keys(row).filter((key) => !['__proto__', 'prototype', 'constructor'].includes(String(key).toLowerCase()));
-        const name = String(row.Item || row.Nome || row.Elemento || row[keys[0]] || 'Item importado');
-        const newItem = item(id('item'), target.id, name, {});
-        context.board.columns.forEach((columnEntry) => {
-          const key = keys.find((entry) => entry.toLowerCase() === columnEntry.name.toLowerCase());
-          newItem.values[columnEntry.id] = key ? row[key] : '';
-        });
-        target.items.push(newItem);
+      const headers = [...new Set(rows.flatMap((row) => Object.keys(row)))].filter((key) => !['__proto__', 'prototype', 'constructor'].includes(String(key).toLowerCase()));
+      if (!headers.length || !rows.length) throw new Error('A planilha não possui registros para importar.');
+      const normalized = (value) => normalizeSearchText(value).replace(/\s+/g, '');
+      const mapping = {};
+      headers.forEach((header, index) => {
+        const headerKey = normalized(header);
+        const exact = context.board.columns.find((entry) => normalized(entry.name) === headerKey);
+        const close = context.board.columns.find((entry) => normalized(entry.name).includes(headerKey) || headerKey.includes(normalized(entry.name)));
+        mapping[header] = /^(item|nome|elemento|registro|titulo)$/i.test(normalizeSearchText(header).replace(/\s+/g, '')) || index === 0
+          ? '__name__'
+          : (exact || close)?.id || '';
       });
-      closeOverlay();
-      saveData(`${rows.length} ${rows.length === 1 ? 'item importado' : 'itens importados'}`);
-      render();
+      runtime.importPreview = {
+        fileName: file.name,
+        groupId: String(groupId),
+        rows,
+        headers,
+        mapping,
+        skipDuplicates: Boolean(formData.get('skipDuplicates')),
+      };
+      openImportPreview();
     } catch (error) {
       toast(error.message || 'Não foi possível ler o arquivo', true);
     }
+  }
+
+  function openImportPreview() {
+    const context = findBoard();
+    const preview = runtime.importPreview;
+    if (!context || !preview) return;
+    const existingNames = new Set(flatBoardItems(context.board).map((entry) => normalizeSearchText(entry.item.name)));
+    const duplicateCount = preview.rows.filter((row) => {
+      const nameHeader = preview.headers.find((header) => preview.mapping[header] === '__name__') || preview.headers[0];
+      return existingNames.has(normalizeSearchText(row[nameHeader]));
+    }).length;
+    const options = `<option value="">Ignorar coluna</option><option value="__name__">Nome do registro</option>${context.board.columns.map((entry) => `<option value="${attr(entry.id)}">${escapeHtml(entry.name)}</option>`).join('')}`;
+    openModal({
+      title: 'Revisar importação',
+      subtitle: `${preview.fileName} · ${preview.rows.length} registro(s)`,
+      body: `<div class="atlas-v2-import-summary"><div><i data-lucide="sheet"></i><span><strong>${preview.headers.length}</strong><small>colunas encontradas</small></span></div><div><i data-lucide="rows-3"></i><span><strong>${preview.rows.length}</strong><small>linhas válidas</small></span></div><div><i data-lucide="copy-check"></i><span><strong>${duplicateCount}</strong><small>possíveis duplicados</small></span></div></div><form id="atlas-v2-import-confirm-form"><div class="atlas-v2-import-mapping">${preview.headers.map((header) => `<label><span><strong>${escapeHtml(header)}</strong><small>${escapeHtml(String(preview.rows[0]?.[header] ?? '').slice(0, 60))}</small></span><i data-lucide="arrow-right"></i><select name="map:${attr(header)}">${options.replace(`value="${attr(preview.mapping[header])}"`, `value="${attr(preview.mapping[header])}" selected`)}</select></label>`).join('')}</div><label class="atlas-v2-check-row"><input name="skipDuplicates" type="checkbox" ${preview.skipDuplicates ? 'checked' : ''}><span><strong>Ignorar ${duplicateCount} possível(is) duplicado(s)</strong><small>Nenhum registro existente será alterado.</small></span></label></form>`,
+      actions: `<button class="atlas-v2-button atlas-v2-button-quiet" type="button" data-action="import">Voltar</button><button class="atlas-v2-button atlas-v2-button-primary" type="submit" form="atlas-v2-import-confirm-form"><i data-lucide="file-check-2"></i>Confirmar importação</button>`,
+    });
+  }
+
+  function confirmImport(form) {
+    const context = findBoard();
+    const preview = runtime.importPreview;
+    if (!context || !preview) return;
+    const target = context.board.groups.find((entry) => entry.id === preview.groupId);
+    if (!target) return toast('O grupo de destino não está mais disponível.', true);
+    const data = new FormData(form);
+    const mapping = {};
+    preview.headers.forEach((header) => { mapping[header] = String(data.get(`map:${header}`) || ''); });
+    const nameHeader = preview.headers.find((header) => mapping[header] === '__name__') || preview.headers[0];
+    const existingNames = new Set(flatBoardItems(context.board).map((entry) => normalizeSearchText(entry.item.name)));
+    const createdIds = [];
+    let skipped = 0;
+    preview.rows.forEach((row) => {
+      const name = String(row[nameHeader] || 'Item importado').trim() || 'Item importado';
+      if (data.get('skipDuplicates') && existingNames.has(normalizeSearchText(name))) {
+        skipped += 1;
+        return;
+      }
+      const newItem = item(id('item'), target.id, name, {});
+      context.board.columns.forEach((columnEntry) => { newItem.values[columnEntry.id] = columnEntry.type === 'checkbox' ? false : ''; });
+      preview.headers.forEach((header) => {
+        const columnId = mapping[header];
+        if (columnId && columnId !== '__name__') newItem.values[columnId] = row[header] ?? '';
+      });
+      target.items.push(newItem);
+      createdIds.push(newItem.id);
+      existingNames.add(normalizeSearchText(name));
+    });
+    context.board.settings = context.board.settings || {};
+    context.board.settings.import_batches = Array.isArray(context.board.settings.import_batches) ? context.board.settings.import_batches : [];
+    context.board.settings.import_batches.push({
+      id: id('import'),
+      fileName: preview.fileName,
+      groupId: target.id,
+      itemIds: createdIds,
+      createdAt: new Date().toISOString(),
+      rolledBackAt: null,
+    });
+    context.board.settings.import_batches = context.board.settings.import_batches.slice(-20);
+    runtime.importPreview = null;
+    closeOverlay();
+    saveData(`${createdIds.length} item(ns) importado(s)${skipped ? ` · ${skipped} duplicado(s) ignorado(s)` : ''}`, { importBatch: createdIds });
+    render();
+  }
+
+  function rollbackImport(batchId) {
+    const context = findBoard();
+    const batches = Array.isArray(context?.board?.settings?.import_batches) ? context.board.settings.import_batches : [];
+    const batch = batches.find((entry) => entry.id === batchId && !entry.rolledBackAt);
+    if (!batch || !requirePermission('delete', context, 'desfazer esta importação')) return;
+    const target = context.board.groups.find((entry) => entry.id === batch.groupId);
+    if (!target) return toast('O grupo original desta importação não existe mais.', true);
+    const ids = new Set(batch.itemIds || []);
+    const before = target.items.length;
+    target.items = target.items.filter((entry) => !ids.has(entry.id));
+    const removed = before - target.items.length;
+    batch.rolledBackAt = new Date().toISOString();
+    closeOverlay();
+    saveData(`${removed} registro(s) da importação foram removidos`, { scope: 'board' });
+    render();
   }
 
   function openAddViewModal() {
@@ -6395,6 +7403,7 @@
       const offset = Number(trigger.offsetDays || 0);
       return offset === 0 ? `Quando chegar a data de ${column}` : `${Math.abs(offset)} dia(s) ${offset < 0 ? 'antes' : 'depois'} de ${column}`;
     }
+    if (type === 'scheduled') return `Em agenda ${trigger.frequency === 'hourly' ? 'a cada hora' : trigger.frequency === 'weekly' ? 'semanal' : 'diária'}${trigger.time ? ` às ${trigger.time}` : ''}`;
     return 'Quando o item for alterado';
   }
 
@@ -6468,7 +7477,9 @@
     const existing = boardAutomations(context.board.id).find((entry) => entry.id === automationId) || preset || null;
     const trigger = existing?.trigger || { type: 'item_created' };
     const condition = existing?.conditions?.[0] || {};
+    const secondCondition = existing?.conditions?.[1] || {};
     const action = existing?.actions?.[0] || { type: 'set_value' };
+    const secondAction = existing?.actions?.[1] || {};
     const users = (runtime.data.users || []).filter((entry) => entry.status === 'active');
     const firstColumn = context.board.columns[0]?.id || '';
     const firstGroup = context.board.groups[0]?.id || '';
@@ -6484,10 +7495,12 @@
             <option value="field_changed" ${trigger.type === 'field_changed' ? 'selected' : ''}>Um campo for alterado</option>
             <option value="group_changed" ${trigger.type === 'group_changed' ? 'selected' : ''}>O item mudar de setor</option>
             <option value="date_reached" ${trigger.type === 'date_reached' ? 'selected' : ''}>Uma data chegar</option>
+            <option value="scheduled" ${trigger.type === 'scheduled' ? 'selected' : ''}>Em um horário agendado</option>
           </select></label>
           <div class="atlas-v2-rule-grid" data-trigger-field="field_changed"><label class="atlas-v2-field"><span>Campo</span><select name="triggerColumnId">${automationColumnOptions(context.board, trigger.columnId || firstColumn)}</select></label><label class="atlas-v2-field"><span>Valor de destino (opcional)</span><input name="triggerValue" value="${attr(trigger.value ?? '')}" placeholder="Ex.: Concluído"></label></div>
           <div class="atlas-v2-rule-grid" data-trigger-field="group_changed"><label class="atlas-v2-field is-wide"><span>Setor de destino</span><select name="triggerGroupId"><option value="">Qualquer setor</option>${automationGroupOptions(context.board, trigger.groupId || '')}</select></label></div>
           <div class="atlas-v2-rule-grid" data-trigger-field="date_reached"><label class="atlas-v2-field"><span>Coluna de data</span><select name="triggerDateColumnId">${automationColumnOptions(context.board, trigger.columnId || firstColumn)}</select></label><label class="atlas-v2-field"><span>Deslocamento em dias</span><input name="triggerOffsetDays" type="number" min="-365" max="365" value="${Number(trigger.offsetDays || 0)}"><small>-1 = um dia antes; 0 = no dia</small></label></div>
+          <div class="atlas-v2-rule-grid" data-trigger-field="scheduled"><label class="atlas-v2-field"><span>Frequência</span><select name="triggerFrequency"><option value="hourly" ${trigger.frequency === 'hourly' ? 'selected' : ''}>A cada hora</option><option value="daily" ${trigger.frequency === 'daily' || !trigger.frequency ? 'selected' : ''}>Diariamente</option><option value="weekly" ${trigger.frequency === 'weekly' ? 'selected' : ''}>Semanalmente</option></select></label><label class="atlas-v2-field"><span>Horário</span><input name="triggerTime" type="time" value="${attr(trigger.time || '08:00')}"></label></div>
         </section>
         <section class="atlas-v2-rule-block"><header><b>2</b><span>Somente se</span><label class="atlas-v2-switch"><input type="checkbox" name="conditionEnabled" ${existing?.conditions?.length ? 'checked' : ''}><span></span></label></header>
           <div class="atlas-v2-rule-grid" data-condition-fields ${existing?.conditions?.length ? '' : 'hidden'}><label class="atlas-v2-field"><span>Campo</span><select name="conditionColumnId">${automationColumnOptions(context.board, condition.columnId || firstColumn, true)}</select></label><label class="atlas-v2-field"><span>Operador</span><select name="conditionOperator"><option value="equals" ${condition.operator === 'equals' ? 'selected' : ''}>Igual a</option><option value="not_equals" ${condition.operator === 'not_equals' ? 'selected' : ''}>Diferente de</option><option value="contains" ${condition.operator === 'contains' ? 'selected' : ''}>Contém</option><option value="is_empty" ${condition.operator === 'is_empty' ? 'selected' : ''}>Está vazio</option><option value="not_empty" ${condition.operator === 'not_empty' ? 'selected' : ''}>Não está vazio</option><option value="greater_than" ${condition.operator === 'greater_than' ? 'selected' : ''}>Maior que</option><option value="less_than" ${condition.operator === 'less_than' ? 'selected' : ''}>Menor que</option></select></label><label class="atlas-v2-field is-wide"><span>Valor</span><input name="conditionValue" value="${attr(condition.value ?? '')}"></label></div>
@@ -6499,6 +7512,12 @@
           <div class="atlas-v2-rule-grid" data-action-field="notify"><label class="atlas-v2-field"><span>Destinatário</span><select name="notifyRecipient"><option value="current_user" ${action.recipient === 'current_user' ? 'selected' : ''}>Usuário que fez a alteração</option><option value="responsible" ${action.recipient === 'responsible' ? 'selected' : ''}>Responsável indicado em um campo</option><option value="user" ${action.recipient === 'user' ? 'selected' : ''}>Usuário específico</option><option value="board_members" ${action.recipient === 'board_members' ? 'selected' : ''}>Membros do quadro</option><option value="admins" ${action.recipient === 'admins' ? 'selected' : ''}>Administradores</option></select></label><label class="atlas-v2-field" data-notify-user><span>Usuário</span><select name="notifyUserId">${users.map((entry) => `<option value="${attr(entry.id)}" ${entry.id === action.userId ? 'selected' : ''}>${escapeHtml(entry.name)}</option>`).join('')}</select></label><label class="atlas-v2-field" data-notify-column><span>Campo responsável</span><select name="notifyColumnId">${automationColumnOptions(context.board, action.columnId || firstColumn)}</select></label><label class="atlas-v2-field is-wide"><span>Título</span><input name="notifyTitle" maxlength="120" value="${attr(action.title || 'Atualização em {{item}}')}"></label><label class="atlas-v2-field is-wide"><span>Mensagem</span><textarea name="notifyMessage" maxlength="500">${escapeHtml(action.message || 'A automação “{{automation}}” foi executada no quadro {{board}}.')}</textarea><small>Variáveis: {{item}}, {{board}}, {{automation}}, {{value}}</small></label></div>
           <div class="atlas-v2-rule-grid" data-action-field="create_subitem"><label class="atlas-v2-field is-wide"><span>Nome do subitem</span><input name="subitemName" maxlength="120" value="${attr(action.name || 'Novo subitem')}"></label></div>
           <div class="atlas-v2-rule-grid" data-action-field="rename_item"><label class="atlas-v2-field is-wide"><span>Novo nome</span><input name="renameValue" maxlength="160" value="${attr(action.value || '')}"></label></div>
+        </section>
+        <section class="atlas-v2-rule-block"><header><b>4</b><span>Condição e ação adicionais</span></header>
+          <label class="atlas-v2-check-row"><input type="checkbox" name="condition2Enabled" ${existing?.conditions?.[1] ? 'checked' : ''}><span><strong>Exigir uma segunda condição</strong><small>As duas condições precisam ser verdadeiras.</small></span></label>
+          <div class="atlas-v2-rule-grid"><label class="atlas-v2-field"><span>Campo da condição</span><select name="condition2ColumnId">${automationColumnOptions(context.board, secondCondition.columnId || firstColumn, true)}</select></label><label class="atlas-v2-field"><span>Operador</span><select name="condition2Operator"><option value="equals" ${secondCondition.operator === 'equals' ? 'selected' : ''}>Igual a</option><option value="not_equals" ${secondCondition.operator === 'not_equals' ? 'selected' : ''}>Diferente de</option><option value="contains" ${secondCondition.operator === 'contains' ? 'selected' : ''}>Contém</option><option value="is_empty" ${secondCondition.operator === 'is_empty' ? 'selected' : ''}>Está vazio</option><option value="not_empty" ${secondCondition.operator === 'not_empty' ? 'selected' : ''}>Não está vazio</option></select></label><label class="atlas-v2-field is-wide"><span>Valor</span><input name="condition2Value" value="${attr(secondCondition.value ?? '')}"></label></div>
+          <label class="atlas-v2-check-row"><input type="checkbox" name="action2Enabled" ${existing?.actions?.[1] ? 'checked' : ''}><span><strong>Executar uma segunda ação</strong><small>Executada logo após a ação principal.</small></span></label>
+          <div class="atlas-v2-rule-grid"><label class="atlas-v2-field"><span>Ação adicional</span><select name="action2Type"><option value="set_value" ${secondAction.type === 'set_value' ? 'selected' : ''}>Preencher campo</option><option value="move_group" ${secondAction.type === 'move_group' ? 'selected' : ''}>Mover para grupo</option><option value="create_subitem" ${secondAction.type === 'create_subitem' ? 'selected' : ''}>Criar subitem</option><option value="rename_item" ${secondAction.type === 'rename_item' ? 'selected' : ''}>Renomear item</option></select></label><label class="atlas-v2-field"><span>Campo</span><select name="action2ColumnId">${automationColumnOptions(context.board, secondAction.columnId || firstColumn)}</select></label><label class="atlas-v2-field"><span>Grupo</span><select name="action2GroupId">${automationGroupOptions(context.board, secondAction.groupId || firstGroup)}</select></label><label class="atlas-v2-field is-wide"><span>Valor ou nome</span><input name="action2Value" value="${attr(secondAction.value ?? secondAction.name ?? '')}" placeholder="Valor, nome do item ou subitem"></label></div>
         </section>
         <label class="atlas-v2-check-row"><input type="checkbox" name="active" ${existing?.active === false ? '' : 'checked'}><span><strong>Automação ativa</strong><small>A regra começa a funcionar assim que for salva.</small></span></label>
       </form>`,
@@ -6523,9 +7542,13 @@
     } else if (triggerType === 'date_reached') {
       trigger.columnId = String(data.get('triggerDateColumnId') || '');
       trigger.offsetDays = Number(data.get('triggerOffsetDays') || 0);
+    } else if (triggerType === 'scheduled') {
+      trigger.frequency = String(data.get('triggerFrequency') || 'daily');
+      trigger.time = String(data.get('triggerTime') || '08:00');
     }
     const conditions = [];
     if (data.get('conditionEnabled')) conditions.push({ columnId: String(data.get('conditionColumnId') || ''), operator: String(data.get('conditionOperator') || 'equals'), value: String(data.get('conditionValue') || '') });
+    if (data.get('condition2Enabled')) conditions.push({ columnId: String(data.get('condition2ColumnId') || ''), operator: String(data.get('condition2Operator') || 'equals'), value: String(data.get('condition2Value') || '') });
     const actionType = String(data.get('actionType') || 'set_value');
     const action = { type: actionType };
     if (actionType === 'set_value') { action.columnId = String(data.get('actionColumnId') || ''); action.value = String(data.get('actionValue') || ''); }
@@ -6533,8 +7556,18 @@
     if (actionType === 'notify') { action.recipient = String(data.get('notifyRecipient') || 'current_user'); action.userId = String(data.get('notifyUserId') || ''); action.columnId = String(data.get('notifyColumnId') || ''); action.title = String(data.get('notifyTitle') || '').trim(); action.message = String(data.get('notifyMessage') || '').trim(); }
     if (actionType === 'create_subitem') action.name = String(data.get('subitemName') || 'Novo subitem').trim();
     if (actionType === 'rename_item') action.value = String(data.get('renameValue') || '').trim();
+    const actions = [action];
+    if (data.get('action2Enabled')) {
+      const secondType = String(data.get('action2Type') || 'set_value');
+      const second = { type: secondType };
+      if (secondType === 'set_value') { second.columnId = String(data.get('action2ColumnId') || ''); second.value = String(data.get('action2Value') || ''); }
+      if (secondType === 'move_group') second.groupId = String(data.get('action2GroupId') || '');
+      if (secondType === 'create_subitem') second.name = String(data.get('action2Value') || 'Novo subitem').trim();
+      if (secondType === 'rename_item') second.value = String(data.get('action2Value') || '').trim();
+      actions.push(second);
+    }
     const entry = {
-      id: automationId || id('automation'), boardId: context.board.id, name: String(data.get('name') || '').trim() || 'Automação sem nome', trigger, conditions, actions: [action], active: Boolean(data.get('active')), createdBy: currentUser()?.id || '', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+      id: automationId || id('automation'), boardId: context.board.id, name: String(data.get('name') || '').trim() || 'Automação sem nome', trigger, conditions, actions, active: Boolean(data.get('active')), createdBy: currentUser()?.id || '', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
     };
     runtime.data.automations = runtime.data.automations || [];
     const index = runtime.data.automations.findIndex((candidate) => candidate.id === automationId);
@@ -6685,6 +7718,7 @@
     if (trigger.type === 'item_created') return payload.eventType === 'item_created';
     if (trigger.type === 'field_changed') return payload.eventType === 'field_changed' && payload.columnId === trigger.columnId && (trigger.value === undefined || String(payload.newValue) === String(trigger.value));
     if (trigger.type === 'group_changed') return payload.eventType === 'group_changed' && (!trigger.groupId || payload.newGroupId === trigger.groupId);
+    if (trigger.type === 'scheduled') return payload.eventType === 'scheduled';
     return payload.eventType === 'manual';
   }
 
@@ -6741,8 +7775,10 @@
   async function openNotificationsDrawer() {
     await refreshNotifications();
     const notifications = runtime.data.notifications || [];
-    const rows = notifications.map((entry) => `<article class="atlas-v2-notification-card ${entry.readAt ? 'is-read' : ''}"><button type="button" data-action="notification-open" data-notification-id="${attr(entry.id)}" data-board-id="${attr(entry.boardId || '')}"><span class="atlas-v2-notification-icon"><i data-lucide="${entry.type === 'automation' ? 'workflow' : 'bell'}"></i></span><span><strong>${escapeHtml(entry.title || 'Notificação')}</strong><p>${escapeHtml(entry.message || '')}</p><small>${formatDateTime(entry.createdAt)}</small></span></button>${entry.readAt ? '' : `<button class="atlas-v2-icon-button" type="button" data-action="notification-read" data-notification-id="${attr(entry.id)}" title="Marcar como lida"><i data-lucide="check"></i></button>`}</article>`).join('');
-    openDrawer({ title: 'Notificações', subtitle: `${notifications.filter((entry) => !entry.readAt).length} não lida(s)`, body: `<div class="atlas-v2-notification-list">${rows || '<div class="atlas-v2-empty-view"><div><i data-lucide="bell-off"></i><strong>Nenhuma notificação</strong><span>Alertas das automações aparecerão aqui.</span></div></div>'}</div>`, actions: notifications.some((entry) => !entry.readAt) ? '<button class="atlas-v2-button atlas-v2-button-quiet" type="button" data-action="notifications-read-all"><i data-lucide="check-check"></i>Marcar todas como lidas</button>' : '<button class="atlas-v2-button atlas-v2-button-quiet" type="button" data-action="close-overlay">Fechar</button>' });
+    const filtered = notifications.filter((entry) => runtime.notificationFilter === 'unread' ? !entry.readAt : runtime.notificationFilter === 'automation' ? entry.type === 'automation' : true);
+    const rows = filtered.map((entry) => `<article class="atlas-v2-notification-card ${entry.readAt ? 'is-read' : ''}"><button type="button" data-action="notification-open" data-notification-id="${attr(entry.id)}" data-board-id="${attr(entry.boardId || '')}"><span class="atlas-v2-notification-icon"><i data-lucide="${entry.type === 'automation' ? 'workflow' : entry.type === 'sla' ? 'alarm-clock' : 'bell'}"></i></span><span><strong>${escapeHtml(entry.title || 'Notificação')}</strong><p>${escapeHtml(entry.message || '')}</p><small>${formatDateTime(entry.createdAt)}</small></span></button>${entry.readAt ? '' : `<button class="atlas-v2-icon-button" type="button" data-action="notification-read" data-notification-id="${attr(entry.id)}" title="Marcar como lida"><i data-lucide="check"></i></button>`}</article>`).join('');
+    const filters = [['all', 'Todas'], ['unread', 'Não lidas'], ['automation', 'Automações']].map(([key, label]) => `<button class="${runtime.notificationFilter === key ? 'is-active' : ''}" type="button" data-action="notification-filter" data-notification-filter="${key}">${label}</button>`).join('');
+    openDrawer({ title: 'Notificações', subtitle: `${notifications.filter((entry) => !entry.readAt).length} não lida(s)`, body: `<nav class="atlas-v2-notification-filters">${filters}</nav><div class="atlas-v2-notification-list">${rows || '<div class="atlas-v2-empty-view"><div><i data-lucide="bell-off"></i><strong>Nenhuma notificação neste filtro</strong><span>Alertas de SLA e automações aparecerão aqui.</span></div></div>'}</div>`, actions: notifications.some((entry) => !entry.readAt) ? '<button class="atlas-v2-button atlas-v2-button-quiet" type="button" data-action="notifications-read-all"><i data-lucide="check-check"></i>Marcar todas como lidas</button>' : '<button class="atlas-v2-button atlas-v2-button-quiet" type="button" data-action="close-overlay">Fechar</button>' });
   }
 
   async function markNotificationRead(notificationId, openBoardId = '') {
@@ -6766,12 +7802,86 @@
     openNotificationsDrawer();
   }
 
+  async function scanSlaNotifications() {
+    if (!runtime.data || !currentUser()) return;
+    const today = new Date().toISOString().slice(0, 10);
+    const markKey = `atlas-v2-sla-marks:${currentUser().id}:${today}`;
+    const marks = new Set(JSON.parse(localStorage.getItem(markKey) || '[]'));
+    const created = [];
+    runtime.data.workspaces.forEach((workspace) => workspace.modules.forEach((module) => module.boards.forEach((boardEntry) => {
+      if (!hasPermission('view', { workspace, module, board: boardEntry })) return;
+      flatBoardItems(boardEntry).forEach(({ item: itemEntry }) => {
+        const state = boardSlaState(boardEntry, itemEntry);
+        if (!state || !['late', 'warning'].includes(state.level)) return;
+        const signature = `${boardEntry.id}:${itemEntry.id}:${state.level}`;
+        if (marks.has(signature)) return;
+        marks.add(signature);
+        created.push({
+          id: id('notification'),
+          userId: currentUser().id,
+          boardId: boardEntry.id,
+          itemId: itemEntry.id,
+          title: state.level === 'late' ? `Prazo vencido: ${itemEntry.name}` : `Prazo próximo: ${itemEntry.name}`,
+          message: `${state.label} no quadro ${boardEntry.name}.`,
+          type: 'sla',
+          readAt: null,
+          createdAt: new Date().toISOString(),
+        });
+      });
+    })));
+    if (!created.length) return;
+    runtime.data.notifications = [...created, ...(runtime.data.notifications || [])];
+    localStorage.setItem(markKey, JSON.stringify([...marks]));
+    if (runtime.remoteMode && runtime.authClient && isUuid(currentUser().id)) {
+      const rows = created.filter((entry) => isUuid(entry.boardId) && isUuid(entry.itemId)).map((entry) => ({
+        user_id: currentUser().id,
+        board_id: entry.boardId,
+        item_id: entry.itemId,
+        titulo: entry.title,
+        mensagem: entry.message,
+        tipo: 'sla',
+        dados: { source: 'atlas-v2.1' },
+      }));
+      if (rows.length) {
+        const { error } = await runtime.authClient.from('atlas_v2_notifications').insert(rows);
+        if (error) console.warn('Atlas V2.1: avisos de SLA ficaram na fila local.', error);
+      }
+    }
+    renderNotificationDot();
+  }
+
+  function runLocalScheduledAutomations() {
+    if (runtime.remoteMode) return;
+    const now = new Date();
+    runtime.data.workspaces.forEach((workspace) => workspace.modules.forEach((module) => module.boards.forEach((boardEntry) => {
+      boardAutomations(boardEntry.id).filter((entry) => entry.active !== false && entry.trigger?.type === 'scheduled').forEach((automation) => {
+        const frequency = automation.trigger.frequency || 'daily';
+        const [hour, minute] = String(automation.trigger.time || '08:00').split(':').map(Number);
+        if (frequency !== 'hourly' && (now.getHours() < hour || (now.getHours() === hour && now.getMinutes() < minute))) return;
+        const slot = frequency === 'hourly'
+          ? now.toISOString().slice(0, 13)
+          : frequency === 'weekly'
+            ? `${now.getFullYear()}-W${Math.ceil((((now - new Date(now.getFullYear(), 0, 1)) / 86400000) + new Date(now.getFullYear(), 0, 1).getDay() + 1) / 7)}`
+            : now.toISOString().slice(0, 10);
+        const key = `atlas-v2-schedule:${automation.id}:${slot}`;
+        if (localStorage.getItem(key)) return;
+        localStorage.setItem(key, '1');
+        flatBoardItems(boardEntry).forEach(({ item: itemEntry }) => executeLocalAutomation(automation, boardEntry, itemEntry, { eventType: 'scheduled' }));
+      });
+    })));
+  }
+
   function startAutomationMonitor() {
     if (!runtime.authClient || !runtime.authSession?.user || runtime.automationMonitorTimer) return;
     runtime.automationMonitorStartedAt = new Date().toISOString();
     const check = async () => {
       if (document.hidden || runtime.bootstrapRefreshing || !runtime.authClient) return;
       try {
+        runLocalScheduledAutomations();
+        await Promise.allSettled([
+          runtime.authClient.rpc('atlas_v2_process_due_automations'),
+          runtime.authClient.rpc('atlas_v2_process_scheduled_automations'),
+        ]);
         const { data, error } = await runtime.authClient.from('atlas_v2_automation_runs').select('created_at,status').order('created_at', { ascending: false }).limit(1).maybeSingle();
         if (!error && data?.created_at) {
           const current = String(data.created_at);
@@ -6786,9 +7896,13 @@
           }
         }
         await refreshNotifications();
+        await scanSlaNotifications();
       } catch (_) {}
     };
-    try { runtime.authClient.rpc('atlas_v2_process_due_automations'); } catch (_) {}
+    try {
+      runtime.authClient.rpc('atlas_v2_process_due_automations');
+      runtime.authClient.rpc('atlas_v2_process_scheduled_automations');
+    } catch (_) {}
     setTimeout(check, 5000);
     runtime.automationMonitorTimer = setInterval(check, 15000);
   }
@@ -6977,9 +8091,38 @@
       'test-admin-storage': testAdminStorageConnection,
       'open-image-viewer': () => openImageViewer(target.dataset.itemId, target.dataset.columnId, target.dataset.imageIndex),
       'open-attachment-viewer': () => openAttachmentViewer(target.dataset.itemId, target.dataset.columnId, target.dataset.imageIndex),
+      'rollback-import': () => rollbackImport(target.dataset.batchId),
       'viewer-previous': () => moveImageViewer(-1),
       'viewer-next': () => moveImageViewer(1),
+      'viewer-zoom-out': () => setImageViewerZoom((runtime.imageViewer?.zoom || 1) - 0.25),
+      'viewer-zoom-in': () => setImageViewerZoom((runtime.imageViewer?.zoom || 1) + 0.25),
+      'viewer-reset': resetImageViewer,
+      'viewer-rotate': rotateImageViewer,
+      'viewer-fullscreen': toggleImageViewerFullscreen,
       'viewer-remove': removeViewerImage,
+      'field-mode-toggle': () => {
+        runtime.fieldMode = !runtime.fieldMode;
+        localStorage.setItem(FIELD_MODE_KEY, runtime.fieldMode ? '1' : '0');
+        if (runtime.fieldMode && context?.board) context.board.activeView = 'table';
+        render();
+      },
+      'capture-location': () => captureCurrentLocation(target.dataset.itemId, target.dataset.columnId),
+      'dashboard-config': openDashboardBuilder,
+      'dashboard-remove-widget': () => removeDashboardWidget(target.dataset.widgetId),
+      'calendar-prev': () => setCalendarMonth(-1),
+      'calendar-next': () => setCalendarMonth(1),
+      'calendar-today': () => setCalendarMonth(0, true),
+      'calendar-open-item': () => {
+        const found = context && findItem(context.board, target.dataset.itemId);
+        if (!found) return;
+        context.board.activeView = 'table';
+        runtime.boardSearch = found.item.name;
+        const search = document.getElementById('atlas-v2-board-search');
+        if (search) search.value = runtime.boardSearch;
+        render();
+      },
+      'item-history': () => openItemHistory(target.dataset.itemId),
+      'history-restore': () => restoreItemHistory(target.dataset.historyId),
       'open-create': () => openCreateModal('board'),
       'create-workspace': () => { closeOverlay(); openCreateModal('workspace'); },
       'workspace-menu': openWorkspaceMenu,
@@ -6992,7 +8135,18 @@
         if (module) { module.open = !module.open; renderNavigation(); refreshIcons(document.getElementById('atlas-v2-navigation')); }
       },
       'select-workspace': () => selectWorkspace(target.dataset.workspaceId),
-      'change-view': () => { context.board.activeView = target.dataset.view; saveData('', { remote: false, audit: false, revision: false }); render(); },
+      'change-view': () => {
+        context.board.activeView = target.dataset.view;
+        runtime.boardUiStates.delete(String(context.board.id));
+        runtime.pendingBoardUiState = null;
+        const boardScroll = document.getElementById('atlas-v2-board-scroll');
+        if (boardScroll) {
+          boardScroll.scrollTop = 0;
+          boardScroll.scrollLeft = 0;
+        }
+        saveData('', { remote: false, audit: false, revision: false });
+        render();
+      },
       'filter-work': () => {
         runtime.workFilter = target.dataset.workId || '';
         runtime.expandedWorkSectors.clear();
@@ -7079,8 +8233,17 @@
       'automation-run': () => openAutomationRunModal(target.dataset.automationId),
       'notification-read': () => markNotificationRead(target.dataset.notificationId),
       'notification-open': () => markNotificationRead(target.dataset.notificationId, target.dataset.boardId),
+      'notification-filter': () => {
+        runtime.notificationFilter = target.dataset.notificationFilter || 'all';
+        openNotificationsDrawer();
+      },
       'notifications-read-all': markAllNotificationsRead,
-      'filter': () => document.getElementById('atlas-v2-board-search')?.focus(),
+      'filter': () => {
+        if (runtime.fieldMode && window.innerWidth <= 820) document.getElementById('atlas-v2-board-search')?.focus();
+        else openAdvancedFilters();
+      },
+      'filter-clear': clearAdvancedFilters,
+      'filter-use-saved': () => useSavedSearch(target.dataset.searchId),
       'sort': () => {
         context.board.groups.forEach((groupEntry) => groupEntry.items.sort((a, b) => a.name.localeCompare(b.name, 'pt-BR')));
         saveData('Itens ordenados'); render();
@@ -7090,8 +8253,9 @@
       },
       'user-menu': openUserMenu,
       'open-administration': () => openAdministration('overview'),
-      'admin-tab': () => { runtime.adminTab = target.dataset.adminTab || 'overview'; render(); },
+      'admin-tab': () => { void openAdminTab(target.dataset.adminTab || 'overview'); },
       'admin-sync-users': () => syncAuthUsersFromSupabase(),
+      'admin-health-check': runSystemHealthCheck,
       'admin-new-storage': () => openStorageConnectionModal(),
       'admin-edit-storage': () => openStorageConnectionModal(target.dataset.storageId),
       'admin-new-user': openAdminUserModal,
@@ -7126,6 +8290,10 @@
     }
     if (target.matches('input[name="storage-mode"]')) {
       updateStorageFields(target.value, true);
+      return;
+    }
+    if (target.closest('#atlas-v2-column-form') && target.name === 'type') {
+      updateColumnEditorVisibility();
       return;
     }
     if (target.matches('[name="driveName"], [name="driveSector"], [name="driveEmail"], [name="driveFolderUrl"], [name="driveAppScriptUrl"]')) {
@@ -7165,6 +8333,10 @@
       const found = findItem(context.board, target.dataset.itemValue);
       if (!found) return;
       const columnEntry = context.board.columns.find((entry) => entry.id === target.dataset.columnId);
+      if (!requirePermission('edit', { ...context, groupId: found.item.groupId, columnId: target.dataset.columnId }, 'editar este campo')) {
+        render();
+        return;
+      }
       // Inputs nativos de data podem disparar `change` enquanto o usuário ainda
       // está preenchendo o ano. Salvar e renderizar nesse momento interrompe a
       // digitação. A data é confirmada somente no focusout (ou após seleção no
@@ -7184,6 +8356,7 @@
         found.item.values[target.dataset.columnId] = target.value;
       }
       const nextValue = found.item.values[target.dataset.columnId];
+      captureItemHistory(context.board, found.item, target.dataset.columnId, previousValue, nextValue);
       if (runtime.remoteMode && runtime.authClient && columnEntry) {
         try {
           target.disabled = true;
@@ -7264,6 +8437,7 @@
     if (String(previousValue || '') === nextValue) return;
 
     found.item.values[columnEntry.id] = nextValue;
+    captureItemHistory(context.board, found.item, columnEntry.id, previousValue, nextValue);
     if (runtime.remoteMode && runtime.authClient) {
       try {
         target.dataset.dateCommitting = 'true';
@@ -7301,9 +8475,15 @@
     if (!requirePermission('edit', context, 'editar registros')) { render(); return; }
     const found = context && findItem(context.board, target.dataset.itemName);
     if (!found) return;
+    if (!requirePermission('edit', { ...context, groupId: found.item.groupId }, 'editar este registro')) {
+      render();
+      return;
+    }
     const value = target.value.trim();
+    const previousName = found.item.name;
     found.item.name = value || 'Item sem nome';
     target.value = found.item.name;
+    captureItemHistory(context.board, found.item, '__name__', previousName, found.item.name, 'Nome atualizado');
     if (runtime.remoteMode && runtime.authClient) {
       saveData('', { remote: false });
       try {
@@ -7328,6 +8508,9 @@
     if (form.id === 'atlas-v2-status-colors-form') submitStatusColors(form);
     if (form.id === 'atlas-v2-board-settings-form') submitBoardSettings(form);
     if (form.id === 'atlas-v2-import-form') submitImport(form);
+    if (form.id === 'atlas-v2-import-confirm-form') confirmImport(form);
+    if (form.id === 'atlas-v2-dashboard-widget-form') submitDashboardWidget(form);
+    if (form.id === 'atlas-v2-filter-form') submitAdvancedFilters(form);
     if (form.id === 'atlas-v2-rename-work-form') submitRenameWork(form);
     if (form.id === 'atlas-v2-workspace-form') submitWorkspace(form);
     if (form.id === 'atlas-v2-admin-user-form') submitAdminUser(form);
@@ -7343,6 +8526,7 @@
   const HORIZONTAL_DRAG_SCROLL_SELECTOR = '.atlas-v2-table-wrap, .atlas-v2-work-tabs, .atlas-v2-gantt-scroll';
 
   function horizontalDragContainer(target) {
+    if (window.innerWidth <= 820) return null;
     const direct = target?.closest?.(HORIZONTAL_DRAG_SCROLL_SELECTOR);
     const groupTable = direct || target?.closest?.('.atlas-v2-group')?.querySelector('.atlas-v2-table-wrap');
     if (!groupTable || groupTable.scrollWidth <= groupTable.clientWidth + 2) return null;
@@ -7350,6 +8534,31 @@
   }
 
   function handlePointerDown(event) {
+    const viewerImage = event.target.closest?.('.atlas-v2-viewer-image');
+    if (viewerImage && event.button === 0 && runtime.imageViewer) {
+      event.preventDefault();
+      const media = viewerImage.closest('.atlas-v2-viewer-media');
+      const gesture = runtime.imageViewerGesture || {
+        media,
+        pointers: new Map(),
+        startZoom: runtime.imageViewer.zoom || 1,
+        startDistance: 0,
+        startX: runtime.imageViewer.x || 0,
+        startY: runtime.imageViewer.y || 0,
+        originX: event.clientX,
+        originY: event.clientY,
+      };
+      gesture.pointers.set(event.pointerId, { x: event.clientX, y: event.clientY, startX: event.clientX, startY: event.clientY });
+      if (gesture.pointers.size === 2) {
+        const points = [...gesture.pointers.values()];
+        gesture.startDistance = Math.hypot(points[1].x - points[0].x, points[1].y - points[0].y) || 1;
+        gesture.startZoom = runtime.imageViewer.zoom || 1;
+      }
+      runtime.imageViewerGesture = gesture;
+      media?.classList.add('is-dragging');
+      try { viewerImage.setPointerCapture?.(event.pointerId); } catch (_) {}
+      return;
+    }
     if (event.button !== 2) return;
     const container = horizontalDragContainer(event.target);
     if (!container) return;
@@ -7367,6 +8576,23 @@
   }
 
   function handlePointerMove(event) {
+    const gesture = runtime.imageViewerGesture;
+    if (gesture?.pointers?.has(event.pointerId) && runtime.imageViewer) {
+      const point = gesture.pointers.get(event.pointerId);
+      point.x = event.clientX;
+      point.y = event.clientY;
+      if (gesture.pointers.size >= 2) {
+        const points = [...gesture.pointers.values()].slice(0, 2);
+        const distance = Math.hypot(points[1].x - points[0].x, points[1].y - points[0].y) || 1;
+        runtime.imageViewer.zoom = Math.min(5, Math.max(0.5, gesture.startZoom * (distance / gesture.startDistance)));
+      } else if ((runtime.imageViewer.zoom || 1) > 1.01) {
+        runtime.imageViewer.x = gesture.startX + (event.clientX - gesture.originX);
+        runtime.imageViewer.y = gesture.startY + (event.clientY - gesture.originY);
+      }
+      applyImageViewerTransform();
+      event.preventDefault();
+      return;
+    }
     const drag = runtime.horizontalDrag;
     if (!drag || drag.pointerId !== event.pointerId) return;
     const distance = event.clientX - drag.startX;
@@ -7376,6 +8602,24 @@
   }
 
   function finishHorizontalDrag(event) {
+    const gesture = runtime.imageViewerGesture;
+    if (gesture?.pointers?.has(event.pointerId)) {
+      const point = gesture.pointers.get(event.pointerId);
+      const swipe = point ? point.x - point.startX : 0;
+      gesture.pointers.delete(event.pointerId);
+      if (!gesture.pointers.size) {
+        gesture.media?.classList.remove('is-dragging');
+        runtime.imageViewerGesture = null;
+        if ((runtime.imageViewer?.zoom || 1) <= 1.01 && Math.abs(swipe) > 70) moveImageViewer(swipe < 0 ? 1 : -1);
+      } else {
+        const remaining = [...gesture.pointers.values()][0];
+        gesture.originX = remaining.x;
+        gesture.originY = remaining.y;
+        gesture.startX = runtime.imageViewer?.x || 0;
+        gesture.startY = runtime.imageViewer?.y || 0;
+      }
+      return;
+    }
     const drag = runtime.horizontalDrag;
     if (!drag || (event.pointerId !== undefined && drag.pointerId !== event.pointerId)) return;
     drag.container.classList.remove('is-right-dragging');
@@ -7467,6 +8711,21 @@
       moveImageViewer(1);
       return;
     }
+    if (runtime.imageViewer && ['+', '='].includes(event.key)) {
+      event.preventDefault();
+      setImageViewerZoom((runtime.imageViewer.zoom || 1) + 0.25);
+      return;
+    }
+    if (runtime.imageViewer && event.key === '-') {
+      event.preventDefault();
+      setImageViewerZoom((runtime.imageViewer.zoom || 1) - 0.25);
+      return;
+    }
+    if (runtime.imageViewer && event.key === '0') {
+      event.preventDefault();
+      resetImageViewer();
+      return;
+    }
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
       event.preventDefault();
       openGlobalSearch();
@@ -7487,6 +8746,12 @@
     }, 120);
   }
 
+  function handleWheel(event) {
+    if (!runtime.imageViewer || !event.target.closest?.('.atlas-v2-viewer-media')) return;
+    event.preventDefault();
+    setImageViewerZoom((runtime.imageViewer.zoom || 1) + (event.deltaY < 0 ? 0.2 : -0.2));
+  }
+
   window.__ATLAS_REALTIME_STATUS__ = () => ({
     version: window.__ATLAS_VERSION__,
     status: runtime.realtimeStatus,
@@ -7497,6 +8762,12 @@
   });
 
   function init() {
+    if (authTestMode()) {
+      window.__ATLAS_TEST__ = {
+        isRemoteBootstrapSnapshot,
+        activeBoardColumnCount: () => findBoard()?.board?.columns?.length || 0,
+      };
+    }
     document.documentElement.dataset.theme = localStorage.getItem(THEME_KEY) || 'dark';
     document.addEventListener('click', handleAuthClick);
     document.addEventListener('submit', handleAuthSubmit);

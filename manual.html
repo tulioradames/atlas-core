@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Manual Interativo | Atlas V2.0.19 Hotfix</title>
-<meta name="description" content="Manual simplificado e interativo de utilização do Atlas V2.0.19 Hotfix.">
+<title>Manual Interativo | Atlas V2.1.0</title>
+<meta name="description" content="Manual simplificado e interativo de utilização do Atlas V2.1.0.">
   <meta name="author" content="Túlio Radamés">
   <style>
     :root {
@@ -145,7 +145,7 @@
   <aside class="sidebar">
     <div class="brand">
       <a class="brand-mark" href="index.html" title="Voltar ao Atlas"><span class="brand-a">A</span><strong>ATLAS</strong></a>
-<span class="version">V2.0.19 HOTFIX</span>
+          <span class="version">V2.1.0 OFICIAL</span>
     </div>
     <div class="side-actions">
       <input class="search" id="guide-search" type="search" placeholder="Pesquisar no manual" aria-label="Pesquisar no manual">
@@ -174,7 +174,7 @@
     <header class="hero">
       <div class="eyebrow">Manual interativo de utilização</div>
       <h1>Use o Atlas com <em>segurança e agilidade.</em></h1>
-<p class="lead">Aprenda o essencial da V2.0.19 Hotfix em poucos minutos. Marque os passos concluídos, pesquise qualquer função e consulte os procedimentos quando precisar.</p>
+<p class="lead">Aprenda o essencial da V2.1.0 em poucos minutos. Marque os passos concluídos, pesquise qualquer função e consulte os procedimentos quando precisar.</p>
       <div class="hero-actions">
         <button class="btn primary" id="start-tour">▶ Iniciar tour de 2 minutos</button>
         <a class="btn" href="#inicio">✓ Começar pelo básico</a>
@@ -238,16 +238,18 @@
         </div>
       </section>
 
-      <section class="section" id="visualizacoes" data-title="Tabela Obras Kanban e Gantt">
-        <div class="section-head"><span class="section-num">4</span><div><h2>Tabela, Obras, Kanban e Gantt</h2><p>Escolha a visualização que melhor responde à sua tarefa.</p></div></div>
+      <section class="section" id="visualizacoes" data-title="Visualizações do quadro">
+        <div class="section-head"><span class="section-num">4</span><div><h2>Visualizações do quadro</h2><p>Escolha a perspectiva que melhor responde à sua tarefa.</p></div></div>
         <div class="section-body">
           <div class="tabs" data-tabs="views">
-            <button class="tab is-active" data-tab="table">Tabela</button><button class="tab" data-tab="works">Obras</button><button class="tab" data-tab="kanban">Kanban</button><button class="tab" data-tab="gantt">Gantt</button>
+            <button class="tab is-active" data-tab="table">Tabela</button><button class="tab" data-tab="works">Obras</button><button class="tab" data-tab="kanban">Kanban</button><button class="tab" data-tab="gantt">Gantt</button><button class="tab" data-tab="calendar">Calendário</button><button class="tab" data-tab="dashboard">Painel</button>
           </div>
           <div class="tab-panel is-active" data-panel="table"><div class="card"><h3>Tabela</h3><p>Ideal para preencher muitos campos, comparar registros e editar dados com precisão.</p><ul><li>Setores e elementos iniciam fechados.</li><li>Use o botão direito + arraste para ver colunas ocultas.</li><li>O filtro atua no quadro atual.</li></ul></div></div>
           <div class="tab-panel" data-panel="works"><div class="card"><h3>Obras</h3><p>Ideal para navegar por cidades ou obras e visualizar os setores internos.</p><ul><li>Digite a cidade em “Filtrar itens” para ir direto a ela.</li><li>A faixa de obras aceita botão direito + arraste.</li><li>Os setores internos podem representar POP, CEO, CTO ou fases operacionais.</li></ul></div></div>
           <div class="tab-panel" data-panel="kanban"><div class="card"><h3>Kanban</h3><p>Ideal para acompanhar etapas e mover cartões entre setores.</p><ul><li>Arraste o cartão para mudar o setor.</li><li>Use o status para indicar a situação do item.</li><li>Filtros e permissões do quadro continuam válidos.</li></ul></div></div>
           <div class="tab-panel" data-panel="gantt"><div class="card"><h3>Gantt</h3><p>Ideal para visualizar cronogramas, dependências e períodos.</p><ul><li>As barras usam a cor configurada no status.</li><li>Use Hoje, Ajuste automático e os botões de zoom.</li><li>Botão direito + arraste movimenta a linha do tempo.</li><li>Elementos aparecem com seus subelementos logo abaixo.</li></ul></div></div>
+          <div class="tab-panel" data-panel="calendar"><div class="card"><h3>Calendário</h3><p>Distribui os registros pelo mês usando as datas configuradas no quadro.</p><ul><li>Use as setas para mudar o mês.</li><li>Clique em Hoje para retornar ao período atual.</li><li>Selecione um registro para localizá-lo na tabela.</li></ul></div></div>
+          <div class="tab-panel" data-panel="dashboard"><div class="card"><h3>Painel</h3><p>Apresenta indicadores calculados com os dados do quadro.</p><ul><li>Adicione totais, concluídos e atrasados.</li><li>Calcule somas e médias de colunas numéricas.</li><li>Visualize distribuições por status.</li></ul></div></div>
         </div>
       </section>
 
@@ -255,11 +257,26 @@
         <div class="section-head"><span class="section-num">5</span><div><h2>Busca e filtros</h2><p>Encontre o que precisa sem percorrer o quadro inteiro.</p></div></div>
         <div class="section-body">
           <div class="cards">
-            <div class="card"><h3>Filtrar itens</h3><p>Pesquisa setores/grupos, itens, subitens e valores dentro do quadro atual. Ao digitar o nome de um setor, o Atlas exibe e abre esse setor com seus registros. Em Obras, também localiza a cidade/obra e abre a aba correspondente.</p></div>
-            <div class="card"><h3>Busca global</h3><p>Pressione <kbd>Ctrl K</kbd> ou clique em Buscar para procurar rotas e registros em todo o Atlas.</p></div>
+            <div class="card"><h3>Filtrar itens</h3><p>Pesquisa setores, registros, subitens e valores. Os filtros avançados combinam grupo, campo, período e presença de anexo, e podem ser salvos.</p></div>
+            <div class="card"><h3>Busca global</h3><p>Pressione <kbd>Ctrl K</kbd> ou clique em Buscar para procurar rotas, registros e nomes de anexos em todo o Atlas.</p></div>
             <div class="card"><h3>Localizar rota</h3><p>O campo no menu lateral filtra módulos e quadros pelo nome.</p></div>
           </div>
-      <div class="tip"><strong>Acentos não atrapalham:</strong> “cidade modelo” pode localizar “Cidade Modelo”.</div>
+          <div class="tip"><strong>Acentos não atrapalham:</strong> “joao camara” pode localizar “João Câmara”.</div>
+        </div>
+      </section>
+
+      <section class="section" id="v21" data-title="Recursos da V2.1">
+        <div class="section-head"><span class="section-num">6</span><div><h2>Recursos da V2.1</h2><p>Análise, prazos e operação de campo no mesmo quadro.</p></div></div>
+        <div class="section-body">
+          <div class="cards">
+            <div class="card"><h3>Fórmulas</h3><p>Crie uma coluna do tipo Fórmula e use nomes entre chaves, como <kbd>{Lançado} / {Projetado} * 100</kbd>.</p></div>
+            <div class="card"><h3>SLA</h3><p>Defina a coluna de vencimento nas configurações do quadro para receber alertas de atenção e atraso.</p></div>
+            <div class="card"><h3>Histórico restaurável</h3><p>Abra o histórico do registro para conferir quem alterou um campo e restaurar o valor anterior.</p></div>
+            <div class="card"><h3>Modo campo</h3><p>No celular, o Atlas abre cartões simples com câmera, galeria, GPS e ações fixas na parte inferior. Tabela, Obras, Kanban, Calendário e Gantt seguem um fluxo vertical, sem rolagem lateral.</p></div>
+            <div class="card"><h3>Trabalho offline</h3><p>Quando instalado como PWA, o Atlas mantém a estrutura em cache e envia alterações pendentes quando a conexão voltar.</p></div>
+            <div class="card"><h3>Importação reversível</h3><p>Depois de revisar o mapeamento e os duplicados, use Desfazer lote para remover somente os itens da última importação.</p></div>
+          </div>
+          <div class="tip"><strong>No celular:</strong> os registros são apresentados automaticamente como cartões verticais. Use a rolagem normal para consultar campos, anexar evidências e percorrer as visualizações.</div>
         </div>
       </section>
 
@@ -270,7 +287,7 @@
 <div class="step"><div><strong>Abra a célula de imagem ou arquivo</strong><small>Clique no campo configurado como Imagens, Fotos, Diagramas, Planilhas ou Arquivos.</small></div><label class="check"><input type="checkbox" data-check="image-open"> Concluído</label></div>
             <div class="step"><div><strong>Selecione o arquivo</strong><small>Respeite o limite definido pelo ambiente. O padrão da V2 é até 15 MB.</small></div><label class="check"><input type="checkbox" data-check="image-upload"> Concluído</label></div>
             <div class="step"><div><strong>Aguarde o envio</strong><small>O arquivo é armazenado na conexão do Google Drive associada ao setor.</small></div><label class="check"><input type="checkbox" data-check="image-wait"> Concluído</label></div>
-<div class="step"><div><strong>Abra o visualizador</strong><small>Use as setas ou as teclas ← e → para navegar entre anexos do mesmo campo.</small></div><label class="check"><input type="checkbox" data-check="image-view"> Concluído</label></div>
+<div class="step"><div><strong>Abra o visualizador</strong><small>Use zoom, rotação, tela cheia, arraste e as setas para navegar entre anexos do mesmo campo.</small></div><label class="check"><input type="checkbox" data-check="image-view"> Concluído</label></div>
           </div>
           <details><summary>A imagem não abriu. O que fazer?</summary><div>Use “Abrir original”. Se o original também falhar, confirme se o arquivo ainda existe no Drive e se o compartilhamento permite visualização. Atualize a página com <kbd>Ctrl F5</kbd> depois de corrigir a conexão.</div></details>
           <details><summary>Posso remover uma imagem?</summary><div>Sim, se o seu perfil tiver permissão de edição. A remoção envia a referência para atualização e solicita a exclusão no Drive configurado.</div></details>

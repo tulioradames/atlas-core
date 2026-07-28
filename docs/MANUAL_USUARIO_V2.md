@@ -1,106 +1,192 @@
-# Manual simplificado — Atlas V2.0.19 Hotfix
+# Manual de uso - Atlas V2.1.0
 
 **Criador:** Túlio Radamés
+**Aplicação:** Atlas V2.1.0 Oficial
 
-**Versão do manual:** 1.1
+A versão navegável deste manual está em [`manual.html`](../manual.html).
 
-**Aplicação:** Atlas V2.0.19 Hotfix
+## 1. Entrar e navegar
 
-A versão interativa está disponível em [`manual.html`](../manual.html).
+1. Entre com e-mail e senha.
+2. Novos usuários aguardam liberação de um administrador.
+3. Abra uma área, um módulo e o quadro desejado no menu lateral.
+4. Confira o indicador de salvamento no rodapé após cada alteração.
 
-## Fluxo básico
+## 2. Trabalhar com registros
 
-1. Entre com sua conta e aguarde a validação do perfil.
-2. No menu lateral, abra o módulo e escolha o quadro.
-3. Use **Filtrar itens** para localizar um registro. Em **Obras**, digitar a cidade abre a obra correspondente.
-4. Clique na célula que deseja alterar.
-5. Aguarde o rodapé mostrar **Alterações salvas**.
+- **Novo item:** cria um registro no primeiro grupo visível.
+- **Novo grupo:** adiciona uma etapa ou setor ao quadro.
+- **Nova coluna:** adiciona um campo de texto, status, data, imagem, fórmula ou outro tipo.
+- **Subitem:** detalha uma atividade abaixo do item principal.
+- **Selecionar:** permite mover ou excluir vários registros.
 
-## Visualizações
+## 3. Visualizações
 
-- **Tabela:** preenchimento e comparação de campos.
-- **Obras:** navegação por cidade ou obra e seus setores internos.
-- **Kanban:** movimentação de cartões entre etapas.
-- **Gantt:** cronograma de elementos e subelementos.
+- **Tabela:** edição e comparação de campos.
+- **Obras:** organização de obras e seus setores internos.
+- **Kanban:** cartões distribuídos por etapa.
+- **Gantt:** itens e subitens em uma linha do tempo.
+- **Calendário:** registros organizados pela data configurada.
+- **Painel:** indicadores configuráveis do quadro.
 
-Nas tabelas, na faixa de obras e no Gantt, mantenha o **botão direito do mouse pressionado e arraste** para movimentar horizontalmente.
+## 4. Fórmulas
 
-## Busca
+1. Clique em **Nova coluna**.
+2. Selecione **Fórmula**.
+3. Informe os nomes das colunas entre chaves.
+4. Escolha número, porcentagem ou moeda.
 
-- **Filtrar itens:** pesquisa setor/grupo, item, subitem e valores no quadro atual. Ao digitar o nome de um setor, o Atlas abre e exibe esse setor com seus registros.
-- **Ctrl K:** busca global.
-- **Localizar rota:** pesquisa módulos e quadros no menu lateral.
+Exemplo:
 
-A busca ignora diferenças entre letras maiúsculas, minúsculas e acentos.
+```text
+{Total lançado} / {Total projetado} * 100
+```
 
-## Imagens e arquivos
+A fórmula é somente leitura e atualiza quando os campos de origem mudam.
 
-1. Abra uma célula do tipo **Imagem** ou **Arquivo**.
+## 5. SLA e prazos
+
+Em **Configurações do quadro**, selecione a coluna que representa o vencimento e
+quantos dias antes o Atlas deve avisar.
+
+- **No prazo:** data futura fora da faixa de alerta.
+- **Atenção:** prazo próximo.
+- **Atrasado:** prazo vencido e item ainda não concluído.
+
+Os avisos aparecem nos registros e na central de notificações.
+
+## 6. Busca e filtros
+
+- **Filtrar itens:** pesquisa no quadro atual.
+- **Ctrl K:** abre a busca global.
+- **Filtros avançados:** grupo, campo, valor, período e presença de anexo.
+- **Salvar pesquisa:** guarda uma combinação de filtros para reutilização.
+
+A busca global também considera nomes e tipos dos anexos.
+
+## 7. Imagens e arquivos
+
+1. Use uma coluna do tipo **Imagem** ou **Arquivo**.
 2. Selecione um ou mais arquivos.
-3. Aguarde o envio ao Google Drive configurado para o setor.
-4. Clique na miniatura ou no nome para abrir o visualizador.
-5. Use as setas da tela ou as teclas **←** e **→** para alternar anexos.
+3. Aguarde o envio ao Drive setorial.
+4. Clique na miniatura para abrir no Atlas.
 
-Se uma prévia não abrir, use **Abrir original**.
+No visualizador:
 
-Arquivos novos são privados por padrão. O usuário precisa ter acesso à pasta no Google Drive para visualizar o original.
+- `+` e `-` controlam o zoom;
+- `0` restaura o enquadramento;
+- o botão de rotação gira a imagem;
+- tela cheia amplia a área de visualização;
+- arraste a imagem quando estiver ampliada;
+- use as setas ou deslize para trocar de anexo.
 
-## Lixeira e auditoria
+## 8. Modo campo no celular
 
-- exclusões são registradas na lixeira antes da remoção definitiva;
-- estruturas, itens, colunas e anexos podem ser restaurados;
-- o histórico registra o usuário autenticado e permanece no Supabase;
-- somente usuários autorizados podem restaurar ou excluir definitivamente.
+O primeiro acesso em telas pequenas abre o modo campo automaticamente.
 
-## Importação
+- registros aparecem como cartões verticais;
+- os campos principais ficam inteiros na tela;
+- imagens podem ser enviadas pela câmera ou galeria;
+- campos de localização possuem captura de GPS;
+- ações **Novo**, **Buscar** e **Avisos** ficam fixas na parte inferior;
+- o botão **Campo** alterna entre o modo simples e a tabela.
 
-- formatos aceitos: `.xlsx`, `.xls` e `.csv`;
-- tamanho máximo: 8 MB;
-- limite por importação: 5.000 linhas e 100 colunas;
-- revise o mapeamento antes de confirmar.
+## 9. Importar planilhas
 
-## Automações
+1. Clique em **Importar**.
+2. Escolha `.xlsx`, `.xls` ou `.csv`.
+3. Selecione o grupo de destino.
+4. Revise o mapeamento das colunas.
+5. Confira possíveis duplicados.
+6. Confirme a importação.
 
-Uma automação possui:
+Limites: 8 MB, 5.000 linhas e 100 colunas por arquivo.
 
-- **Gatilho:** quando a regra deve iniciar.
-- **Condição:** restrição opcional.
-- **Ação:** o que o Atlas deve executar.
+Enquanto o lote estiver disponível, abra novamente **Importar** e use
+**Desfazer lote** para remover somente os registros daquela importação.
 
-Exemplo: quando o Status mudar para **Concluído**, mover o item para **Concluídas**.
+## 10. Histórico restaurável
 
-A regra só dispara quando existe uma mudança real no valor.
+Abra o histórico de um item para consultar:
 
-## Perfis
+- campo alterado;
+- valor anterior e novo;
+- usuário e horário;
+- comando para restaurar o valor anterior.
 
-- **Administrador:** controle total.
-- **Supervisor:** gestão operacional, exclusão e compartilhamento conforme as regras.
-- **Operador:** criação e edição nos quadros liberados.
-- **Visualizador:** somente leitura.
+A restauração também gera um novo registro de histórico.
 
-## Realtime e salvamento
+## 11. Automações
 
-- **Conectado:** sincronização autenticada ativa.
-- **Aguardando:** inicializando ou reconectando.
-- **Falha:** revise internet, sessão e configuração do Supabase.
+Uma automação pode ter:
 
-O Realtime não substitui o indicador do rodapé. Sempre confirme **Alterações salvas**.
+- gatilho por criação, mudança de campo, mudança de grupo, data ou agenda;
+- até duas condições;
+- até duas ações;
+- execução manual para teste;
+- histórico de sucesso e falha.
 
-## Atalhos
+Agendas podem rodar a cada hora, diariamente ou semanalmente.
+
+## 12. Painel e calendário
+
+No **Painel**, administradores do quadro podem adicionar:
+
+- total de registros;
+- concluídos;
+- atrasados;
+- soma;
+- média;
+- distribuição por status.
+
+No **Calendário**, use as setas para mudar o mês e **Hoje** para retornar ao mês
+atual.
+
+## 13. Permissões
+
+- **Admin:** controle total.
+- **Supervisor:** gestão operacional e compartilhamento.
+- **Operador:** criação e edição.
+- **Visualizador:** consulta.
+
+Na Administração, regras específicas podem liberar ou bloquear uma área,
+módulo, quadro, grupo ou coluna. A restrição é aplicada na interface e no RLS do
+Supabase.
+
+## 14. Saúde do sistema e Drive
+
+Em **Administração > Sistema**, execute o diagnóstico para conferir:
+
+- navegador e cache;
+- autenticação e Data API do Supabase;
+- canal Realtime;
+- conexão e latência dos Drives setoriais.
+
+Cada setor pode usar uma conta Google e pasta raiz diferentes.
+
+## 15. Offline e instalação
+
+Quando publicado em HTTPS, o Atlas pode ser instalado como aplicativo pelo
+navegador. A estrutura do sistema fica em cache e alterações feitas sem internet
+entram na fila local para sincronização quando a conexão voltar.
+
+Uploads precisam de internet para chegar ao Google Drive.
+
+## 16. Atalhos
 
 | Ação | Atalho ou gesto |
 |---|---|
 | Busca global | `Ctrl K` |
-| Fechar janela ou menu | `Esc` |
+| Fechar janela | `Esc` |
 | Imagem anterior/próxima | `←` / `→` |
+| Aumentar/diminuir imagem | `+` / `-` |
+| Restaurar imagem | `0` |
 | Atualização completa | `Ctrl F5` |
-| Rolagem horizontal | Botão direito + arrastar |
-| Imprimir o manual | `Ctrl P` |
 
-## Solução rápida
+## 17. Solução rápida
 
-- **Sem permissão para editar:** solicite revisão do perfil ou do quadro.
-- **Automação não moveu o item:** confirme regra ativa, gatilho, valor e histórico de execução.
-- **Imagem ou arquivo não abriu:** teste o original e revise o acesso à pasta no Drive.
-- **Tabela cortando colunas:** use a barra inferior ou botão direito + arraste.
-- **Alteração não apareceu:** confirme o rodapé e o Realtime; depois atualize a página.
+- **Sem permissão:** revise perfil e regra específica do grupo ou coluna.
+- **Automação não executou:** verifique gatilho, condições, agenda e histórico.
+- **Imagem não abriu:** confira internet, sessão e acesso à pasta do Drive.
+- **Dados offline:** aguarde o indicador informar que a fila foi sincronizada.
+- **Planilha errada:** use **Desfazer lote** antes de continuar.
