@@ -3145,6 +3145,16 @@ window.__ATLAS_VERSION__ = '2.1.0 OFICIAL';
     }
   }
 
+  async function currentAuthAccessToken() {
+    if (!runtime.authClient) throw new Error('Sessao do Supabase indisponivel.');
+    const { data, error } = await runtime.authClient.auth.getSession();
+    if (error) throw new Error(`Nao foi possivel renovar a sessao do Atlas: ${authErrorMessage(error)}`);
+    const session = data?.session || null;
+    if (!session?.access_token) throw new Error('Sua sessao expirou. Entre novamente no Atlas.');
+    runtime.authSession = session;
+    return session.access_token;
+  }
+
   async function syncAuthUsersFromSupabase(options = {}) {
     if (!runtime.authClient || runtime.authUsersLoading || runtime.authProfile?.role !== 'admin') return;
     runtime.authUsersLoading = true;
@@ -3290,6 +3300,9 @@ window.__ATLAS_VERSION__ = '2.1.0 OFICIAL';
     if (!runtime.authListenerRegistered) {
       runtime.authListenerRegistered = true;
       runtime.authClient.auth.onAuthStateChange((event, session) => {
+        if (session && ['INITIAL_SESSION', 'SIGNED_IN', 'TOKEN_REFRESHED', 'USER_UPDATED'].includes(event)) {
+          runtime.authSession = session;
+        }
         if (event === 'PASSWORD_RECOVERY') {
           runtime.authSession = session || null;
           renderAuth('reset-password');
@@ -5349,6 +5362,7 @@ window.__ATLAS_VERSION__ = '2.1.0 OFICIAL';
   }
 
   async function uploadAttachmentToStorage(fileEntry, connection, context, found, columnEntry) {
+    const authToken = await currentAuthAccessToken();
     const moduleName = storageModule(connection, context);
     const mediaType = legacyMediaType(columnEntry);
     const parentName = found.parent?.name || found.item.name;
@@ -5358,7 +5372,7 @@ window.__ATLAS_VERSION__ = '2.1.0 OFICIAL';
       rootFolderId: connection.folderId,
       connectionId: connection.id,
       boardId: context.board.id,
-      authToken: runtime.authSession?.access_token || '',
+      authToken,
       nomeArquivo: fileEntry.name,
       mimeType: fileEntry.mimeType,
       base64: fileEntry.base64,
@@ -5457,6 +5471,7 @@ window.__ATLAS_VERSION__ = '2.1.0 OFICIAL';
     if (error || !data?.id) {
       runtime.realtimeLocalIds.delete(row.id);
       if (uploaded.fileId && connection?.appScriptUrl) {
+        const authToken = await currentAuthAccessToken();
         fetch(connection.appScriptUrl, {
           method: 'POST',
           body: JSON.stringify({
@@ -5464,7 +5479,7 @@ window.__ATLAS_VERSION__ = '2.1.0 OFICIAL';
             rootFolderId: connection.folderId,
             connectionId: connection.id,
             boardId: context.board.id,
-            authToken: runtime.authSession?.access_token || '',
+            authToken,
             fileId: uploaded.fileId,
             modulo: storageModule(connection, context),
             module: storageModule(connection, context),
@@ -5672,6 +5687,7 @@ window.__ATLAS_VERSION__ = '2.1.0 OFICIAL';
     let driveCleanupFailed = false;
     if (removed.fileId && connection?.appScriptUrl) {
       try {
+        const authToken = await currentAuthAccessToken();
         const moduleName = storageModule(connection, data.context);
         const response = await fetch(connection.appScriptUrl, {
           method: 'POST',
@@ -5680,7 +5696,7 @@ window.__ATLAS_VERSION__ = '2.1.0 OFICIAL';
             rootFolderId: connection.folderId,
             connectionId: connection.id,
             boardId: data.context.board.id,
-            authToken: runtime.authSession?.access_token || '',
+            authToken,
             fileId: removed.fileId,
             modulo: moduleName,
             module: moduleName,
@@ -6635,7 +6651,7 @@ window.__ATLAS_VERSION__ = '2.1.0 OFICIAL';
   }
 
   async function testStorageEndpoint(appScriptUrl, folderId, expectedModule = '') {
-    if (!runtime.authSession?.access_token) throw new Error('Sua sessão expirou. Entre novamente antes de validar o Drive.');
+    const authToken = await currentAuthAccessToken();
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 15000);
     try {
@@ -6644,7 +6660,7 @@ window.__ATLAS_VERSION__ = '2.1.0 OFICIAL';
         body: JSON.stringify({
           action: 'testconnection',
           rootFolderId: folderId,
-          authToken: runtime.authSession.access_token,
+          authToken,
           module: expectedModule,
         }),
         redirect: 'follow',

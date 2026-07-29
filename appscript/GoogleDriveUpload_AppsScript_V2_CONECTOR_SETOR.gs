@@ -96,8 +96,15 @@ function atlasAuthorize_(body, action) {
     }
   );
 
-  if (response.getResponseCode() < 200 || response.getResponseCode() >= 300) {
-    throw new Error('Nao foi possivel validar a permissao no Atlas.');
+  const responseCode = response.getResponseCode();
+  if (responseCode < 200 || responseCode >= 300) {
+    const responseDetail = String(response.getContentText() || '')
+      .replace(/\s+/g, ' ')
+      .slice(0, 300);
+    throw new Error(
+      'Nao foi possivel validar a permissao no Atlas (HTTP ' + responseCode + ').'
+      + (responseDetail ? ' ' + responseDetail : '')
+    );
   }
   let allowed = false;
   try { allowed = JSON.parse(response.getContentText()) === true; } catch (_) { allowed = false; }
