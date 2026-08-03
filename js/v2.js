@@ -1,7 +1,7 @@
 (function atlasV2Official() {
   'use strict';
 
-window.__ATLAS_VERSION__ = '2.1.0 OFICIAL';
+window.__ATLAS_VERSION__ = '2.2.0 DESENVOLVIMENTO';
 
   const STORAGE_KEY = 'atlas-v2-official-data';
   const THEME_KEY = 'atlas-v2-theme';
@@ -120,6 +120,7 @@ window.__ATLAS_VERSION__ = '2.1.0 OFICIAL';
     deferredHydration: false,
     deferredHydrated: false,
     bootstrapCacheTimer: null,
+    localBackupTimer: null,
     automationMonitorTimer: null,
     automationMonitorStartedAt: '',
     lastAutomationRunAt: '',
@@ -147,7 +148,10 @@ window.__ATLAS_VERSION__ = '2.1.0 OFICIAL';
     realtimeBroadcastQueue: [],
     itemPersistQueues: new Map(),
     loadedBoardData: new Set(),
+    loadedItemValues: new Set(),
     boardDataLoading: new Map(),
+    boardSearchTimer: null,
+    navSearchTimer: null,
     auditQueue: Promise.resolve(),
     trashQueue: Promise.resolve(),
     boardUiStates: new Map(),
@@ -178,6 +182,9 @@ window.__ATLAS_VERSION__ = '2.1.0 OFICIAL';
       : localStorage.getItem(FIELD_MODE_KEY) === '1',
     calendarCursor: new Map(),
     importPreview: null,
+    operationProgress: null,
+    operationProgressTimer: null,
+    assetLoads: new Map(),
     offlineQueue: [],
     healthChecks: [],
   };
@@ -187,8 +194,57 @@ window.__ATLAS_VERSION__ = '2.1.0 OFICIAL';
     return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
   }
 
+  function loadAssetScript(source, ready) {
+    if (typeof ready === 'function' && ready()) return Promise.resolve();
+    if (runtime.assetLoads.has(source)) return runtime.assetLoads.get(source);
+    const operation = new Promise((resolve, reject) => {
+      const script = document.createElement('script');
+      script.src = source;
+      script.async = true;
+      script.onload = resolve;
+      script.onerror = () => reject(new Error(`NÃ£o foi possÃ­vel carregar ${source}.`));
+      document.head.appendChild(script);
+    });
+    runtime.assetLoads.set(source, operation);
+    operation.catch(() => runtime.assetLoads.delete(source));
+    return operation;
+  }
+
   function deepClone(value) {
     return JSON.parse(JSON.stringify(value));
+  }
+
+  function setOperationProgress(label, percent = 0, detail = '') {
+    clearTimeout(runtime.operationProgressTimer);
+    const normalizedPercent = Math.max(0, Math.min(100, Math.round(Number(percent) || 0)));
+    runtime.operationProgress = { label: String(label || 'Processando'), percent: normalizedPercent, detail: String(detail || '') };
+    const root = document.getElementById('atlas-v2-operation-progress');
+    if (!root) return;
+    root.hidden = false;
+    const labelNode = document.getElementById('atlas-v2-operation-label');
+    const percentNode = document.getElementById('atlas-v2-operation-percent');
+    const meter = document.getElementById('atlas-v2-operation-meter');
+    const detailNode = document.getElementById('atlas-v2-operation-detail');
+    if (labelNode) labelNode.textContent = runtime.operationProgress.label;
+    if (percentNode) percentNode.textContent = `${normalizedPercent}%`;
+    if (meter) meter.value = normalizedPercent;
+    if (detailNode) {
+      detailNode.textContent = runtime.operationProgress.detail;
+      detailNode.hidden = !runtime.operationProgress.detail;
+    }
+    root.classList.toggle('is-complete', normalizedPercent >= 100);
+  }
+
+  function clearOperationProgress(delay = 700) {
+    clearTimeout(runtime.operationProgressTimer);
+    runtime.operationProgressTimer = setTimeout(() => {
+      runtime.operationProgress = null;
+      const root = document.getElementById('atlas-v2-operation-progress');
+      if (root) {
+        root.hidden = true;
+        root.classList.remove('is-complete');
+      }
+    }, Math.max(0, Number(delay) || 0));
   }
 
   function compactImageReference(entry) {
@@ -294,12 +350,16 @@ window.__ATLAS_VERSION__ = '2.1.0 OFICIAL';
     }
   }
 
-  function scheduleLocalBackupCompaction() {
-    const run = () => {
-      if (runtime.data) persistLocalBackup(runtime.data);
-    };
-    if (typeof window.requestIdleCallback === 'function') window.requestIdleCallback(run, { timeout: 1400 });
-    else setTimeout(run, 300);
+  function scheduleLocalBackupCompaction(delay = 220) {
+    clearTimeout(runtime.localBackupTimer);
+    runtime.localBackupTimer = setTimeout(() => {
+      runtime.localBackupTimer = null;
+      const run = () => {
+        if (runtime.data) persistLocalBackup(runtime.data);
+      };
+      if (typeof window.requestIdleCallback === 'function') window.requestIdleCallback(run, { timeout: 1200 });
+      else setTimeout(run, 0);
+    }, delay);
   }
 
   function openBootstrapCache() {
@@ -395,13 +455,13 @@ window.__ATLAS_VERSION__ = '2.1.0 OFICIAL';
     database.close();
   }
 
-  function scheduleBootstrapCacheWrite(data = runtime.data) {
+  function scheduleBootstrapCacheWrite(data = runtime.data, delay = 700) {
     const userId = runtime.authSession?.user?.id;
     if (!userId || !isRemoteBootstrapSnapshot(data)) return;
     clearTimeout(runtime.bootstrapCacheTimer);
     runtime.bootstrapCacheTimer = setTimeout(() => {
       writeBootstrapCache(userId, data).catch((error) => console.warn('Atlas V2: cache local indisponível.', error));
-    }, 700);
+    }, Math.max(300, Number(delay) || 700));
   }
 
   function option(label, color, background) {
@@ -424,7 +484,14 @@ window.__ATLAS_VERSION__ = '2.1.0 OFICIAL';
   }
 
   function item(key, groupId, name, values = {}) {
-    return { id: key, groupId, name, values, subitems: [], subitemsExpanded: false };
+    return { id: key, groupId, name, values, order: 0, subitems: [], subitemsExpanded: false };
+  }
+
+  function nextItemOrder(collection = []) {
+    return (collection || []).reduce((highest, entry, index) => {
+      const current = Number(entry?.order);
+      return Math.max(highest, Number.isFinite(current) ? current : index);
+    }, -1) + 1;
   }
 
   function group(key, name, color, items = []) {
@@ -533,6 +600,7 @@ window.__ATLAS_VERSION__ = '2.1.0 OFICIAL';
       settings: config.settings || {},
       columns: config.columns || [],
       groups: config.groups || [],
+      storageConnectionId: config.storageConnectionId || null,
     };
   }
 
@@ -648,6 +716,16 @@ window.__ATLAS_VERSION__ = '2.1.0 OFICIAL';
                   official: true,
                   exampleVersion: 3,
                   views: ['table', 'works', 'kanban', 'gantt'],
+                  settings: {
+                    works_mode: 'sectorized',
+                    works_sector_column_id: 'obra-tipo',
+                    works_sector_order: ['POP', 'CEO', 'CTO'],
+                    works_sector_colors: {
+                      POP: '#a96510',
+                      CEO: '#73568f',
+                      CTO: '#176ead',
+                    },
+                  },
                   columns: cityWorksColumns(),
                   groups: cityWorksGroups(),
                 }),
@@ -908,15 +986,25 @@ window.__ATLAS_VERSION__ = '2.1.0 OFICIAL';
   async function readRemoteTableByIds(table, itemIds, options = {}) {
     const ids = [...new Set((itemIds || []).filter(Boolean))];
     if (!ids.length) return [];
-    const rows = [];
+    const chunks = [];
     for (let index = 0; index < ids.length; index += 100) {
-      const chunk = ids.slice(index, index + 100);
-      rows.push(...await readRemoteTable(table, {
-        ...options,
-        in: { column: options.itemColumn || 'item_id', values: chunk },
-      }));
+      chunks.push(ids.slice(index, index + 100));
     }
-    return rows;
+    const results = new Array(chunks.length);
+    let cursor = 0;
+    const concurrency = Math.min(5, chunks.length);
+    const worker = async () => {
+      while (cursor < chunks.length) {
+        const index = cursor;
+        cursor += 1;
+        results[index] = await readRemoteTable(table, {
+          ...options,
+          in: { column: options.itemColumn || 'item_id', values: chunks[index] },
+        });
+      }
+    };
+    await Promise.all(Array.from({ length: concurrency }, worker));
+    return results.flat();
   }
 
   function mapRemoteStorage(entry) {
@@ -1054,13 +1142,21 @@ window.__ATLAS_VERSION__ = '2.1.0 OFICIAL';
   async function hydrateBoardRemoteData(boardId, options = {}) {
     const normalizedBoardId = String(boardId || '');
     if (!normalizedBoardId || !runtime.authClient || !runtime.remoteMode) return false;
-    if (!options.force && runtime.loadedBoardData.has(normalizedBoardId)) return true;
-    if (runtime.boardDataLoading.has(normalizedBoardId)) return runtime.boardDataLoading.get(normalizedBoardId);
+    const boardItemRows = (runtime.remoteRows?.atlas_v2_items || []).filter((entry) => String(entry.board_id) === normalizedBoardId);
+    const boardItemIds = boardItemRows.map((entry) => String(entry.id));
+    const requestedIds = [...new Set((Array.isArray(options.itemIds) ? options.itemIds : boardItemIds).map(String).filter(Boolean))];
+    const itemIds = options.force ? requestedIds : requestedIds.filter((itemId) => !runtime.loadedItemValues.has(itemId));
+    if (!itemIds.length) {
+      if (boardItemIds.every((itemId) => runtime.loadedItemValues.has(itemId))) runtime.loadedBoardData.add(normalizedBoardId);
+      return true;
+    }
+    if (runtime.boardDataLoading.has(normalizedBoardId)) {
+      await runtime.boardDataLoading.get(normalizedBoardId);
+      return hydrateBoardRemoteData(normalizedBoardId, options);
+    }
     if (runtime.data?.activeBoardId === normalizedBoardId) document.body.classList.add('atlas-v2-board-loading');
 
     const operation = (async () => {
-      const itemRows = (runtime.remoteRows?.atlas_v2_items || []).filter((entry) => String(entry.board_id) === normalizedBoardId);
-      const itemIds = itemRows.map((entry) => entry.id);
       const [valueRows, attachmentRows] = await Promise.all([
         readRemoteTableByIds('atlas_v2_item_values', itemIds, {
           select: 'id,item_id,column_id,valor,updated_by,created_at,updated_at',
@@ -1078,7 +1174,10 @@ window.__ATLAS_VERSION__ = '2.1.0 OFICIAL';
         visit(itemEntry.subitems || []);
       });
       (context.board.groups || []).forEach((groupEntry) => visit(groupEntry.items || []));
-      itemMap.forEach((itemEntry) => { itemEntry.values = {}; });
+      itemIds.forEach((itemId) => {
+        const itemEntry = itemMap.get(itemId);
+        if (itemEntry) itemEntry.values = {};
+      });
       valueRows.forEach((entry) => {
         const itemEntry = itemMap.get(entry.item_id);
         if (itemEntry) itemEntry.values[entry.column_id] = entry.valor;
@@ -1086,17 +1185,24 @@ window.__ATLAS_VERSION__ = '2.1.0 OFICIAL';
       mergeRemoteAttachments(itemMap, attachmentRows, (context.board.columns || []).map((entry) => ({ id: entry.id, tipo: entry.type })));
       runtime.remoteRows = runtime.remoteRows || {};
       const itemIdSet = new Set(itemIds.map(String));
+      const projectedValueRows = valueRows.map(projectRealtimeValueRow);
       runtime.remoteRows.atlas_v2_item_values = [
         ...(runtime.remoteRows.atlas_v2_item_values || []).filter((entry) => !itemIdSet.has(String(entry.item_id))),
-        ...valueRows,
+        ...projectedValueRows,
       ];
       runtime.remoteRows.atlas_v2_attachments = [
         ...(runtime.remoteRows.atlas_v2_attachments || []).filter((entry) => !itemIdSet.has(String(entry.item_id))),
         ...attachmentRows,
       ];
-      runtime.loadedBoardData.add(normalizedBoardId);
+      itemIds.forEach((itemId) => runtime.loadedItemValues.add(String(itemId)));
+      if (boardItemIds.every((itemId) => runtime.loadedItemValues.has(itemId))) runtime.loadedBoardData.add(normalizedBoardId);
       scheduleBootstrapCacheWrite(runtime.data);
-      if (options.renderAfter !== false && runtime.data.activeBoardId === normalizedBoardId) render();
+      if (options.renderAfter !== false && runtime.data.activeBoardId === normalizedBoardId) {
+        renderBoardContent(context.board);
+        renderSelection(context.board);
+        applyPermissionUi(context);
+        refreshIcons(document.getElementById('atlas-v2-board-content'));
+      }
       return true;
     })().catch((error) => {
       console.error('Atlas V2: falha ao carregar os registros do quadro.', error);
@@ -1776,7 +1882,7 @@ window.__ATLAS_VERSION__ = '2.1.0 OFICIAL';
       ? local.activeBoardId
       : boardRows[0]?.id;
     const activeItemIds = itemRows
-      .filter((entry) => entry.board_id === preferredBoardId)
+      .filter((entry) => entry.board_id === preferredBoardId && !entry.parent_item_id)
       .map((entry) => entry.id);
     const [valueRows, attachmentRows] = await Promise.all([
       readRemoteTableByIds('atlas_v2_item_values', activeItemIds, {
@@ -1811,9 +1917,33 @@ window.__ATLAS_VERSION__ = '2.1.0 OFICIAL';
       });
     }
     itemTree.forEach((entry) => { entry.subitemsExpanded = false; });
+    const indexRows = (rows, keySelector) => {
+      const index = new Map();
+      rows.forEach((entry) => {
+        const key = keySelector(entry);
+        if (!index.has(key)) index.set(key, []);
+        index.get(key).push(entry);
+      });
+      return index;
+    };
+    const viewsByBoard = indexRows(viewRows, (entry) => entry.board_id);
+    const columnsByBoard = indexRows(columnRows, (entry) => entry.board_id);
+    const groupsByBoard = indexRows(groupRows, (entry) => entry.board_id);
+    const topItemsByGroup = indexRows(
+      itemRows.filter((entry) => !entry.parent_item_id && !entry.arquivado),
+      (entry) => `${entry.board_id}:${entry.group_id}`,
+    );
+    const modulesByWorkspace = indexRows(
+      moduleRows.filter((entry) => entry.ativo !== false),
+      (entry) => entry.workspace_id,
+    );
+    const boardsByModule = indexRows(
+      boardRows.filter((entry) => entry.ativo !== false),
+      (entry) => entry.module_id,
+    );
     const boards = new Map(boardRows.map((entry) => {
       const settings = entry.configuracoes && typeof entry.configuracoes === 'object' ? entry.configuracoes : {};
-      const boardViews = viewRows.filter((view) => view.board_id === entry.id);
+      const boardViews = viewsByBoard.get(entry.id) || [];
       const views = boardViews.map((view) => view.tipo).filter((type, index, list) => VIEW_TYPES[type] && list.indexOf(type) === index);
       const boardEntry = board({
         id: entry.id,
@@ -1824,15 +1954,14 @@ window.__ATLAS_VERSION__ = '2.1.0 OFICIAL';
         official: entry.oficial,
         views: views.length ? views : (Array.isArray(settings.views) ? settings.views.filter((type) => VIEW_TYPES[type]) : ['table', 'kanban', 'gantt']),
         activeView: views.find((type) => boardViews.find((view) => view.tipo === type && view.padrao)) || views[0] || 'table',
-        columns: columnRows.filter((columnEntry) => columnEntry.board_id === entry.id && columnEntry.ativo !== false).map(mapRemoteColumn),
-        groups: groupRows.filter((groupEntry) => groupEntry.board_id === entry.id).map((groupEntry) => ({
+        columns: (columnsByBoard.get(entry.id) || []).filter((columnEntry) => columnEntry.ativo !== false).map(mapRemoteColumn),
+        groups: (groupsByBoard.get(entry.id) || []).map((groupEntry) => ({
           id: groupEntry.id,
           name: groupEntry.nome,
           color: groupEntry.cor,
           collapsed: Boolean(groupEntry.recolhido),
           order: Number(groupEntry.ordem || 0),
-          items: itemRows
-            .filter((itemEntry) => itemEntry.board_id === entry.id && itemEntry.group_id === groupEntry.id && !itemEntry.parent_item_id && !itemEntry.arquivado)
+          items: (topItemsByGroup.get(`${entry.id}:${groupEntry.id}`) || [])
             .map((itemEntry) => itemTree.get(itemEntry.id))
             .filter(Boolean),
         })),
@@ -1881,7 +2010,7 @@ window.__ATLAS_VERSION__ = '2.1.0 OFICIAL';
       order: Number(entry.ordem || 0),
       active: entry.ativo !== false,
       storageConnectionId: entry.storage_connection_id || null,
-      modules: moduleRows.filter((moduleEntry) => moduleEntry.workspace_id === entry.id && moduleEntry.ativo !== false).map((moduleEntry) => ({
+      modules: (modulesByWorkspace.get(entry.id) || []).map((moduleEntry) => ({
         id: moduleEntry.id,
         name: moduleEntry.nome,
         description: moduleEntry.descricao,
@@ -1891,7 +2020,7 @@ window.__ATLAS_VERSION__ = '2.1.0 OFICIAL';
         order: Number(moduleEntry.ordem || 0),
         active: moduleEntry.ativo !== false,
         storageConnectionId: moduleEntry.storage_connection_id || null,
-        boards: boardRows.filter((boardEntry) => boardEntry.module_id === moduleEntry.id && boardEntry.ativo !== false).map((boardEntry) => boards.get(boardEntry.id)).filter(Boolean),
+        boards: (boardsByModule.get(moduleEntry.id) || []).map((boardEntry) => boards.get(boardEntry.id)).filter(Boolean),
       })),
     }));
 
@@ -1932,7 +2061,13 @@ window.__ATLAS_VERSION__ = '2.1.0 OFICIAL';
     runtime.data = remote;
     runtime.remoteRows = remoteRows(remote);
     runtime.remoteRows.atlas_v2_attachments = includeAttachments ? (attachmentRows || []) : previousAttachmentRows;
-    runtime.loadedBoardData = new Set(preferredBoardId ? [preferredBoardId] : []);
+    runtime.loadedItemValues = new Set(activeItemIds.map(String));
+    const preferredBoardItemIds = itemRows.filter((entry) => entry.board_id === preferredBoardId).map((entry) => String(entry.id));
+    runtime.loadedBoardData = new Set(
+      preferredBoardId && preferredBoardItemIds.every((itemId) => runtime.loadedItemValues.has(itemId))
+        ? [preferredBoardId]
+        : [],
+    );
     scheduleBootstrapCacheWrite(remote);
     return remote;
   }
@@ -1983,7 +2118,6 @@ window.__ATLAS_VERSION__ = '2.1.0 OFICIAL';
       runtime.data.system.integrations = applyRealtimeIntegrationStatus(integrationRows.map((entry) => ({ id: entry.id, name: entry.nome, status: entry.status, detail: entry.configuracoes?.detail || '' })));
       runtime.data.auditLog = activityRows.map(mapRemoteAuditEntry);
       runtime.data.trash = trashRows.map(mapRemoteTrashEntry);
-      await hydrateBoardRemoteData(runtime.data.activeBoardId, { force: true, renderAfter: false });
       runtime.deferredHydrated = true;
       scheduleBootstrapCacheWrite(runtime.data);
       render();
@@ -2081,7 +2215,7 @@ window.__ATLAS_VERSION__ = '2.1.0 OFICIAL';
   function scheduleRemoteSync() {
     if (!runtime.remoteMode || !runtime.authClient) return;
     clearTimeout(runtime.remoteSyncTimer);
-    runtime.remoteSyncTimer = setTimeout(syncRemoteData, 140);
+    runtime.remoteSyncTimer = setTimeout(syncRemoteData, 70);
   }
 
   function replaceRemoteBaselineRow(table, row) {
@@ -2386,7 +2520,25 @@ window.__ATLAS_VERSION__ = '2.1.0 OFICIAL';
       const before = remoteMap(table, previous[table]);
       const after = remoteMap(table, next[table]);
       changes[table] = next[table].filter((row) => before.get(remoteKey(table, row)) !== JSON.stringify(row));
-      removals[table] = [...before.keys()].filter((key) => !after.has(key));
+      removals[table] = [...before.keys()].filter((key) => {
+        if (after.has(key)) return false;
+        // CRITICO (hotfix 2026-08-03): remoteRows(runtime.data) percorre TODA a
+        // arvore de dados em memoria, mas o carregamento sob demanda (V2.2.0)
+        // deixa os valores de itens nao abertos nesta sessao vazios ({}) ate
+        // serem hidratados. Sem esta guarda, um sync disparado por QUALQUER
+        // acao (duplicar, mover, restaurar da lixeira) apagava de verdade, no
+        // Supabase, os valores de itens que o usuario simplesmente nunca abriu
+        // nesta sessao - confundindo "nao carregado" com "usuario apagou o
+        // campo". So um item presente em runtime.loadedItemValues teve seus
+        // valores efetivamente buscados do servidor, e so nesse caso a
+        // ausencia de uma chave aqui reflete uma remocao real feita pelo
+        // usuario.
+        if (table === 'atlas_v2_item_values') {
+          const itemId = key.split(':')[0];
+          if (!runtime.loadedItemValues.has(itemId)) return false;
+        }
+        return true;
+      });
     });
     if (runtime.authProfile?.role !== 'admin') {
       ['atlas_v2_storage_connections', 'atlas_v2_access_rules', 'atlas_v2_board_members', 'atlas_v2_field_templates'].forEach((table) => {
@@ -2399,49 +2551,73 @@ window.__ATLAS_VERSION__ = '2.1.0 OFICIAL';
     runtime.remoteSyncing = true;
     const indicator = document.getElementById('atlas-v2-save-state');
     if (indicator) indicator.innerHTML = '<i data-lucide="loader-circle"></i>Validando alterações';
+    const totalUnits = Math.max(1, Object.values(changes).flat().length + Object.values(removals).flat().length);
+    let completedUnits = 0;
+    const advanceSyncProgress = (label, units = 0) => {
+      completedUnits += Number(units) || 0;
+      const percent = 8 + (completedUnits / totalUnits) * 84;
+      setOperationProgress(label, percent, `${Math.min(completedUnits, totalUnits)} de ${totalUnits} alteração(ões)`);
+    };
+    setOperationProgress('Validando alterações', 4, `${totalUnits} alteração(ões) na fila`);
     let conflictDetected = false;
     try {
-      const conflictEntries = [];
-      for (const table of Object.keys(next)) {
-        if (!changes[table]?.length && !removals[table]?.length) continue;
-        const conflicts = await verifyRemoteSyncConflicts(table, changes[table], removals[table], previous[table]);
-        if (conflicts.length) conflictEntries.push(...conflicts.map((key) => `${table}:${key}`));
-      }
+      const conflictResults = await Promise.all(Object.keys(next)
+        .filter((table) => changes[table]?.length || removals[table]?.length)
+        .map(async (table) => ({
+          table,
+          conflicts: await verifyRemoteSyncConflicts(table, changes[table], removals[table], previous[table]),
+        })));
+      const conflictEntries = conflictResults.flatMap(({ table, conflicts }) => conflicts.map((key) => `${table}:${key}`));
       if (conflictEntries.length) {
         conflictDetected = true;
         runtime.remoteReady = false;
         runtime.remoteRefreshQueued = true;
         if (indicator) indicator.innerHTML = '<i data-lucide="shield-alert"></i>Atualização concorrente detectada';
+        setOperationProgress('Atualização concorrente detectada', 100, 'Os dados mais recentes do servidor serão carregados.');
+        clearOperationProgress(2500);
         toast('Outro usuário atualizou esses dados antes do seu salvamento. A versão mais recente foi preservada; aguarde a atualização e refaça somente a sua alteração.', true);
         return false;
       }
 
       if (indicator) indicator.innerHTML = '<i data-lucide="loader-circle"></i>Sincronizando';
-      const upsertOrder = ['atlas_v2_storage_connections', 'atlas_v2_workspaces', 'atlas_v2_modules', 'atlas_v2_boards', 'atlas_v2_groups', 'atlas_v2_columns', 'atlas_v2_automations', 'atlas_v2_items', 'atlas_v2_item_values', 'atlas_v2_views', 'atlas_v2_access_rules', 'atlas_v2_board_members', 'atlas_v2_field_templates'];
-      for (const table of upsertOrder) {
-        if (!changes[table]?.length) continue;
-        const options = table === 'atlas_v2_item_values' ? { onConflict: 'item_id,column_id' } : table === 'atlas_v2_board_members' ? { onConflict: 'board_id,user_id' } : { onConflict: 'id' };
-        const { error } = await runtime.authClient.from(table).upsert(changes[table], options);
-        if (error) throw error;
+      const upsertLayers = [
+        ['atlas_v2_storage_connections', 'atlas_v2_workspaces'],
+        ['atlas_v2_modules'],
+        ['atlas_v2_boards'],
+        ['atlas_v2_groups', 'atlas_v2_columns', 'atlas_v2_automations', 'atlas_v2_views', 'atlas_v2_access_rules', 'atlas_v2_board_members', 'atlas_v2_field_templates'],
+        ['atlas_v2_items'],
+        ['atlas_v2_item_values'],
+      ];
+      for (const layer of upsertLayers) {
+        await Promise.all(layer.map(async (table) => {
+          if (!changes[table]?.length) return;
+          const options = table === 'atlas_v2_item_values' ? { onConflict: 'item_id,column_id' } : table === 'atlas_v2_board_members' ? { onConflict: 'board_id,user_id' } : { onConflict: 'id' };
+          const { error } = await runtime.authClient.from(table).upsert(changes[table], options);
+          if (error) throw error;
+          advanceSyncProgress('Enviando informações', changes[table].length);
+        }));
       }
       const deleteOrder = ['atlas_v2_views', 'atlas_v2_item_values', 'atlas_v2_items', 'atlas_v2_columns', 'atlas_v2_groups', 'atlas_v2_board_members', 'atlas_v2_access_rules', 'atlas_v2_boards', 'atlas_v2_modules', 'atlas_v2_workspaces', 'atlas_v2_storage_connections', 'atlas_v2_automations', 'atlas_v2_field_templates'];
       for (const table of deleteOrder) {
         if (!removals[table]?.length) continue;
         if (table === 'atlas_v2_item_values') {
-          for (const key of removals[table]) {
+          await Promise.all(removals[table].map(async (key) => {
             const [itemId, columnId] = key.split(':');
             const { error } = await runtime.authClient.from(table).delete().eq('item_id', itemId).eq('column_id', columnId);
             if (error) throw error;
-          }
+            advanceSyncProgress('Removendo informações', 1);
+          }));
         } else if (table === 'atlas_v2_board_members') {
-          for (const key of removals[table]) {
+          await Promise.all(removals[table].map(async (key) => {
             const [boardId, userId] = key.split(':');
             const { error } = await runtime.authClient.from(table).delete().eq('board_id', boardId).eq('user_id', userId);
             if (error) throw error;
-          }
+            advanceSyncProgress('Removendo acessos', 1);
+          }));
         } else {
           const { error } = await runtime.authClient.from(table).delete().in('id', removals[table]);
           if (error) throw error;
+          advanceSyncProgress('Removendo informações', removals[table].length);
         }
       }
       const attachmentBaseline = Array.isArray(runtime.remoteRows?.atlas_v2_attachments)
@@ -2451,10 +2627,14 @@ window.__ATLAS_VERSION__ = '2.1.0 OFICIAL';
       runtime.remoteRows.atlas_v2_attachments = attachmentBaseline;
       const automationApplied = await refreshAutomationEffectsAfterSync(changes, syncStartedAt);
       if (indicator) indicator.innerHTML = `<i data-lucide="cloud-check"></i>${automationApplied ? 'Automação aplicada' : 'Alterações sincronizadas'}`;
+      setOperationProgress('Sincronização concluída', 100, `${totalUnits} alteração(ões) enviada(s)`);
+      clearOperationProgress();
       return true;
     } catch (error) {
       console.error('Atlas V2: falha ao sincronizar dados operacionais.', error);
       if (indicator) indicator.innerHTML = '<i data-lucide="cloud-alert"></i>Falha ao sincronizar';
+      setOperationProgress('Falha na sincronização', 100, error.message || String(error));
+      clearOperationProgress(2500);
       toast(`Falha ao sincronizar com o Supabase: ${error.message || error}`, true);
       return false;
     } finally {
@@ -2624,7 +2804,9 @@ window.__ATLAS_VERSION__ = '2.1.0 OFICIAL';
     if (options.revision !== false) runtime.dataRevision += 1;
     if (message && options.audit !== false) recordAudit(message, options);
 
-    const localBackupSaved = persistLocalBackup(runtime.data);
+    const shouldPersistImmediately = !runtime.remoteMode || navigator.onLine === false || options.localImmediate === true;
+    const localBackupSaved = shouldPersistImmediately ? persistLocalBackup(runtime.data) : true;
+    if (!shouldPersistImmediately) scheduleLocalBackupCompaction();
     scheduleBootstrapCacheWrite(runtime.data);
     if (options.remote !== false) {
       if (!runtime.remoteMode || runtime.remoteReady) scheduleRemoteSync();
@@ -2754,7 +2936,7 @@ window.__ATLAS_VERSION__ = '2.1.0 OFICIAL';
   }
 
   function authVersion() {
-    return window.ATNX_CONFIG?.V2_VERSION || 'V2.1.0 Oficial';
+    return window.ATNX_CONFIG?.V2_VERSION || 'V2.2.0 Desenvolvimento';
   }
 
   function authFeatureList() {
@@ -2764,7 +2946,9 @@ window.__ATLAS_VERSION__ = '2.1.0 OFICIAL';
       ['sigma', 'Fórmulas operacionais', 'Colunas calculadas automaticamente a partir dos dados do quadro.'],
       ['history', 'Histórico restaurável', 'Consulte alterações e recupere valores anteriores de cada registro.'],
       ['shield-check', 'Permissões granulares', 'Controle de acesso por área, módulo, quadro, grupo e coluna.'],
-      ['file-search-2', 'Importação inteligente', 'Mapeamento, prévia, duplicados e reversão do último lote importado.'],
+      ['file-search-2', 'Importador universal', 'Detecta abas, cabeçalhos, colunas, grupos e hierarquias antes de enviar os dados.'],
+      ['list-checks', 'Edição em massa', 'Selecione elementos e subelementos para atualizar todos de uma só vez.'],
+      ['cloud-upload', 'Sincronização com progresso', 'Envios mais rápidos com acompanhamento em porcentagem de dados e arquivos.'],
       ['image', 'Imagens com controle completo', 'Zoom, rotação, tela cheia e navegação entre anexos no Atlas.'],
       ['smartphone', 'Modo campo e PWA', 'Experiência direta no celular, câmera, localização e trabalho offline.'],
     ];
@@ -2850,7 +3034,7 @@ window.__ATLAS_VERSION__ = '2.1.0 OFICIAL';
         <span class="atlas-v2-auth-state-icon"><i data-lucide="user-round-check"></i></span>
         <span class="atlas-v2-auth-kicker">CADASTRO CRIADO</span>
         <h2>Solicitação registrada</h2>
-        <p>Confirme seu e-mail, caso solicitado, e aguarde a liberação de um administrador.</p>
+        <p>Seu cadastro aguarda somente a liberação de um administrador. Não é necessário confirmar o e-mail.</p>
         ${authNotice(message, 'success')}
         <button class="atlas-v2-auth-primary" type="button" data-auth-action="show-login"><i data-lucide="log-in"></i>Ir para o login</button>
       </section>`;
@@ -2919,7 +3103,7 @@ window.__ATLAS_VERSION__ = '2.1.0 OFICIAL';
     const message = String(error?.message || error || '').trim();
     const normalized = message.toLowerCase();
     if (normalized.includes('invalid login credentials')) return 'E-mail ou senha incorretos.';
-    if (normalized.includes('email not confirmed')) return 'Confirme seu e-mail antes de entrar.';
+    if (normalized.includes('email not confirmed')) return 'Seu acesso ainda aguarda liberação do administrador.';
     if (normalized.includes('user already registered')) return 'Este e-mail já possui cadastro.';
     if (normalized.includes('password should be') || normalized.includes('weak password')) return 'A senha precisa ter pelo menos 8 caracteres e não pode estar em listas de senhas vazadas.';
     if (normalized.includes('rate limit')) return 'Muitas tentativas. Aguarde alguns minutos e tente novamente.';
@@ -3025,8 +3209,8 @@ window.__ATLAS_VERSION__ = '2.1.0 OFICIAL';
 
   function registerAtlasPwa() {
     if (!('serviceWorker' in navigator) || !/^https?:$/.test(window.location.protocol)) return;
-    navigator.serviceWorker.register('./service-worker.js?v=2.1.0-oficial-2', { scope: './' }).catch((error) => {
-      console.warn('Atlas V2.1: PWA indisponível.', error);
+      navigator.serviceWorker.register('./service-worker.js?v=2.2.0-dev-7', { scope: './' }).catch((error) => {
+      console.warn('Atlas V2.2: PWA indisponível.', error);
     });
   }
 
@@ -3080,7 +3264,10 @@ window.__ATLAS_VERSION__ = '2.1.0 OFICIAL';
         runtime.remoteReady = false;
         runtime.remoteRows = remoteRows(cached);
         runtime.remoteRows.atlas_v2_attachments = [];
-        runtime.loadedBoardData = new Set(cached.activeBoardId ? [cached.activeBoardId] : []);
+        const cachedBoard = findBoard(cached.activeBoardId)?.board;
+        const cachedItemIds = cachedBoard ? flatBoardItems(cachedBoard).map(({ item }) => String(item.id)) : [];
+        runtime.loadedItemValues = new Set(cachedItemIds);
+        runtime.loadedBoardData = new Set(cached.activeBoardId && cachedItemIds.length ? [cached.activeBoardId] : []);
         upsertAuthenticatedUser(profile, authUser);
         unlockApplication();
         render();
@@ -3165,7 +3352,7 @@ window.__ATLAS_VERSION__ = '2.1.0 OFICIAL';
       if (!runtime.data.users.some((entry) => entry.id === runtime.data.currentUserId) && runtime.authProfile) {
         runtime.data.users.unshift(databaseProfileToUser(runtime.authProfile, runtime.authSession?.user));
       }
-      saveData('', { audit: false, revision: false });
+      saveData('', { audit: false, revision: false, remote: false });
       if (options.renderAfter !== false) render();
     } catch (error) {
       console.error('Atlas V2: falha ao sincronizar usuários.', error);
@@ -3196,8 +3383,6 @@ window.__ATLAS_VERSION__ = '2.1.0 OFICIAL';
   async function submitAuthSignup(form) {
     renderAuth('loading');
     const options = { data: { nome: String(form.elements.name.value || '').trim() } };
-    const redirectTo = authRedirectUrl();
-    if (redirectTo) options.emailRedirectTo = redirectTo.replace('?recovery=1', '');
     const { data, error } = await runtime.authClient.auth.signUp({
       email: String(form.elements.email.value || '').trim(),
       password: String(form.elements.password.value || ''),
@@ -3335,9 +3520,59 @@ window.__ATLAS_VERSION__ = '2.1.0 OFICIAL';
     return (runtime.data.storageConnections || []).find((entry) => entry.id === connectionId) || null;
   }
 
+  function normalizedStorageScopeName(value) {
+    return String(value || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, ' ')
+      .trim();
+  }
+
   function storageForContext(context = findBoard()) {
     if (!context) return null;
-    return storageConnection(context.board?.storageConnectionId || context.module?.storageConnectionId || context.workspace?.storageConnectionId);
+    const direct = storageConnection(context.board?.storageConnectionId || context.module?.storageConnectionId || context.workspace?.storageConnectionId);
+    if (direct) return direct;
+    const scopeNames = [context.module?.name, context.workspace?.name, context.board?.name]
+      .map(normalizedStorageScopeName)
+      .filter(Boolean);
+    return (runtime.data.storageConnections || []).find((entry) => {
+      if (entry.status === 'disabled') return false;
+      const connectionNames = [entry.sector, entry.name].map(normalizedStorageScopeName).filter(Boolean);
+      return connectionNames.some((name) => scopeNames.includes(name));
+    }) || null;
+  }
+
+  function assignStorageConnectionToMatchingScope(connection) {
+    if (!connection?.id) return '';
+    const sectorName = normalizedStorageScopeName(connection.sector);
+    const nameWithoutDrive = normalizedStorageScopeName(String(connection.name || '').replace(/^drive\s+(do|da|de)\s+/i, ''));
+    const targetNames = [sectorName, nameWithoutDrive].filter(Boolean);
+    let matchedWorkspace = null;
+    let matchedModule = null;
+    runtime.data.workspaces.some((workspace) => {
+      if (!workspace.storageConnectionId && targetNames.includes(normalizedStorageScopeName(workspace.name))) matchedWorkspace = workspace;
+      matchedModule = (workspace.modules || []).find((module) => (
+        !module.storageConnectionId
+        && targetNames.includes(normalizedStorageScopeName(module.name))
+      )) || null;
+      return Boolean(matchedModule);
+    });
+    const context = findBoard();
+    const targetModule = matchedModule || (!context?.module?.storageConnectionId ? context?.module : null);
+    if (targetModule) {
+      targetModule.storageConnectionId = connection.id;
+      return `módulo ${targetModule.name}`;
+    }
+    if (matchedWorkspace) {
+      matchedWorkspace.storageConnectionId = connection.id;
+      return `área ${matchedWorkspace.name}`;
+    }
+    if (context?.workspace && !context.workspace.storageConnectionId) {
+      context.workspace.storageConnectionId = connection.id;
+      return `área ${context.workspace.name}`;
+    }
+    return '';
   }
 
   function storageStatusLabel(status) {
@@ -3755,7 +3990,7 @@ window.__ATLAS_VERSION__ = '2.1.0 OFICIAL';
       const detail = entry.accountEmail || entry.folderId
         ? `${entry.accountEmail || 'Conta setorial'}${entry.folderId ? ` · Pasta ${entry.folderId.slice(0, 10)}...` : ''}`
         : 'Conexão existente; abra para revisar ou completar os dados.';
-      return `<div class="atlas-v2-admin-storage-row"><span><i data-lucide="hard-drive"></i></span><span><strong>${escapeHtml(entry.name)}</strong><small>${escapeHtml(entry.sector)} · ${escapeHtml(detail)} · ${usage} uso(s)${escapeHtml(warning)}</small></span><b class="is-${attr(entry.status)}">${escapeHtml(storageStatusLabel(entry.status))}</b><button type="button" data-action="admin-edit-storage" data-storage-id="${attr(entry.id)}" title="Configurar conexão"><i data-lucide="settings-2"></i></button></div>`;
+      return `<div class="atlas-v2-admin-storage-row"><span><i data-lucide="hard-drive"></i></span><span><strong>${escapeHtml(entry.name)}</strong><small>${escapeHtml(entry.sector)} · ${escapeHtml(detail)} · ${usage} uso(s)${escapeHtml(warning)}</small></span><b class="is-${attr(entry.status)}">${escapeHtml(storageStatusLabel(entry.status))}</b><button type="button" data-action="admin-organize-storage" data-storage-id="${attr(entry.id)}" title="Organizar arquivos existentes"><i data-lucide="folder-tree"></i></button><button type="button" data-action="admin-edit-storage" data-storage-id="${attr(entry.id)}" title="Configurar conexão"><i data-lucide="settings-2"></i></button></div>`;
     }).join('');
     const trash = (runtime.data.trash || []).map((entry) => `<div class="atlas-v2-admin-trash-row"><i data-lucide="trash-2"></i><span><strong>${escapeHtml(entry.name)}</strong><small>${escapeHtml(entry.type)} · ${formatDateTime(entry.deletedAt)}</small></span><button type="button" data-action="admin-restore-trash" data-trash-id="${attr(entry.id)}" title="Restaurar"><i data-lucide="undo-2"></i></button><button class="is-danger" type="button" data-action="admin-purge-trash" data-trash-id="${attr(entry.id)}" title="Excluir definitivamente"><i data-lucide="x"></i></button></div>`).join('');
     const errors = (runtime.data.errors || []).map((entry) => `<div class="atlas-v2-admin-trash-row"><i data-lucide="triangle-alert"></i><span><strong>${escapeHtml(entry.title)}</strong><small>${escapeHtml(entry.detail || '')}</small></span></div>`).join('');
@@ -3886,10 +4121,12 @@ window.__ATLAS_VERSION__ = '2.1.0 OFICIAL';
     if (form.elements.driveVerified.value !== '1') return setAdminStorageStatus('Teste a conexão antes de salvar.', 'error');
     const existing = storageConnection(connectionId);
     const payload = { ...draft, status: 'connected', module: existing?.module || 'custom', verifiedAt: new Date().toISOString() };
+    const savedConnection = existing || { id: id('storage'), ...payload, createdAt: new Date().toISOString() };
     if (existing) Object.assign(existing, payload);
-    else runtime.data.storageConnections.push({ id: id('storage'), ...payload, createdAt: new Date().toISOString() });
+    else runtime.data.storageConnections.push(savedConnection);
+    const linkedScope = storageUsageCount(savedConnection.id) ? '' : assignStorageConnectionToMatchingScope(savedConnection);
     closeOverlay();
-    saveData(existing ? 'Conexão de Drive atualizada' : 'Conexão de Drive cadastrada');
+    saveData(`${existing ? 'Conexão de Drive atualizada' : 'Conexão de Drive cadastrada'}${linkedScope ? ` e vinculada ao ${linkedScope}` : ''}`);
     render();
   }
 
@@ -3958,10 +4195,11 @@ window.__ATLAS_VERSION__ = '2.1.0 OFICIAL';
     try {
       if (runtime.authClient && runtime.authSession) {
         const databaseValue = field === 'status' ? PROFILE_STATUS_TO_DATABASE[value] : value;
-        const { error } = await runtime.authClient
-          .from('atlas_profiles')
-          .update({ [field]: databaseValue, updated_at: new Date().toISOString() })
-          .eq('id', userId);
+        const { error } = await runtime.authClient.rpc('atlas_admin_update_profile_access', {
+          p_user_id: userId,
+          p_role: field === 'role' ? databaseValue : null,
+          p_status: field === 'status' ? databaseValue : null,
+        });
         if (error) throw error;
       }
       if (field === 'status' && value === 'active') user.lastActivity = new Date().toISOString();
@@ -4168,6 +4406,12 @@ window.__ATLAS_VERSION__ = '2.1.0 OFICIAL';
     const parent = { index: found.index, workspaceId: found.workspace?.id || '', moduleId: found.module?.id || '' };
     const trashEntry = addTrashEntry(type, found.entry.name, found.entry, parent);
     if (!await stageTrashEntries([trashEntry])) return;
+    try {
+      await syncTrashEntriesWithDrive([trashEntry], 'delete');
+    } catch (error) {
+      await rollbackStagedTrash([trashEntry], `A exclusão foi cancelada porque o Drive não confirmou a remoção: ${error.message || error}`);
+      return;
+    }
     found.collection.splice(found.index, 1);
     const first = allBoards()[0];
     if (first && (!findBoard(runtime.data.activeBoardId) || runtime.data.activeBoardId === targetId)) {
@@ -4182,7 +4426,10 @@ window.__ATLAS_VERSION__ = '2.1.0 OFICIAL';
   function collectTrashAttachmentRows(entry) {
     const rows = [];
     const seen = new Set();
-    const addValues = (itemId, values = {}) => {
+    const fallbackBoardId = entry?.type === 'board'
+      ? entry.payload?.id
+      : entry?.parent?.boardId;
+    const addValues = (itemId, values = {}, boardId = fallbackBoardId) => {
       Object.entries(values || {}).forEach(([columnId, value]) => {
         const rawEntries = parseImageValue(value);
         normalizeImageEntries(value).forEach((attachment, order) => {
@@ -4208,43 +4455,123 @@ window.__ATLAS_VERSION__ = '2.1.0 OFICIAL';
             thumbnail_url: attachment.thumbnailUrl || attachment.viewUrl || attachment.url || '',
             ordem: order,
             criado_por: runtime.authSession?.user?.id || null,
+            atlasBoardId: boardId || '',
           });
         });
       });
     };
-    const visit = (node) => {
+    const visit = (node, boardId = fallbackBoardId) => {
       if (!node || typeof node !== 'object') return;
-      if (isUuid(node.id) && node.values && typeof node.values === 'object') addValues(node.id, node.values);
-      (node.subitems || []).forEach(visit);
-      (node.items || []).forEach(visit);
-      (node.groups || []).forEach(visit);
-      (node.boards || []).forEach(visit);
-      (node.modules || []).forEach(visit);
+      const activeBoardId = Array.isArray(node.groups) && Array.isArray(node.columns) && isUuid(node.id)
+        ? node.id
+        : boardId;
+      if (isUuid(node.id) && node.values && typeof node.values === 'object') addValues(node.id, node.values, activeBoardId);
+      (node.subitems || []).forEach((child) => visit(child, activeBoardId));
+      (node.items || []).forEach((child) => visit(child, activeBoardId));
+      (node.groups || []).forEach((child) => visit(child, activeBoardId));
+      (node.boards || []).forEach((child) => visit(child, child?.id || activeBoardId));
+      (node.modules || []).forEach((child) => visit(child, activeBoardId));
     };
-    visit(entry?.payload);
+    visit(entry?.payload, fallbackBoardId);
     if (entry?.type === 'column' && isUuid(entry.payload?.id)) {
       (entry.parent?.values || []).forEach((savedValue) => {
-        addValues(savedValue.itemId, { [entry.payload.id]: savedValue.value });
+        addValues(savedValue.itemId, { [entry.payload.id]: savedValue.value }, entry.parent?.boardId);
       });
     }
     return rows;
+  }
+
+  function databaseAttachmentRows(rows = []) {
+    return rows.map(({ atlasBoardId, ...row }) => row);
+  }
+
+  async function syncDriveAttachmentRows(rows = [], action = 'delete') {
+    const durableRows = rows.filter((row) => row?.file_id);
+    if (!durableRows.length) return;
+    const authToken = await currentAuthAccessToken();
+    const batches = new Map();
+
+    durableRows.forEach((row) => {
+      const boardId = row.atlasBoardId || '';
+      const context = boardId ? findBoard(boardId) : null;
+      const connection = storageConnection(row.storage_connection_id)
+        || (context ? storageForContext(context) : null);
+      if (!connection?.id || !connection?.appScriptUrl || !connection?.folderId) {
+        throw new Error(`A conexão do Drive não foi encontrada para ${row.nome || 'um arquivo'}.`);
+      }
+      const key = `${connection.id}::${boardId}`;
+      if (!batches.has(key)) batches.set(key, { connection, boardId, fileIds: [] });
+      batches.get(key).fileIds.push(row.file_id);
+    });
+
+    for (const batch of batches.values()) {
+      const response = await fetch(batch.connection.appScriptUrl, {
+        method: 'POST',
+        body: JSON.stringify({
+          action,
+          rootFolderId: batch.connection.folderId,
+          connectionId: batch.connection.id,
+          boardId: batch.boardId || null,
+          authToken,
+          fileIds: [...new Set(batch.fileIds.filter(Boolean))],
+        }),
+        redirect: 'follow',
+      });
+      const result = await response.json().catch(() => null);
+      if (!response.ok || !result?.success) {
+        const detail = result?.failures?.[0]?.error || result?.error || 'O conector não confirmou a operação.';
+        throw new Error(detail);
+      }
+    }
+  }
+
+  async function rollbackStagedTrash(entries, message) {
+    const ids = new Set(entries.map((entry) => entry.id));
+    for (const entry of entries) {
+      try { await removeRemoteTrashEntry(entry.id); } catch (_) {}
+    }
+    runtime.data.trash = runtime.data.trash.filter((entry) => !ids.has(entry.id));
+    toast(message, true);
+  }
+
+  async function syncTrashEntriesWithDrive(entries, action = 'delete') {
+    const rows = entries.flatMap((entry) => collectTrashAttachmentRows(entry));
+    await syncDriveAttachmentRows(rows, action);
   }
 
   async function restoreTrashAttachments(entry) {
     if (!runtime.authClient || !runtime.remoteMode) return;
     const rows = collectTrashAttachmentRows(entry);
     if (!rows.length) return;
+    const storedRows = databaseAttachmentRows(rows);
     const { data, error } = await runtime.authClient
       .from('atlas_v2_attachments')
-      .upsert(rows, { onConflict: 'id' })
+      .upsert(storedRows, { onConflict: 'id' })
       .select('*');
     if (error) throw error;
     runtime.remoteRows = runtime.remoteRows || {};
     const restoredIds = new Set(rows.map((row) => row.id));
     runtime.remoteRows.atlas_v2_attachments = [
       ...(runtime.remoteRows.atlas_v2_attachments || []).filter((row) => !restoredIds.has(row.id)),
-      ...(data || rows),
+      ...(data || storedRows),
     ];
+  }
+
+  // Hotfix 2026-08-03: marca como "carregados" todos os itens dentro do que
+  // acabou de ser restaurado da lixeira. Sem isso, o proximo sync completo
+  // trataria esses itens como "nao carregados nesta sessao" e a guarda nova de
+  // syncRemoteData (acima) descartaria justamente as mudancas que deveriam ser
+  // reenviadas ao Supabase.
+  function markRestoredValuesLoaded(node) {
+    if (!node || typeof node !== 'object') return;
+    if (isUuid(node.id) && node.values && typeof node.values === 'object') {
+      runtime.loadedItemValues.add(String(node.id));
+    }
+    (node.subitems || []).forEach(markRestoredValuesLoaded);
+    (node.items || []).forEach(markRestoredValuesLoaded);
+    (node.groups || []).forEach(markRestoredValuesLoaded);
+    (node.boards || []).forEach(markRestoredValuesLoaded);
+    (node.modules || []).forEach(markRestoredValuesLoaded);
   }
 
   function restoreTrashLocally(entry) {
@@ -4265,12 +4592,17 @@ window.__ATLAS_VERSION__ = '2.1.0 OFICIAL';
       boardContext.board.columns.splice(Math.min(Number(entry.parent.index || 0), boardContext.board.columns.length), 0, deepClone(entry.payload));
       (entry.parent.values || []).forEach((savedValue) => {
         const found = findItem(boardContext.board, savedValue.itemId);
-        if (found) found.item.values[entry.payload.id] = deepClone(savedValue.value);
+        if (found) {
+          found.item.values[entry.payload.id] = deepClone(savedValue.value);
+          runtime.loadedItemValues.add(String(savedValue.itemId));
+        }
       });
       return true;
     }
     if (!collection) { toast('A estrutura pai também precisa ser restaurada', true); return false; }
-    collection.splice(Math.min(Number(entry.parent.index || 0), collection.length), 0, deepClone(entry.payload));
+    const restored = deepClone(entry.payload);
+    collection.splice(Math.min(Number(entry.parent.index || 0), collection.length), 0, restored);
+    markRestoredValuesLoaded(restored);
     return true;
   }
 
@@ -4280,7 +4612,10 @@ window.__ATLAS_VERSION__ = '2.1.0 OFICIAL';
     if (!entry) return;
     const snapshot = deepClone(runtime.data);
     if (!restoreTrashLocally(entry)) return;
+    let driveRestored = false;
     try {
+      await syncTrashEntriesWithDrive([entry], 'restore');
+      driveRestored = true;
       saveData('', { remote: false, audit: false });
       if (runtime.remoteMode && !await syncRemoteData()) throw new Error('A estrutura não pôde ser recriada no Supabase.');
       await restoreTrashAttachments(entry);
@@ -4289,6 +4624,9 @@ window.__ATLAS_VERSION__ = '2.1.0 OFICIAL';
       saveData(`${entry.name} restaurado`, { scope: 'system', remote: false });
       render();
     } catch (error) {
+      if (driveRestored) {
+        try { await syncTrashEntriesWithDrive([entry], 'trash'); } catch (_) {}
+      }
       runtime.data = snapshot;
       persistLocalBackup(runtime.data);
       render();
@@ -4433,14 +4771,54 @@ window.__ATLAS_VERSION__ = '2.1.0 OFICIAL';
     refreshIcons();
   }
 
+  function updateActiveNavigation(boardId) {
+    document.querySelectorAll('.atlas-v2-board-row[data-board-id]').forEach((entry) => {
+      entry.classList.toggle('is-active', entry.dataset.boardId === String(boardId));
+    });
+  }
+
+  function renderBoardRoute(context, options = {}) {
+    if (!context) return;
+    document.body.classList.remove('atlas-v2-admin-page');
+    if (options.workspaceChanged) {
+      renderWorkspace(context.workspace);
+      renderNavigation();
+    } else {
+      updateActiveNavigation(context.board.id);
+    }
+    const content = document.getElementById('atlas-v2-board-content');
+    if (content) content.className = 'atlas-v2-board-content';
+    renderBoardHeader(context);
+    const boardSearch = document.getElementById('atlas-v2-board-search');
+    if (boardSearch) {
+      const isWorks = context.board.activeView === 'works';
+      boardSearch.value = runtime.boardSearch;
+      boardSearch.placeholder = isWorks ? 'Pesquisar cidade, setor, obra ou item' : 'Filtrar setor, item ou subitem';
+      boardSearch.setAttribute('aria-label', isWorks ? 'Pesquisar cidade, setor, obra ou item na visualiza\u00e7\u00e3o atual' : 'Filtrar setor, item ou subitem do quadro atual');
+    }
+    renderViewTabs(context.board);
+    renderBoardContent(context.board);
+    renderSelection(context.board);
+    applyPermissionUi(context);
+    [
+      document.getElementById('atlas-v2-breadcrumb'),
+      document.getElementById('atlas-v2-board-icon'),
+      document.getElementById('atlas-v2-view-tabs'),
+      document.getElementById('atlas-v2-board-content'),
+      document.getElementById('atlas-v2-selection-bar'),
+      options.workspaceChanged ? document.getElementById('atlas-v2-navigation') : null,
+    ].filter(Boolean).forEach(refreshIcons);
+  }
+
   function applyPermissionUi(context) {
     const canCreate = hasPermission('create', context);
     const canEdit = hasPermission('edit', context);
     const canDelete = hasPermission('delete', context);
     const canConfigure = hasPermission('configure', context);
     const canShare = hasPermission('share', context);
+    if (canCreate && canEdit && canDelete && canConfigure && canShare) return;
     const groups = [
-      [canCreate, ['add-item', 'add-item-to-group', 'add-subitem', 'duplicate-item', 'import']],
+      [canCreate, ['add-item', 'add-item-to-group', 'add-subitem', 'add-work-element', 'duplicate-item', 'import']],
       [canEdit, ['bulk-move', 'sort']],
       [canDelete, ['delete-item', 'bulk-delete', 'delete-work']],
       [canConfigure, ['add-group', 'add-column', 'group-menu', 'board-settings', 'automations']],
@@ -4694,8 +5072,6 @@ window.__ATLAS_VERSION__ = '2.1.0 OFICIAL';
   function renderWorkTabs(boardEntry) {
     const works = boardWorkEntries(boardEntry);
     if (!works.length) return '';
-    selectWorkFromContextSearch(boardEntry);
-    if (!works.some(({ item: itemEntry }) => itemEntry.id === runtime.workFilter)) runtime.workFilter = works[0].item.id;
     const searchMatch = workSearchMatch(boardEntry);
     const button = (label, value, count, color) => `<button class="atlas-v2-work-tab ${runtime.workFilter === value ? 'is-active' : ''} ${searchMatch?.item.id === value ? 'is-search-match' : ''}" type="button" data-action="filter-work" data-work-id="${attr(value)}" style="--work-color:${attr(color || '#176ead')}" title="${attr(label)}"><span class="atlas-v2-work-dot"></span><strong>${escapeHtml(label)}</strong><small>${count}</small></button>`;
     return `<nav class="atlas-v2-work-tabs" aria-label="Selecionar obra">${works.map(({ item: itemEntry, group: groupEntry }) => button(itemEntry.name, itemEntry.id, itemEntry.subitems?.length || 0, groupEntry.color)).join('')}<span class="atlas-v2-work-actions"><button class="atlas-v2-work-rename" type="button" data-action="rename-work" title="Renomear obra" aria-label="Renomear obra selecionada"><i data-lucide="pencil"></i></button><button class="atlas-v2-work-delete" type="button" data-action="delete-work" title="Excluir obra" aria-label="Excluir obra selecionada"><i data-lucide="trash-2"></i></button></span></nav>`;
@@ -4715,6 +5091,19 @@ window.__ATLAS_VERSION__ = '2.1.0 OFICIAL';
     return boardEntry.groups
       .flatMap((groupEntry) => groupEntry.items.map((itemEntry) => ({ item: itemEntry, group: groupEntry })))
       .find(({ item: itemEntry }) => itemEntry.id === runtime.workFilter) || null;
+  }
+
+  function ensureWorkSelection(boardEntry) {
+    const works = boardWorkEntries(boardEntry);
+    if (!works.length) {
+      runtime.workFilter = '';
+      return null;
+    }
+    selectWorkFromContextSearch(boardEntry);
+    if (!works.some(({ item: itemEntry }) => itemEntry.id === runtime.workFilter)) {
+      runtime.workFilter = works[0].item.id;
+    }
+    return selectedWork(boardEntry);
   }
 
   function sectorizedWorkItems(boardEntry, workItem, sectorName) {
@@ -4761,7 +5150,7 @@ window.__ATLAS_VERSION__ = '2.1.0 OFICIAL';
           </tr></thead>
           <tbody>${items.map((itemEntry) => renderItemRows(boardEntry, itemEntry)).join('') || `<tr><td colspan="${boardEntry.columns.length + 4}" class="atlas-v2-empty-cell">Nenhum registro em ${escapeHtml(sectorName)}.</td></tr>`}</tbody>
         </table>
-        <button class="atlas-v2-add-row" type="button" data-action="add-subitem" data-item-id="${attr(workItem.id)}" data-work-sector="${attr(sectorName)}"><i data-lucide="plus"></i><span>Adicionar elemento em ${escapeHtml(sectorName)}</span></button>
+        <button class="atlas-v2-add-row" type="button" data-action="add-work-element" data-item-id="${attr(workItem.id)}" data-work-sector="${attr(sectorName)}"><i data-lucide="plus"></i><span>Adicionar elemento em ${escapeHtml(sectorName)}</span></button>
       </div>` : ''}
     </section>`;
   }
@@ -4896,7 +5285,7 @@ window.__ATLAS_VERSION__ = '2.1.0 OFICIAL';
     const fieldModeActive = mobileVertical && boardEntry.activeView === 'table';
     root.classList.toggle('is-field-mode-view', fieldModeActive);
     if (boardEntry.activeView === 'works') {
-      selectWorkFromContextSearch(boardEntry);
+      ensureWorkSelection(boardEntry);
       if (mobileVertical) {
         root.innerHTML = renderMobileWorks(boardEntry);
       } else {
@@ -4926,6 +5315,7 @@ window.__ATLAS_VERSION__ = '2.1.0 OFICIAL';
       root.innerHTML = visibleGroups(boardEntry).map((groupEntry) => renderGroupTable(boardEntry, groupEntry, boardEntry.groups.indexOf(groupEntry))).join('') || `<div class="atlas-v2-empty-view"><div><i data-lucide="search-x"></i><strong>Nenhum setor, item ou subitem encontrado</strong></div></div>`;
     }
     restoreBoardUiState(uiState, restoreToken);
+    void ensureBoardViewData(boardEntry);
   }
 
   function renderEmptyBoard() {
@@ -4936,7 +5326,8 @@ window.__ATLAS_VERSION__ = '2.1.0 OFICIAL';
     const items = filteredItems(boardEntry, groupEntry);
     const searchOpensSector = contextualSectorMatch(groupEntry.name, contextualItemSearch(boardEntry));
     const groupCollapsed = groupEntry.collapsed && !searchOpensSector;
-    const allSelected = items.length > 0 && items.every((entry) => runtime.selectedItems.has(entry.id));
+    const selectableIds = items.flatMap((entry) => itemTreeIds(entry, []));
+    const allSelected = selectableIds.length > 0 && selectableIds.every((itemId) => runtime.selectedItems.has(itemId));
     const subitemCount = items.reduce((total, entry) => total + visibleSubitems(boardEntry, entry).length, 0);
     const columnsWidth = boardEntry.columns.reduce((total, entry) => total + Number(entry.width || 160), 0);
     const tableWidth = 40 + 300 + columnsWidth + 112 + 42;
@@ -5347,26 +5738,253 @@ window.__ATLAS_VERSION__ = '2.1.0 OFICIAL';
   }
 
   function persistRemoteItemsSoon(context, itemIds = []) {
-    if (!runtime.remoteMode || !runtime.authClient) return;
+    if (!runtime.remoteMode || !runtime.authClient) return Promise.resolve([]);
     const ids = [...new Set(itemIds.filter(Boolean))];
-    void (async () => {
+    const task = (async () => {
       try {
-        for (const itemId of ids) await enqueueRemoteItemPersistence(context, itemId);
+        const results = [];
+        for (let offset = 0; offset < ids.length; offset += 4) {
+          const batch = ids.slice(offset, offset + 4);
+          results.push(...await Promise.all(batch.map((itemId) => enqueueRemoteItemPersistence(context, itemId))));
+        }
+        return results;
       } catch (error) {
         console.error('Atlas V2: persistência direta de item falhou.', error);
         runtime.remoteSyncQueued = true;
         scheduleRemoteSync();
         toast(`O Atlas tentará sincronizar novamente: ${error.message || error}`, true);
+        throw error;
       }
     })();
+    void task.catch(() => null);
+    return task;
   }
 
-  async function uploadAttachmentToStorage(fileEntry, connection, context, found, columnEntry) {
+  function itemLineage(collection, targetId, ancestors = []) {
+    for (const entry of collection || []) {
+      const lineage = [...ancestors, entry];
+      if (String(entry.id) === String(targetId)) return lineage;
+      const nested = itemLineage(entry.subitems, targetId, lineage);
+      if (nested.length) return nested;
+    }
+    return [];
+  }
+
+  function storageFolderPath(context, found, columnEntry) {
+    const lineage = itemLineage(found.group?.items, found.item.id);
+    const sectorColumnId = context.board.settings?.works_sector_column_id;
+    const isSectorizedWork = Boolean(sectorColumnId && lineage.length);
+
+    if (isSectorizedWork) {
+      const city = lineage[0]?.name || found.parent?.name || found.item.name || 'Sem cidade';
+      const sector = lineage
+        .slice(1)
+        .map((entry) => String(entry.values?.[sectorColumnId] || '').trim())
+        .find(Boolean);
+      const recordNames = lineage.slice(1).map((entry) => entry.name).filter(Boolean);
+      return [
+        city,
+        sector || found.group?.name || 'Sem setor',
+        ...recordNames,
+        columnEntry.name || 'Arquivos',
+      ];
+    }
+
+    return [
+      context.workspace.name,
+      context.module.name,
+      context.board.name,
+      found.group?.name || 'Sem grupo',
+      ...(lineage.length ? lineage.map((entry) => entry.name) : [found.item.name]),
+      columnEntry.name || 'Arquivos',
+    ];
+  }
+
+  function storageOrganizationMoves(connectionId) {
+    const seen = new Set();
+    const moves = [];
+    const boardContexts = allBoards();
+    (runtime.remoteRows?.atlas_v2_attachments || []).forEach((row) => {
+      const fileId = String(row?.file_id || '').trim();
+      if (!fileId || seen.has(fileId)) return;
+      let resolved = null;
+      for (const context of boardContexts) {
+        const found = findItem(context.board, row.item_id);
+        if (!found) continue;
+        resolved = { context, found };
+        break;
+      }
+      if (!resolved) return;
+      const effectiveConnection = storageConnection(row.storage_connection_id)
+        || storageForContext(resolved.context);
+      if (String(effectiveConnection?.id || '') !== String(connectionId || '')) return;
+      const columnEntry = resolved.context.board.columns.find((entry) => String(entry.id) === String(row.column_id));
+      if (!columnEntry) return;
+      seen.add(fileId);
+      moves.push({
+        fileId,
+        folderPath: storageFolderPath(resolved.context, resolved.found, columnEntry),
+        row,
+      });
+    });
+    return moves;
+  }
+
+  async function hydrateStorageBoards(connectionId) {
+    if (!runtime.authClient || !runtime.remoteMode) return;
+    const contexts = allBoards().filter((context) => String(storageForContext(context)?.id || '') === String(connectionId || ''));
+    for (const context of contexts) {
+      await hydrateBoardRemoteData(context.board.id, { force: true, renderAfter: false });
+    }
+  }
+
+  async function openOrganizeStorageModal(connectionId) {
+    if (!requirePermission('admin', null, 'organizar os arquivos do Drive')) return;
+    const connection = storageConnection(connectionId);
+    if (!connection) return;
+    toast('Mapeando os arquivos vinculados a esta conexão...');
+    await hydrateStorageBoards(connectionId);
+    const count = storageOrganizationMoves(connectionId).length;
+    openModal({
+      title: 'Organizar arquivos do Drive',
+      subtitle: connection.name,
+      body: `<div class="atlas-v2-confirm-card"><i data-lucide="folder-tree"></i><div><strong>${count} ${count === 1 ? 'arquivo será reorganizado' : 'arquivos serão reorganizados'}.</strong><p>Em Obras, a estrutura será Cidade / Setor / Registro / Campo. Os arquivos serão movidos, sem duplicação.</p></div></div>`,
+      actions: `<button class="atlas-v2-button atlas-v2-button-quiet" type="button" data-action="close-overlay">Cancelar</button><button class="atlas-v2-button atlas-v2-button-primary" type="button" data-action="admin-confirm-organize-storage" data-storage-id="${attr(connectionId)}" ${count ? '' : 'disabled'}><i data-lucide="folder-tree"></i>Organizar agora</button>`,
+    });
+  }
+
+  function attachmentStorageUpdate(row, folderId) {
+    return {
+      id: row.id,
+      item_id: row.item_id,
+      column_id: row.column_id,
+      storage_connection_id: row.storage_connection_id || null,
+      file_id: row.file_id,
+      folder_id: folderId || '',
+      nome: row.nome || 'Arquivo',
+      mime_type: row.mime_type || '',
+      tamanho: Number(row.tamanho || 0),
+      view_url: row.view_url || '',
+      thumbnail_url: row.thumbnail_url || '',
+      ordem: Number(row.ordem || 0),
+      criado_por: row.criado_por || null,
+    };
+  }
+
+  async function organizeStorageConnection(connectionId) {
+    if (!requirePermission('admin', null, 'organizar os arquivos do Drive')) return;
+    const connection = storageConnection(connectionId);
+    if (!connection?.appScriptUrl || !connection?.folderId) return;
+    await hydrateStorageBoards(connectionId);
+    const moves = storageOrganizationMoves(connectionId);
+    if (!moves.length) {
+      closeOverlay();
+      toast('Nenhum arquivo vinculado precisa ser organizado.');
+      return;
+    }
+
+    closeOverlay();
+    const authToken = await currentAuthAccessToken();
+    let movedCount = 0;
+    const failures = [];
+    for (let offset = 0; offset < moves.length; offset += 50) {
+      const batch = moves.slice(offset, offset + 50);
+      toast(`Organizando arquivos no Drive: ${Math.min(offset + batch.length, moves.length)} de ${moves.length}...`);
+      try {
+        const response = await fetch(connection.appScriptUrl, {
+          method: 'POST',
+          body: JSON.stringify({
+            action: 'move',
+            rootFolderId: connection.folderId,
+            connectionId: connection.id,
+            authToken,
+            moves: batch.map(({ fileId, folderPath }) => ({ fileId, folderPath })),
+          }),
+          redirect: 'follow',
+        });
+        const result = await response.json().catch(() => null);
+        if (!response.ok || !result) throw new Error('O conector não retornou uma resposta válida.');
+
+        const movedById = new Map((result.files || []).map((entry) => [String(entry.fileId), entry.folderId]));
+        const updates = batch
+          .filter((entry) => movedById.has(String(entry.fileId)))
+          .map((entry) => attachmentStorageUpdate(entry.row, movedById.get(String(entry.fileId))));
+        if (updates.length && runtime.authClient && runtime.remoteMode) {
+          const { data, error } = await runtime.authClient
+            .from('atlas_v2_attachments')
+            .upsert(updates, { onConflict: 'id' })
+            .select('*');
+          if (error) throw error;
+          (data || updates).forEach((row) => replaceRemoteBaselineRow('atlas_v2_attachments', row));
+        }
+        movedCount += updates.length;
+        failures.push(...(result.failures || []));
+      } catch (error) {
+        failures.push({ error: error.message || String(error) });
+      }
+    }
+
+    recordAudit('Arquivos do Drive reorganizados', {
+      scope: 'system',
+      connectionId,
+      movedCount,
+      failureCount: failures.length,
+    });
+    saveData('', { scope: 'system', remote: false, audit: false });
+    if (failures.length) {
+      toast(`${movedCount} arquivo(s) organizados; ${failures.length} não puderam ser movidos.`, true);
+    } else {
+      toast(`${movedCount} arquivo(s) organizados por cidade e setor.`);
+    }
+    render();
+  }
+
+  function postJsonWithUploadProgress(url, payload, onProgress) {
+    let estimatedProgress = 3;
+    if (typeof onProgress === 'function') onProgress(estimatedProgress);
+    const progressTimer = setInterval(() => {
+      estimatedProgress = Math.min(92, estimatedProgress + Math.max(0.5, (92 - estimatedProgress) * 0.08));
+      if (typeof onProgress === 'function') onProgress(estimatedProgress);
+    }, 500);
+    let endpoint = url;
+    try {
+      const requestUrl = new URL(url);
+      requestUrl.searchParams.set('atlasRequest', `${Date.now()}`);
+      endpoint = requestUrl.toString();
+    } catch (_) {}
+    const operation = new Promise((resolve, reject) => {
+      const request = new XMLHttpRequest();
+      request.open('POST', endpoint, true);
+      request.timeout = 180000;
+      request.onerror = () => reject(new Error('Não foi possível acessar o conector do Google Drive.'));
+      request.ontimeout = () => reject(new Error('O envio demorou além do limite e foi interrompido.'));
+      request.onload = () => {
+        let result = null;
+        try { result = JSON.parse(request.responseText || ''); } catch (_) {}
+        if (request.status < 200 || request.status >= 400 || !result) {
+          reject(new Error(result?.error || 'O conector não retornou uma resposta válida.'));
+          return;
+        }
+        if (typeof onProgress === 'function') onProgress(100);
+        resolve(result);
+      };
+      request.send(JSON.stringify(payload));
+    });
+    return operation.finally(() => {
+      clearInterval(progressTimer);
+    });
+  }
+
+  async function uploadAttachmentToStorage(fileEntry, connection, context, found, columnEntry, onProgress) {
     const authToken = await currentAuthAccessToken();
     const moduleName = storageModule(connection, context);
     const mediaType = legacyMediaType(columnEntry);
     const parentName = found.parent?.name || found.item.name;
     const isSubitem = Boolean(found.parent);
+    const folderPath = storageFolderPath(context, found, columnEntry);
+    const isSectorizedWork = Boolean(context.board.settings?.works_sector_column_id);
+    const cityName = isSectorizedWork ? folderPath[0] : '';
+    const sectorName = isSectorizedWork ? folderPath[1] : (found.group?.name || context.module.name || 'Itens');
     const payload = {
       action: 'upload',
       rootFolderId: connection.folderId,
@@ -5382,12 +6000,15 @@ window.__ATLAS_VERSION__ = '2.1.0 OFICIAL';
       groupName: found.group?.name || 'Sem grupo',
       itemName: found.item.name,
       columnName: columnEntry.name,
+      cityName,
+      sectorName,
+      folderPath,
 
       // Compatibilidade com os conectores oficiais da V1.4.
       modulo: moduleName,
       module: moduleName,
-      obraNome: context.board.name || context.workspace.name,
-      elementoTipo: found.group?.name || context.module.name || 'Itens',
+      obraNome: cityName || context.board.name || context.workspace.name,
+      elementoTipo: sectorName,
       elementoNome: parentName,
       subelementoNome: found.item.name,
       tipoMidia: mediaType,
@@ -5396,15 +6017,8 @@ window.__ATLAS_VERSION__ = '2.1.0 OFICIAL';
       subitemNome: isSubitem ? found.item.name : '',
       pastaMidiaNome: columnEntry.name || '',
     };
-    const response = await fetch(connection.appScriptUrl, {
-      method: 'POST',
-      body: JSON.stringify(payload),
-      redirect: 'follow',
-    });
-    const textResponse = await response.text();
-    let result;
-    try { result = JSON.parse(textResponse); } catch (error) { throw new Error('O conector não retornou uma resposta válida.'); }
-    if (!response.ok || !result?.success) throw new Error(result?.error || 'Falha ao enviar o arquivo para o Drive.');
+    const result = await postJsonWithUploadProgress(connection.appScriptUrl, payload, onProgress);
+    if (!result?.success) throw new Error(result?.error || 'Falha ao enviar o arquivo para o Drive.');
     return {
       id: id('attachment'),
       name: result.name || result.nome || fileEntry.name,
@@ -5507,7 +6121,7 @@ window.__ATLAS_VERSION__ = '2.1.0 OFICIAL';
       return;
     }
     const connection = storageForContext(context);
-    const connected = Boolean(connection?.status === 'connected' && connection.appScriptUrl && connection.folderId);
+    const connected = Boolean(connection?.appScriptUrl && connection.folderId && connection.status !== 'disabled');
     const imageColumn = columnEntry.type === 'image';
     if (!connected && (runtime.remoteMode || !imageColumn)) {
       toast('Conecte e valide o Google Drive deste setor antes de anexar arquivos.', true);
@@ -5515,22 +6129,32 @@ window.__ATLAS_VERSION__ = '2.1.0 OFICIAL';
       return;
     }
     toast(connected ? 'Confirmando o elemento no Supabase...' : 'Preparando imagens no modo local...');
+    setOperationProgress(imageColumn ? 'Enviando imagens' : 'Enviando arquivos', 2, `${files.length} arquivo(s)`);
     const added = [];
     target.disabled = true;
     try {
       if (connected) {
         await ensureRemoteItemBeforeAttachment(context, found);
+        setOperationProgress(imageColumn ? 'Enviando imagens' : 'Enviando arquivos', 7, 'Registro confirmado no servidor');
         toast('Enviando arquivos para o Drive e registrando no Supabase...');
       }
-      for (const file of files) {
+      for (let fileIndex = 0; fileIndex < files.length; fileIndex += 1) {
+        const file = files[fileIndex];
+        const fileBase = 8 + (fileIndex / files.length) * 88;
+        const fileShare = 88 / files.length;
+        setOperationProgress(`Preparando ${file.name}`, fileBase + (fileShare * 0.08), `${fileIndex + 1} de ${files.length}`);
         const prepared = await prepareFileForAtlas(file, columnEntry.type);
         if (connected) {
-          const uploaded = await uploadAttachmentToStorage(prepared, connection, context, found, columnEntry);
+          const uploaded = await uploadAttachmentToStorage(prepared, connection, context, found, columnEntry, (uploadPercent) => {
+            setOperationProgress(`Enviando ${file.name}`, fileBase + (fileShare * (0.12 + (uploadPercent / 100) * 0.7)), `${fileIndex + 1} de ${files.length}`);
+          });
+          setOperationProgress(`Registrando ${file.name}`, fileBase + (fileShare * 0.88), `${fileIndex + 1} de ${files.length}`);
           const registered = await registerUploadedAttachment(uploaded, connection, context, found, columnEntry, current.length + added.length);
           added.push(registered);
         } else {
           added.push({ id: id('image'), name: prepared.name, mimeType: prepared.mimeType, size: prepared.size, dataUrl: prepared.dataUrl, localOnly: true, uploadedAt: new Date().toISOString() });
         }
+        setOperationProgress(`${file.name} concluído`, fileBase + fileShare, `${fileIndex + 1} de ${files.length}`);
       }
       found.item.values[columnEntry.id] = [...current, ...added];
       if (connected) {
@@ -5540,12 +6164,15 @@ window.__ATLAS_VERSION__ = '2.1.0 OFICIAL';
         toast('Configure uma conexão validada para enviar os originais ao Google Drive.');
       }
       if (!patchRealtimeImageCell({ ...context, found }, columnEntry.id)) render();
+      setOperationProgress(`${imageColumn ? 'Imagens' : 'Arquivos'} enviados`, 100, `${added.length} arquivo(s) concluído(s)`);
     } catch (error) {
       runtime.data.errors.unshift({ id: id('error'), title: 'Falha no envio de arquivo', detail: error.message || String(error), createdAt: new Date().toISOString() });
       toast(error.message || 'Não foi possível enviar os arquivos.', true);
+      setOperationProgress('Falha no envio', 100, error.message || String(error));
     } finally {
       target.disabled = false;
       target.value = '';
+      clearOperationProgress(connected ? 900 : 500);
     }
   }
 
@@ -5672,48 +6299,40 @@ window.__ATLAS_VERSION__ = '2.1.0 OFICIAL';
     const removed = data.attachments[runtime.imageViewer.index];
     if (!removed) return;
 
+    const driveRow = {
+      file_id: removed.fileId || '',
+      storage_connection_id: removed.storageConnectionId || null,
+      nome: removed.name || 'Arquivo',
+      atlasBoardId: data.context.board.id,
+    };
+    let driveTrashed = false;
+    if (driveRow.file_id) {
+      try {
+        await syncDriveAttachmentRows([driveRow], 'delete');
+        driveTrashed = true;
+      } catch (error) {
+        toast(`O arquivo não foi removido porque o Drive não confirmou a exclusão: ${error.message || error}`, true);
+        return;
+      }
+    }
+
     if (removed.attachmentId && runtime.authClient && runtime.remoteMode) {
       runtime.realtimeLocalIds.add(removed.attachmentId);
       const { error } = await runtime.authClient.from('atlas_v2_attachments').delete().eq('id', removed.attachmentId);
       if (error) {
         runtime.realtimeLocalIds.delete(removed.attachmentId);
+        if (driveTrashed) {
+          try { await syncDriveAttachmentRows([driveRow], 'undodelete'); } catch (_) {}
+        }
         toast(`Não foi possível remover o arquivo do Atlas: ${error.message || error}`, true);
         return;
       }
       setTimeout(() => runtime.realtimeLocalIds.delete(removed.attachmentId), 2000);
     }
 
-    const connection = storageConnection(removed.storageConnectionId);
-    let driveCleanupFailed = false;
-    if (removed.fileId && connection?.appScriptUrl) {
-      try {
-        const authToken = await currentAuthAccessToken();
-        const moduleName = storageModule(connection, data.context);
-        const response = await fetch(connection.appScriptUrl, {
-          method: 'POST',
-          body: JSON.stringify({
-            action: 'delete',
-            rootFolderId: connection.folderId,
-            connectionId: connection.id,
-            boardId: data.context.board.id,
-            authToken,
-            fileId: removed.fileId,
-            modulo: moduleName,
-            module: moduleName,
-          }),
-          redirect: 'follow',
-        });
-        const result = await response.json().catch(() => null);
-        if (!response.ok || !result?.success) driveCleanupFailed = true;
-      } catch (_) {
-        driveCleanupFailed = true;
-      }
-    }
-
     data.attachments.splice(runtime.imageViewer.index, 1);
     data.found.item.values[runtime.imageViewer.columnId] = data.attachments;
     saveData('Arquivo removido', { remote: removed.attachmentId ? false : true, itemId: data.found.item.id });
-    if (driveCleanupFailed) toast('O arquivo foi removido do Atlas, mas não pôde ser movido para a lixeira do Drive.', true);
     if (!data.attachments.length) {
       closeOverlay();
       render();
@@ -5731,6 +6350,39 @@ window.__ATLAS_VERSION__ = '2.1.0 OFICIAL';
     });
     (boardEntry.groups || []).forEach((groupEntry) => visit(groupEntry.items, groupEntry));
     return rows;
+  }
+
+  function boardViewItemIds(boardEntry) {
+    if (!boardEntry) return [];
+    const allIds = () => flatBoardItems(boardEntry).map(({ item }) => item.id);
+    if (Object.keys(runtime.searchFilters?.[boardEntry.id] || {}).length) return allIds();
+    if (boardEntry.activeView === 'works') {
+      const selected = ensureWorkSelection(boardEntry);
+      return selected ? itemTreeIds(selected.item, []) : [];
+    }
+    if (!['table'].includes(boardEntry.activeView)) return allIds();
+    const ids = [];
+    const visitExpanded = (itemEntry) => {
+      ids.push(itemEntry.id);
+      if (itemEntry.subitemsExpanded) (itemEntry.subitems || []).forEach(visitExpanded);
+    };
+    (boardEntry.groups || []).forEach((groupEntry) => (groupEntry.items || []).forEach(visitExpanded));
+    return ids;
+  }
+
+  async function ensureBoardViewData(boardEntry, options = {}) {
+    if (!runtime.remoteMode || !runtime.authClient || !boardEntry?.id) return true;
+    const itemIds = options.full
+      ? flatBoardItems(boardEntry).map(({ item }) => item.id)
+      : boardViewItemIds(boardEntry);
+    if (!itemIds.some((itemId) => !runtime.loadedItemValues.has(String(itemId)))) {
+      if (runtime.data?.activeBoardId === boardEntry.id) document.body.classList.remove('atlas-v2-board-loading');
+      return true;
+    }
+    return hydrateBoardRemoteData(boardEntry.id, {
+      itemIds,
+      renderAfter: options.renderAfter !== false,
+    });
   }
 
   function itemIsCompleted(boardEntry, itemEntry) {
@@ -6316,13 +6968,144 @@ window.__ATLAS_VERSION__ = '2.1.0 OFICIAL';
       root.innerHTML = '';
       return;
     }
+    const selected = flatBoardItems(boardEntry).filter((entry) => runtime.selectedItems.has(entry.item.id));
+    const subitems = selected.filter((entry) => entry.parent).length;
+    const elements = selected.length - subitems;
     root.hidden = false;
-    root.innerHTML = `<i data-lucide="list-checks"></i><strong>${count} ${count === 1 ? 'item selecionado' : 'itens selecionados'}</strong><select class="atlas-v2-cell-select" id="atlas-v2-bulk-group" aria-label="Grupo de destino"><option value="">Mover para...</option>${boardEntry.groups.map((entry) => `<option value="${attr(entry.id)}">${escapeHtml(entry.name)}</option>`).join('')}</select><button class="atlas-v2-button atlas-v2-button-quiet" type="button" data-action="bulk-move"><i data-lucide="move-right"></i>Mover</button><button class="atlas-v2-button atlas-v2-button-danger" type="button" data-action="bulk-delete"><i data-lucide="trash-2"></i>Excluir</button><button class="atlas-v2-icon-button" type="button" data-action="clear-selection" title="Limpar seleção"><i data-lucide="x"></i></button>`;
+    root.innerHTML = `<i data-lucide="list-checks"></i><strong>${count} selecionado(s)<small>${elements} elemento(s) · ${subitems} subelemento(s)</small></strong><button class="atlas-v2-button atlas-v2-button-primary" type="button" data-action="bulk-edit"><i data-lucide="square-pen"></i>Editar em massa</button><select class="atlas-v2-cell-select" id="atlas-v2-bulk-group" aria-label="Grupo de destino"><option value="">Mover para...</option>${boardEntry.groups.map((entry) => `<option value="${attr(entry.id)}">${escapeHtml(entry.name)}</option>`).join('')}</select><button class="atlas-v2-button atlas-v2-button-quiet" type="button" data-action="bulk-move"><i data-lucide="move-right"></i>Mover</button><button class="atlas-v2-button atlas-v2-button-danger" type="button" data-action="bulk-delete"><i data-lucide="trash-2"></i>Excluir</button><button class="atlas-v2-icon-button" type="button" data-action="clear-selection" title="Limpar seleção"><i data-lucide="x"></i></button>`;
+  }
+
+  function refreshSelectionUi(boardEntry) {
+    document.querySelectorAll('[data-action="select-item"]').forEach((checkbox) => {
+      const selected = runtime.selectedItems.has(checkbox.dataset.itemId);
+      checkbox.checked = selected;
+      checkbox.closest('[data-item-id]')?.classList.toggle('is-selected', selected);
+    });
+    document.querySelectorAll('[data-action="select-group"]').forEach((checkbox) => {
+      const groupEntry = boardEntry.groups.find((entry) => entry.id === checkbox.dataset.groupId);
+      const ids = (groupEntry?.items || []).flatMap((entry) => itemTreeIds(entry, []));
+      const selectedCount = ids.filter((itemId) => runtime.selectedItems.has(itemId)).length;
+      checkbox.checked = ids.length > 0 && selectedCount === ids.length;
+      checkbox.indeterminate = selectedCount > 0 && selectedCount < ids.length;
+    });
+    const selectAll = document.querySelector('[data-action="select-all-items"]');
+    if (selectAll instanceof HTMLInputElement) {
+      const ids = flatBoardItems(boardEntry).map(({ item }) => item.id);
+      const selectedCount = ids.filter((itemId) => runtime.selectedItems.has(itemId)).length;
+      selectAll.checked = ids.length > 0 && selectedCount === ids.length;
+      selectAll.indeterminate = selectedCount > 0 && selectedCount < ids.length;
+    }
+    renderSelection(boardEntry);
+    refreshIcons(document.getElementById('atlas-v2-selection-bar'));
+  }
+
+  function bulkEditableColumns(boardEntry) {
+    return (boardEntry?.columns || []).filter((entry) => !['formula', 'image', 'file'].includes(entry.type));
+  }
+
+  function bulkValueControl(boardEntry, fieldId, operation = 'set') {
+    if (operation === 'clear') return '<div class="atlas-v2-bulk-clear-note"><i data-lucide="eraser"></i>O campo será limpo em todos os registros selecionados.</div>';
+    if (fieldId === '__name__') return '<label class="atlas-v2-field is-wide"><span>Novo nome</span><input name="value" maxlength="160" required placeholder="Digite o nome que será aplicado"></label>';
+    const columnEntry = boardEntry?.columns?.find((entry) => entry.id === fieldId);
+    if (!columnEntry) return '<div class="atlas-v2-bulk-clear-note">Selecione um campo para continuar.</div>';
+    if (['status', 'select'].includes(columnEntry.type)) {
+      return `<label class="atlas-v2-field is-wide"><span>Novo valor</span><select name="value" required><option value="">Selecione...</option>${(columnEntry.options || []).map((entry) => {
+        const label = typeof entry === 'string' ? entry : entry.label;
+        return `<option value="${attr(label)}">${escapeHtml(label)}</option>`;
+      }).join('')}</select></label>`;
+    }
+    if (columnEntry.type === 'checkbox') {
+      return '<label class="atlas-v2-field is-wide"><span>Novo valor</span><select name="value"><option value="true">Marcado</option><option value="false">Desmarcado</option></select></label>';
+    }
+    const inputType = columnEntry.type === 'date' ? 'date' : ['number', 'currency', 'percentage'].includes(columnEntry.type) ? 'number' : columnEntry.type === 'link' ? 'url' : 'text';
+    const step = ['number', 'currency', 'percentage'].includes(columnEntry.type) ? ' step="any"' : '';
+    return `<label class="atlas-v2-field is-wide"><span>Novo valor</span><input name="value" type="${inputType}"${step} ${columnEntry.type === 'date' ? '' : 'maxlength="500"'} required></label>`;
+  }
+
+  function updateBulkEditorValue() {
+    const form = document.getElementById('atlas-v2-bulk-edit-form');
+    const context = findBoard();
+    const root = document.getElementById('atlas-v2-bulk-value');
+    if (!form || !context || !root) return;
+    root.innerHTML = bulkValueControl(context.board, form.elements.fieldId?.value, form.elements.operation?.value);
+    refreshIcons(root);
+  }
+
+  function openBulkEditModal() {
+    const context = findBoard();
+    if (!context || !runtime.selectedItems.size) return;
+    const columns = bulkEditableColumns(context.board);
+    openModal({
+      title: 'Editar registros em massa',
+      subtitle: `${runtime.selectedItems.size} elemento(s) e subelemento(s) selecionado(s)`,
+      body: `<form id="atlas-v2-bulk-edit-form" class="atlas-v2-form-grid"><label class="atlas-v2-field"><span>Campo</span><select name="fieldId"><option value="__name__">Nome do registro</option>${columns.map((entry) => `<option value="${attr(entry.id)}">${escapeHtml(entry.name)}</option>`).join('')}</select></label><label class="atlas-v2-field"><span>Ação</span><select name="operation"><option value="set">Definir valor</option><option value="clear">Limpar campo</option></select></label><div class="is-wide" id="atlas-v2-bulk-value">${bulkValueControl(context.board, '__name__', 'set')}</div><div class="atlas-v2-bulk-warning is-wide"><i data-lucide="info"></i><span>A alteração será aplicada somente aos registros selecionados, incluindo subelementos marcados.</span></div></form>`,
+      actions: `<button class="atlas-v2-button atlas-v2-button-quiet" type="button" data-action="close-overlay">Cancelar</button><button class="atlas-v2-button atlas-v2-button-primary" type="submit" form="atlas-v2-bulk-edit-form"><i data-lucide="check-check"></i>Aplicar em todos</button>`,
+    });
+  }
+
+  function bulkNormalizedValue(columnEntry, rawValue, operation) {
+    if (operation === 'clear') return columnEntry?.type === 'checkbox' ? false : '';
+    if (columnEntry?.type === 'checkbox') return String(rawValue) === 'true';
+    if (['number', 'currency', 'percentage'].includes(columnEntry?.type)) {
+      const number = Number(String(rawValue).replace(',', '.'));
+      return Number.isFinite(number) ? number : '';
+    }
+    return rawValue;
+  }
+
+  async function submitBulkEdit(form) {
+    const context = findBoard();
+    if (!context || !runtime.selectedItems.size) return;
+    const data = new FormData(form);
+    const fieldId = String(data.get('fieldId') || '');
+    const operation = String(data.get('operation') || 'set');
+    const rawValue = operation === 'clear' ? '' : data.get('value');
+    const columnEntry = context.board.columns.find((entry) => entry.id === fieldId);
+    const selected = flatBoardItems(context.board).filter((entry) => runtime.selectedItems.has(entry.item.id));
+    if (!selected.length) return;
+    if (fieldId !== '__name__' && !columnEntry) return toast('O campo selecionado não está mais disponível.', true);
+
+    closeOverlay();
+    setOperationProgress('Aplicando alteração em massa', 5, `0 de ${selected.length}`);
+    selected.forEach((entry, index) => {
+      if (fieldId === '__name__') {
+        const previous = entry.item.name;
+        entry.item.name = operation === 'clear' ? 'Item sem nome' : String(rawValue || '').trim() || 'Item sem nome';
+        captureItemHistory(context.board, entry.item, '__name__', previous, entry.item.name, 'Nome atualizado em massa');
+      } else {
+        const previous = entry.item.values?.[fieldId];
+        const next = bulkNormalizedValue(columnEntry, rawValue, operation);
+        entry.item.values = entry.item.values || {};
+        entry.item.values[fieldId] = next;
+        captureItemHistory(context.board, entry.item, fieldId, previous, next, 'Campo atualizado em massa');
+        runLocalAutomations('field_changed', context.board, entry.item, { columnId: fieldId, oldValue: previous, newValue: next });
+      }
+      setOperationProgress('Aplicando alteração em massa', 10 + ((index + 1) / selected.length) * 45, `${index + 1} de ${selected.length}`);
+    });
+
+    saveData('', { remote: false });
+    render();
+    try {
+      if (runtime.remoteMode && runtime.authClient) {
+        setOperationProgress('Sincronizando alteração em massa', 60, `${selected.length} registro(s)`);
+        await persistRemoteItemsSoon(context, selected.map((entry) => entry.item.id));
+      } else {
+        saveData();
+      }
+      recordAudit('Edição em massa aplicada', { scope: 'board', count: selected.length, fieldId });
+      setOperationProgress('Alteração concluída', 100, `${selected.length} registro(s) atualizados`);
+      toast(`${selected.length} registro(s) atualizados em massa.`);
+    } catch (error) {
+      setOperationProgress('Sincronização pendente', 100, error.message || String(error));
+    } finally {
+      clearOperationProgress();
+    }
   }
 
   function openBoard(boardId) {
     const context = findBoard(boardId);
     if (!context || !hasPermission('view', context)) return;
+    const workspaceChanged = runtime.data.activeWorkspaceId !== context.workspace.id;
     runtime.page = 'board';
     runtime.data.activeWorkspaceId = context.workspace.id;
     runtime.data.activeBoardId = boardId;
@@ -6330,14 +7113,14 @@ window.__ATLAS_VERSION__ = '2.1.0 OFICIAL';
     runtime.expandedWorkSectors.clear();
     runtime.boardSearch = '';
     runtime.workFilter = '';
-    const needsRemoteData = runtime.remoteMode && !runtime.loadedBoardData.has(String(boardId));
-    if (needsRemoteData) document.body.classList.add('atlas-v2-board-loading');
+    const needsRemoteData = runtime.remoteMode
+      && boardViewItemIds(context.board).some((itemId) => !runtime.loadedItemValues.has(String(itemId)));
+    document.body.classList.toggle('atlas-v2-board-loading', needsRemoteData);
     const search = document.getElementById('atlas-v2-board-search');
     if (search) search.value = '';
-    saveData();
-    render();
+    scheduleBootstrapCacheWrite(runtime.data, 4000);
+    renderBoardRoute(context, { workspaceChanged });
     closeSidebar();
-    if (needsRemoteData) void hydrateBoardRemoteData(boardId);
   }
 
   function addItem(groupId) {
@@ -6348,10 +7131,12 @@ window.__ATLAS_VERSION__ = '2.1.0 OFICIAL';
       return;
     }
     const newItem = item(id('item'), groupEntry.id, 'Novo item', {});
+    newItem.order = nextItemOrder(groupEntry.items);
     context.board.columns.forEach((columnEntry) => {
       newItem.values[columnEntry.id] = columnEntry.type === 'checkbox' ? false : '';
     });
     groupEntry.items.push(newItem);
+    runtime.loadedItemValues.add(String(newItem.id));
     runLocalAutomations('item_created', context.board, newItem);
     if (context.board.activeView === 'works') runtime.workFilter = newItem.id;
     saveData('Item criado', { remote: false });
@@ -6415,10 +7200,23 @@ window.__ATLAS_VERSION__ = '2.1.0 OFICIAL';
     const context = findBoard();
     const found = context && findItem(context.board, itemId);
     if (!found || found.parent) return;
+    // Hotfix 2026-08-03: mesma razao de deleteItems - garantir que os subitens
+    // desta obra estejam com os valores carregados antes de fotografar o item
+    // para a lixeira.
+    if (runtime.remoteMode && runtime.authClient) {
+      try { await hydrateBoardRemoteData(context.board.id, { itemIds: itemTreeIds(found.item, []) }); }
+      catch (error) { console.warn('Atlas V2: nao foi possivel confirmar os valores antes de excluir.', error); }
+    }
     const workName = found.item.name;
     const index = found.collection.indexOf(found.item);
     const trashEntry = addTrashEntry('item', workName, found.item, { boardId: context.board.id, groupId: found.group.id, parentItemId: '', index });
     if (!await stageTrashEntries([trashEntry])) return;
+    try {
+      await syncTrashEntriesWithDrive([trashEntry], 'delete');
+    } catch (error) {
+      await rollbackStagedTrash([trashEntry], `A obra não foi excluída porque o Drive não confirmou a remoção dos arquivos: ${error.message || error}`);
+      return;
+    }
     found.collection.splice(index, 1);
     runtime.selectedItems.delete(found.item.id);
     runtime.workFilter = '';
@@ -6432,21 +7230,27 @@ window.__ATLAS_VERSION__ = '2.1.0 OFICIAL';
     }
   }
 
-  function addSubitem(parentItemId, workSector = '') {
+  function addSubitem(parentItemId, workSector = '', options = {}) {
     const context = findBoard();
     const found = context && findItem(context.board, parentItemId);
     if (!found) return;
-    const newSubitem = item(id('subitem'), found.group.id, 'Novo subitem', {});
+    const isWorkElement = Boolean(options.workElement && workSector);
+    const newSubitem = item(id(isWorkElement ? 'element' : 'subitem'), found.group.id, isWorkElement ? 'Novo elemento' : 'Novo subitem', {});
     context.board.columns.forEach((columnEntry) => {
       newSubitem.values[columnEntry.id] = columnEntry.type === 'checkbox' ? false : '';
     });
     const sectorColumnId = context.board.settings?.works_sector_column_id;
     if (workSector && sectorColumnId) newSubitem.values[sectorColumnId] = workSector;
     found.item.subitems = found.item.subitems || [];
+    newSubitem.order = nextItemOrder(found.item.subitems);
     found.item.subitems.push(newSubitem);
+    runtime.loadedItemValues.add(String(newSubitem.id));
     runLocalAutomations('item_created', context.board, newSubitem);
     found.item.subitemsExpanded = true;
-    saveData('Subitem criado', { remote: false });
+    if (isWorkElement) {
+      runtime.expandedWorkSectors.add(workSectorStateKey(context.board.id, found.item.id, workSector));
+    }
+    saveData(isWorkElement ? 'Elemento criado' : 'Subitem criado', { remote: false });
     persistRemoteItemsSoon(context, [newSubitem.id]);
     render();
     requestAnimationFrame(() => {
@@ -6454,6 +7258,10 @@ window.__ATLAS_VERSION__ = '2.1.0 OFICIAL';
       input?.focus();
       input?.select();
     });
+  }
+
+  function addWorkElement(workItemId, workSector) {
+    addSubitem(workItemId, workSector, { workElement: true });
   }
 
   function itemTreeIds(itemEntry, result = []) {
@@ -6483,6 +7291,22 @@ window.__ATLAS_VERSION__ = '2.1.0 OFICIAL';
     const context = findBoard();
     if (!context) return;
     const parentIds = new Set(itemIds.filter((itemId) => { const found = findItem(context.board, itemId); return found && !found.parent; }));
+    // Hotfix 2026-08-03: o retrato salvo na lixeira e montado a partir do que
+    // ja esta na memoria do navegador. Subitens nunca abertos nesta sessao
+    // ficam com valores vazios ({}) por conta do carregamento sob demanda -
+    // sem esta hidratacao, o botao "Restaurar" da lixeira nunca traria de
+    // volta esses valores, mesmo que o dado real continuasse existindo no
+    // Supabase ate o instante da exclusao.
+    if (runtime.remoteMode && runtime.authClient) {
+      const idsToHydrate = itemIds.flatMap((itemId) => {
+        const found = findItem(context.board, itemId);
+        return found ? itemTreeIds(found.item, []) : [];
+      });
+      if (idsToHydrate.length) {
+        try { await hydrateBoardRemoteData(context.board.id, { itemIds: idsToHydrate }); }
+        catch (error) { console.warn('Atlas V2: nao foi possivel confirmar os valores antes de excluir.', error); }
+      }
+    }
     const remoteDeleteIds = [];
     const trashEntries = [];
     itemIds.forEach((itemId) => {
@@ -6492,6 +7316,12 @@ window.__ATLAS_VERSION__ = '2.1.0 OFICIAL';
       trashEntries.push(addTrashEntry('item', found.item.name, found.item, { boardId: context.board.id, groupId: found.group.id, parentItemId: found.parent?.id || '', index: found.collection.indexOf(found.item) }));
     });
     if (!await stageTrashEntries(trashEntries)) return;
+    try {
+      await syncTrashEntriesWithDrive(trashEntries, 'delete');
+    } catch (error) {
+      await rollbackStagedTrash(trashEntries, `Os itens não foram excluídos porque o Drive não confirmou a remoção dos arquivos: ${error.message || error}`);
+      return;
+    }
     context.board.groups.forEach((groupEntry) => {
       groupEntry.items = groupEntry.items.filter((entry) => !itemIds.includes(entry.id));
       groupEntry.items.forEach((entry) => {
@@ -6741,25 +7571,27 @@ window.__ATLAS_VERSION__ = '2.1.0 OFICIAL';
       const workspace = { id: id('ws'), name, color: '#7554a3', access: data.get('access') || 'main', storageConnectionId, modules: [] };
       runtime.data.workspaces.push(workspace);
       runtime.data.activeWorkspaceId = workspace.id;
-      const initialModule = { id: id('module'), name: 'Geral', icon: 'boxes', open: false, storageConnectionId: null, boards: [] };
+      const initialModule = { id: id('module'), name: 'Geral', icon: 'boxes', open: false, storageConnectionId, boards: [] };
       workspace.modules.push(initialModule);
-      const initialBoard = createBoardFromTemplate('Primeiro quadro', 'blank', data.get('access') || 'main', '');
+      const initialBoard = createBoardFromTemplate('Primeiro quadro', 'blank', data.get('access') || 'main', '', storageConnectionId);
       initialModule.boards.push(initialBoard);
       runtime.data.activeBoardId = initialBoard.id;
     } else if (type === 'module') {
       const workspace = runtime.data.workspaces.find((entry) => entry.id === data.get('workspaceId')) || currentWorkspace();
-      const newModule = { id: id('module'), name, icon: 'boxes', open: false, storageConnectionId: null, boards: [] };
+      const workspaceConnectionId = workspace.storageConnectionId || null;
+      const newModule = { id: id('module'), name, icon: 'boxes', open: false, storageConnectionId: workspaceConnectionId, boards: [] };
       workspace.modules.push(newModule);
-      const initialBoard = createBoardFromTemplate('Primeiro quadro', 'blank', 'main', '');
+      const initialBoard = createBoardFromTemplate('Primeiro quadro', 'blank', 'main', '', workspaceConnectionId);
       newModule.boards.push(initialBoard);
       runtime.data.activeWorkspaceId = workspace.id;
       runtime.data.activeBoardId = initialBoard.id;
     } else if (type === 'submodule') {
       const workspace = currentWorkspace();
       const parent = workspace.modules.find((entry) => entry.id === data.get('parentModuleId')) || workspace.modules[0];
-      const newModule = { id: id('module'), parentId: parent?.id || null, name, icon: 'folder-tree', open: false, storageConnectionId: null, boards: [] };
+      const inheritedStorageConnectionId = parent?.storageConnectionId || workspace.storageConnectionId || null;
+      const newModule = { id: id('module'), parentId: parent?.id || null, name, icon: 'folder-tree', open: false, storageConnectionId: inheritedStorageConnectionId, boards: [] };
       workspace.modules.push(newModule);
-      const initialBoard = createBoardFromTemplate('Primeiro quadro', 'blank', 'main', '');
+      const initialBoard = createBoardFromTemplate('Primeiro quadro', 'blank', 'main', '', inheritedStorageConnectionId);
       newModule.boards.push(initialBoard);
       if (parent) parent.open = true;
       runtime.data.activeWorkspaceId = workspace.id;
@@ -6767,7 +7599,8 @@ window.__ATLAS_VERSION__ = '2.1.0 OFICIAL';
     } else {
       const workspace = currentWorkspace();
       const module = workspace.modules.find((entry) => entry.id === data.get('moduleId')) || workspace.modules[0];
-      const newBoard = createBoardFromTemplate(name, data.get('template') || 'blank', data.get('access') || 'main', String(data.get('description') || ''));
+      const inheritedStorageConnectionId = module?.storageConnectionId || workspace.storageConnectionId || null;
+      const newBoard = createBoardFromTemplate(name, data.get('template') || 'blank', data.get('access') || 'main', String(data.get('description') || ''), inheritedStorageConnectionId);
       module.boards.push(newBoard);
       module.open = true;
       runtime.data.activeBoardId = newBoard.id;
@@ -6777,7 +7610,7 @@ window.__ATLAS_VERSION__ = '2.1.0 OFICIAL';
     render();
   }
 
-  function createBoardFromTemplate(name, template, access, description) {
+  function createBoardFromTemplate(name, template, access, description, storageConnectionId = null) {
     const boardId = id('board');
     if (String(template).startsWith('custom:')) {
       const saved = runtime.data.templates.find((entry) => entry.id === String(template).slice(7));
@@ -6794,7 +7627,7 @@ window.__ATLAS_VERSION__ = '2.1.0 OFICIAL';
           groupIds.set(entry.id, nextId);
           return group(nextId, entry.name, entry.color || '#0f6cbd', []);
         });
-        const created = board({ id: boardId, name, description, access, icon: saved.icon || 'layout-template', views: deepClone(saved.views || ['table']), settings: deepClone(saved.settings || {}), columns, groups });
+        const created = board({ id: boardId, name, description, access, icon: saved.icon || 'layout-template', views: deepClone(saved.views || ['table']), settings: deepClone(saved.settings || {}), columns, groups, storageConnectionId });
         created.settings.slaDateColumnId = columnIds.get(created.settings.slaDateColumnId) || created.settings.slaDateColumnId || '';
         created.settings.dashboardWidgets = (created.settings.dashboardWidgets || []).map((entry) => ({ ...entry, id: id('widget'), columnId: columnIds.get(entry.columnId) || entry.columnId || '' }));
         (saved.automations || []).forEach((automation) => runtime.data.automations.push({
@@ -6816,7 +7649,7 @@ window.__ATLAS_VERSION__ = '2.1.0 OFICIAL';
           column(id('col'), 'Responsável', 'person'),
           column(id('col'), 'Data', 'date'),
           column(id('col'), 'Progresso', 'percentage'),
-        ], groups: [group(id('group'), 'Planejamento', '#7554a3', []), group(id('group'), 'Em execução', '#0f6cbd', []), group(id('group'), 'Concluído', '#168a5b', [])],
+        ], groups: [group(id('group'), 'Planejamento', '#7554a3', []), group(id('group'), 'Em execução', '#0f6cbd', []), group(id('group'), 'Concluído', '#168a5b', [])], storageConnectionId,
       });
     }
     if (template === 'maintenance') {
@@ -6827,7 +7660,7 @@ window.__ATLAS_VERSION__ = '2.1.0 OFICIAL';
           column(id('col'), 'Responsável', 'person'),
           column(id('col'), 'Abertura', 'date'),
           column(id('col'), 'Local', 'location'),
-        ], groups: [group(id('group'), 'Abertas', '#c33d4b', []), group(id('group'), 'Em execução', '#d68a1f', []), group(id('group'), 'Concluídas', '#168a5b', [])],
+        ], groups: [group(id('group'), 'Abertas', '#c33d4b', []), group(id('group'), 'Em execução', '#d68a1f', []), group(id('group'), 'Concluídas', '#168a5b', [])], storageConnectionId,
       });
     }
     if (template === 'field-inspection') {
@@ -6849,7 +7682,7 @@ window.__ATLAS_VERSION__ = '2.1.0 OFICIAL';
           column(id('col'), 'Imagens', 'image'),
           column(id('col'), 'Arquivos', 'file'),
         ],
-        groups: [group(id('group'), 'Programadas', '#7554a3', []), group(id('group'), 'Em campo', '#d68a1f', []), group(id('group'), 'Finalizadas', '#168a5b', [])],
+        groups: [group(id('group'), 'Programadas', '#7554a3', []), group(id('group'), 'Em campo', '#d68a1f', []), group(id('group'), 'Finalizadas', '#168a5b', [])], storageConnectionId,
       });
     }
     if (template === 'sla-service') {
@@ -6870,7 +7703,7 @@ window.__ATLAS_VERSION__ = '2.1.0 OFICIAL';
           due,
           column(id('col'), 'Evidências', 'image'),
         ],
-        groups: [group(id('group'), 'Entrada', '#7554a3', []), group(id('group'), 'Atendimento', '#0f6cbd', []), group(id('group'), 'Bloqueados', '#bf4652', []), group(id('group'), 'Resolvidos', '#168a5b', [])],
+        groups: [group(id('group'), 'Entrada', '#7554a3', []), group(id('group'), 'Atendimento', '#0f6cbd', []), group(id('group'), 'Bloqueados', '#bf4652', []), group(id('group'), 'Resolvidos', '#168a5b', [])], storageConnectionId,
       });
     }
     if (template === 'portfolio') {
@@ -6892,11 +7725,11 @@ window.__ATLAS_VERSION__ = '2.1.0 OFICIAL';
           realized,
           variance,
         ],
-        groups: [group(id('group'), 'Planejado', '#7554a3', []), group(id('group'), 'Em execução', '#0f6cbd', []), group(id('group'), 'Concluído', '#168a5b', [])],
+        groups: [group(id('group'), 'Planejado', '#7554a3', []), group(id('group'), 'Em execução', '#0f6cbd', []), group(id('group'), 'Concluído', '#168a5b', [])], storageConnectionId,
       });
     }
     return board({
-      id: boardId, name, description, access, icon: 'table-2', columns: [column(id('col'), 'Status', 'status', { options: STATUS_OPTIONS })], groups: [group(id('group'), 'Novo grupo', '#0f6cbd', [])],
+      id: boardId, name, description, access, icon: 'table-2', columns: [column(id('col'), 'Status', 'status', { options: STATUS_OPTIONS })], groups: [group(id('group'), 'Novo grupo', '#0f6cbd', [])], storageConnectionId,
     });
   }
 
@@ -7079,6 +7912,12 @@ window.__ATLAS_VERSION__ = '2.1.0 OFICIAL';
     }));
     const trashEntry = addTrashEntry('column', target.name, target, { boardId: context.board.id, index: context.board.columns.indexOf(target), values });
     if (!await stageTrashEntries([trashEntry])) return;
+    try {
+      await syncTrashEntriesWithDrive([trashEntry], 'delete');
+    } catch (error) {
+      await rollbackStagedTrash([trashEntry], `A coluna não foi excluída porque o Drive não confirmou a remoção dos arquivos: ${error.message || error}`);
+      return;
+    }
     context.board.columns = context.board.columns.filter((entry) => entry.id !== columnId);
     context.board.groups.forEach((groupEntry) => groupEntry.items.forEach((itemEntry) => { delete itemEntry.values[columnId]; (itemEntry.subitems || []).forEach((subitem) => { delete subitem.values[columnId]; }); }));
     saveData('Coluna movida para a lixeira');
@@ -7105,6 +7944,12 @@ window.__ATLAS_VERSION__ = '2.1.0 OFICIAL';
     if (context.board.groups.length <= 1) { toast('O último grupo do quadro não pode ser excluído', true); closeOverlay(); return; }
     const trashEntry = addTrashEntry('group', target.name, target, { boardId: context.board.id, index: context.board.groups.indexOf(target) });
     if (!await stageTrashEntries([trashEntry])) return;
+    try {
+      await syncTrashEntriesWithDrive([trashEntry], 'delete');
+    } catch (error) {
+      await rollbackStagedTrash([trashEntry], `O grupo não foi excluído porque o Drive não confirmou a remoção dos arquivos: ${error.message || error}`);
+      return;
+    }
     context.board.groups = context.board.groups.filter((entry) => entry.id !== groupId);
     closeOverlay();
     saveData('Grupo movido para a lixeira');
@@ -7168,10 +8013,18 @@ window.__ATLAS_VERSION__ = '2.1.0 OFICIAL';
     runtime.page = 'board';
     runtime.data.activeWorkspaceId = workspace.id;
     runtime.data.activeBoardId = firstBoard.id;
+    runtime.selectedItems.clear();
     runtime.expandedWorkSectors.clear();
+    runtime.boardSearch = '';
+    runtime.workFilter = '';
+    const context = findBoard(firstBoard.id);
+    const needsRemoteData = runtime.remoteMode && context
+      && boardViewItemIds(context.board).some((itemId) => !runtime.loadedItemValues.has(String(itemId)));
+    document.body.classList.toggle('atlas-v2-board-loading', Boolean(needsRemoteData));
     closeOverlay();
-    saveData();
-    render();
+    scheduleBootstrapCacheWrite(runtime.data, 4000);
+    renderBoardRoute(context, { workspaceChanged: true });
+    closeSidebar();
   }
 
   function openShareDrawer() {
@@ -7246,11 +8099,75 @@ window.__ATLAS_VERSION__ = '2.1.0 OFICIAL';
     const batches = Array.isArray(context?.board?.settings?.import_batches) ? context.board.settings.import_batches : [];
     const reversibleBatch = [...batches].reverse().find((entry) => !entry.rolledBackAt && Array.isArray(entry.itemIds) && entry.itemIds.length);
     openModal({
-      title: 'Importar planilha',
-      subtitle: 'Crie itens no grupo selecionado.',
-      body: `<form id="atlas-v2-import-form" class="atlas-v2-form-grid"><label class="atlas-v2-field is-wide"><span>Arquivo CSV ou Excel</span><input name="file" type="file" accept=".csv,.xlsx,.xls" required></label><label class="atlas-v2-field is-wide"><span>Grupo de destino</span><select name="groupId">${context.board.groups.map((entry) => `<option value="${attr(entry.id)}">${escapeHtml(entry.name)}</option>`).join('')}</select></label><label class="atlas-v2-check-row is-wide"><input name="skipDuplicates" type="checkbox" checked><span><strong>Ignorar possíveis duplicados</strong><small>Compara o nome do registro com os itens existentes no quadro.</small></span></label>${reversibleBatch ? `<div class="atlas-v2-import-rollback is-wide"><i data-lucide="history"></i><span><strong>Último lote: ${escapeHtml(reversibleBatch.fileName || 'Importação')}</strong><small>${reversibleBatch.itemIds.length} registro(s) importado(s) em ${formatDateTime(reversibleBatch.createdAt)}</small></span><button class="atlas-v2-button atlas-v2-button-danger" type="button" data-action="rollback-import" data-batch-id="${attr(reversibleBatch.id)}"><i data-lucide="undo-2"></i>Desfazer lote</button></div>` : ''}</form>`,
+      title: 'Importador universal',
+      subtitle: 'O Atlas identifica a aba, o cabeçalho, os tipos de dados e a hierarquia antes de importar.',
+      body: `<form id="atlas-v2-import-form" class="atlas-v2-form-grid"><label class="atlas-v2-field is-wide"><span>Planilha</span><input name="file" type="file" accept=".csv,.xlsx,.xls,.xlsm,.ods" required><small>CSV, Excel ou OpenDocument · até 15 MB e 5.000 registros</small></label><label class="atlas-v2-field is-wide"><span>Grupo padrão</span><select name="groupId">${context.board.groups.map((entry) => `<option value="${attr(entry.id)}">${escapeHtml(entry.name)}</option>`).join('')}</select><small>Será usado quando a planilha não tiver uma coluna de grupo ou setor.</small></label><label class="atlas-v2-check-row is-wide"><input name="skipDuplicates" type="checkbox" checked><span><strong>Ignorar possíveis duplicados</strong><small>Compara nome, grupo e elemento pai antes de criar o registro.</small></span></label>${reversibleBatch ? `<div class="atlas-v2-import-rollback is-wide"><i data-lucide="history"></i><span><strong>Último lote: ${escapeHtml(reversibleBatch.fileName || 'Importação')}</strong><small>${reversibleBatch.itemIds.length} registro(s) importado(s) em ${formatDateTime(reversibleBatch.createdAt)}</small></span><button class="atlas-v2-button atlas-v2-button-danger" type="button" data-action="rollback-import" data-batch-id="${attr(reversibleBatch.id)}"><i data-lucide="undo-2"></i>Desfazer lote</button></div>` : ''}</form>`,
       actions: `<button class="atlas-v2-button atlas-v2-button-quiet" type="button" data-action="close-overlay">Cancelar</button><button class="atlas-v2-button atlas-v2-button-primary" type="submit" form="atlas-v2-import-form"><i data-lucide="scan-search"></i>Analisar arquivo</button>`,
     });
+  }
+
+  function importHeaderScore(matrix, rowIndex) {
+    const row = matrix[rowIndex] || [];
+    const nonEmpty = row.map((value) => String(value ?? '').trim()).filter(Boolean);
+    if (nonEmpty.length < 2) return -1;
+    const unique = new Set(nonEmpty.map(normalizeSearchText)).size;
+    const textCount = nonEmpty.filter((value) => /[a-zÀ-ÿ]/i.test(value)).length;
+    const following = matrix.slice(rowIndex + 1, rowIndex + 6);
+    const density = following.reduce((total, nextRow) => total + nextRow.filter((value) => String(value ?? '').trim() !== '').length, 0);
+    return (unique * 4) + (textCount * 2) + Math.min(20, density) - rowIndex;
+  }
+
+  function importUniqueHeaders(row = []) {
+    const used = new Map();
+    return row.map((rawHeader, index) => {
+      const safe = String(rawHeader ?? '').trim().slice(0, 120) || `Coluna ${index + 1}`;
+      const key = normalizeSearchText(safe);
+      const count = (used.get(key) || 0) + 1;
+      used.set(key, count);
+      return count === 1 ? safe : `${safe} (${count})`;
+    });
+  }
+
+  function importDateValue(value) {
+    const text = String(value ?? '').trim();
+    if (!text) return '';
+    if (/^\d{4}-\d{2}-\d{2}/.test(text)) return text.slice(0, 10);
+    const match = text.match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{2,4})$/);
+    if (!match) return '';
+    const year = Number(match[3]) < 100 ? 2000 + Number(match[3]) : Number(match[3]);
+    return `${String(year).padStart(4, '0')}-${String(match[2]).padStart(2, '0')}-${String(match[1]).padStart(2, '0')}`;
+  }
+
+  function inferImportType(header, rows) {
+    const key = normalizeSearchText(header);
+    const values = rows.map((row) => String(row[header] ?? '').trim()).filter(Boolean).slice(0, 100);
+    if (/imagem|foto|anexo|arquivo|documento/.test(key)) return /imagem|foto/.test(key) ? 'image' : 'file';
+    if (/responsavel|equipe|colaborador|tecnico|aberto por/.test(key)) return 'person';
+    if (/localizacao|geolocalizacao|coordenada|latitude|longitude/.test(key)) return 'location';
+    if (/link|url|site/.test(key) || (values.length && values.filter((value) => /^https?:\/\//i.test(value)).length / values.length >= 0.7)) return 'link';
+    if (/data|inicio|fim|conclusao|previsao|prazo/.test(key) || (values.length && values.filter(importDateValue).length / values.length >= 0.75)) return 'date';
+    if (values.length && values.filter((value) => /^(sim|nao|não|true|false|yes|no|0|1)$/i.test(value)).length / values.length >= 0.85) return 'checkbox';
+    if (/percent|progresso|andamento/.test(key)) return 'percentage';
+    if (/valor|custo|preco|preço|orcamento|orçamento/.test(key)) return 'currency';
+    if (/quantidade|total|numero|número|km|metragem/.test(key) || (values.length && values.filter((value) => Number.isFinite(Number(value.replace(/\./g, '').replace(',', '.')))).length / values.length >= 0.8)) return 'number';
+    const unique = new Set(values.map(normalizeSearchText));
+    if (/status|situacao|situação|prioridade/.test(key)) return 'status';
+    if (values.length >= 3 && unique.size <= Math.min(20, Math.ceil(values.length * 0.35))) return 'select';
+    return 'text';
+  }
+
+  function autoImportMapping(context, header, index, inferredType) {
+    const key = normalizeSearchText(header).replace(/\s+/g, '');
+    if (/^(item|nome|elemento|registro|titulo|título|cidade|obra|projeto)$/.test(key)) return '__name__';
+    if (/^(grupo|setor|fase|categoria|etapa|statusdogrupo)$/.test(key)) return '__group__';
+    if (/^(pai|elementopai|itempai|registropai|obrapai|projetopai|parent)$/.test(key)) return '__parent__';
+    const normalizedName = (value) => normalizeSearchText(value).replace(/\s+/g, '');
+    const exact = context.board.columns.find((entry) => normalizedName(entry.name) === key);
+    const close = context.board.columns.find((entry) => {
+      const columnKey = normalizedName(entry.name);
+      return key.length > 3 && columnKey.length > 3 && (columnKey.includes(key) || key.includes(columnKey));
+    });
+    return (exact || close)?.id || `__new__:${inferredType}`;
   }
 
   async function submitImport(form) {
@@ -7259,45 +8176,76 @@ window.__ATLAS_VERSION__ = '2.1.0 OFICIAL';
     const groupId = formData.get('groupId');
     if (!(file instanceof File) || !file.size) return;
     try {
-      if (file.size > 8 * 1024 * 1024) throw new Error('A planilha ultrapassa o limite de 8 MB.');
+      setOperationProgress('Lendo planilha', 5, file.name);
+      if (file.size > 15 * 1024 * 1024) throw new Error('A planilha ultrapassa o limite de 15 MB.');
+      await loadAssetScript('./assets/vendor/xlsx.full.min.js', () => Boolean(window.XLSX?.read && window.XLSX?.utils));
       if (!window.XLSX?.read || !window.XLSX?.utils) throw new Error('O leitor seguro de planilhas não foi carregado.');
       const buffer = await file.arrayBuffer();
+      setOperationProgress('Analisando estrutura', 25, 'Localizando a melhor aba e o cabeçalho');
       const workbook = window.XLSX.read(buffer, { type: 'array', cellFormula: false, cellHTML: false, cellStyles: false });
-      const sheet = workbook.Sheets[workbook.SheetNames[0]];
-      if (!sheet) throw new Error('A planilha não possui uma aba legível.');
-      const range = window.XLSX.utils.decode_range(sheet['!ref'] || 'A1:A1');
-      const rowCount = range.e.r - range.s.r + 1;
-      const columnCount = range.e.c - range.s.c + 1;
-      if (rowCount > 5001) throw new Error('A importação aceita no máximo 5.000 registros por arquivo.');
-      if (columnCount > 100) throw new Error('A importação aceita no máximo 100 colunas por arquivo.');
-      const rows = window.XLSX.utils.sheet_to_json(sheet, { defval: '', raw: false }).slice(0, 5000);
       const context = findBoard();
       const target = context?.board?.groups.find((entry) => entry.id === groupId);
       if (!target) throw new Error('O grupo de destino não está mais disponível.');
-      const headers = [...new Set(rows.flatMap((row) => Object.keys(row)))].filter((key) => !['__proto__', 'prototype', 'constructor'].includes(String(key).toLowerCase()));
+
+      const candidates = workbook.SheetNames.map((sheetName) => {
+        const sheet = workbook.Sheets[sheetName];
+        const matrix = window.XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '', raw: false, blankrows: false });
+        let headerRow = 0;
+        let score = -1;
+        matrix.slice(0, 25).forEach((_, rowIndex) => {
+          const current = importHeaderScore(matrix, rowIndex);
+          if (current > score) { score = current; headerRow = rowIndex; }
+        });
+        const populatedRows = matrix.slice(headerRow + 1).filter((row) => row.some((value) => String(value ?? '').trim() !== ''));
+        return { sheetName, matrix, headerRow, score: score + Math.min(100, populatedRows.length), populatedRows };
+      }).filter((entry) => entry.matrix.length);
+      const selectedSheet = candidates.sort((a, b) => b.score - a.score)[0];
+      if (!selectedSheet) throw new Error('A planilha não possui uma aba legível.');
+      const headers = importUniqueHeaders(selectedSheet.matrix[selectedSheet.headerRow]);
+      if (headers.length > 100) throw new Error('A importação aceita no máximo 100 colunas por arquivo.');
+      const rows = selectedSheet.populatedRows.slice(0, 5000).map((rawRow) => headers.reduce((result, header, index) => {
+        result[header] = rawRow[index] ?? '';
+        return result;
+      }, {}));
       if (!headers.length || !rows.length) throw new Error('A planilha não possui registros para importar.');
-      const normalized = (value) => normalizeSearchText(value).replace(/\s+/g, '');
+      const inferredTypes = {};
       const mapping = {};
       headers.forEach((header, index) => {
-        const headerKey = normalized(header);
-        const exact = context.board.columns.find((entry) => normalized(entry.name) === headerKey);
-        const close = context.board.columns.find((entry) => normalized(entry.name).includes(headerKey) || headerKey.includes(normalized(entry.name)));
-        mapping[header] = /^(item|nome|elemento|registro|titulo)$/i.test(normalizeSearchText(header).replace(/\s+/g, '')) || index === 0
-          ? '__name__'
-          : (exact || close)?.id || '';
+        inferredTypes[header] = inferImportType(header, rows);
+        mapping[header] = autoImportMapping(context, header, index, inferredTypes[header]);
       });
+      if (!headers.some((header) => mapping[header] === '__name__')) mapping[headers[0]] = '__name__';
       runtime.importPreview = {
         fileName: file.name,
         groupId: String(groupId),
+        sheetName: selectedSheet.sheetName,
+        headerRow: selectedSheet.headerRow + 1,
         rows,
         headers,
         mapping,
+        inferredTypes,
+        availableSheets: candidates.map((entry) => entry.sheetName),
         skipDuplicates: Boolean(formData.get('skipDuplicates')),
       };
+      setOperationProgress('Planilha analisada', 100, `${selectedSheet.sheetName} · ${rows.length} registro(s)`);
+      clearOperationProgress();
       openImportPreview();
     } catch (error) {
+      clearOperationProgress(0);
       toast(error.message || 'Não foi possível ler o arquivo', true);
     }
+  }
+
+  function importMappingOptions(context, header, selected, inferredType) {
+    const options = [
+      ['', 'Ignorar coluna'],
+      ['__name__', 'Nome do registro'],
+      ['__group__', 'Grupo / setor'],
+      ['__parent__', 'Elemento pai'],
+      ...context.board.columns.map((entry) => [entry.id, `${entry.name} (${COLUMN_TYPES[entry.type]?.label || entry.type})`]),
+      [`__new__:${inferredType}`, `Criar coluna "${header}" (${COLUMN_TYPES[inferredType]?.label || inferredType})`],
+    ];
+    return options.map(([value, label]) => `<option value="${attr(value)}" ${value === selected ? 'selected' : ''}>${escapeHtml(label)}</option>`).join('');
   }
 
   function openImportPreview() {
@@ -7309,31 +8257,77 @@ window.__ATLAS_VERSION__ = '2.1.0 OFICIAL';
       const nameHeader = preview.headers.find((header) => preview.mapping[header] === '__name__') || preview.headers[0];
       return existingNames.has(normalizeSearchText(row[nameHeader]));
     }).length;
-    const options = `<option value="">Ignorar coluna</option><option value="__name__">Nome do registro</option>${context.board.columns.map((entry) => `<option value="${attr(entry.id)}">${escapeHtml(entry.name)}</option>`).join('')}`;
+    const samples = preview.rows.slice(0, 5);
     openModal({
       title: 'Revisar importação',
-      subtitle: `${preview.fileName} · ${preview.rows.length} registro(s)`,
-      body: `<div class="atlas-v2-import-summary"><div><i data-lucide="sheet"></i><span><strong>${preview.headers.length}</strong><small>colunas encontradas</small></span></div><div><i data-lucide="rows-3"></i><span><strong>${preview.rows.length}</strong><small>linhas válidas</small></span></div><div><i data-lucide="copy-check"></i><span><strong>${duplicateCount}</strong><small>possíveis duplicados</small></span></div></div><form id="atlas-v2-import-confirm-form"><div class="atlas-v2-import-mapping">${preview.headers.map((header) => `<label><span><strong>${escapeHtml(header)}</strong><small>${escapeHtml(String(preview.rows[0]?.[header] ?? '').slice(0, 60))}</small></span><i data-lucide="arrow-right"></i><select name="map:${attr(header)}">${options.replace(`value="${attr(preview.mapping[header])}"`, `value="${attr(preview.mapping[header])}" selected`)}</select></label>`).join('')}</div><label class="atlas-v2-check-row"><input name="skipDuplicates" type="checkbox" ${preview.skipDuplicates ? 'checked' : ''}><span><strong>Ignorar ${duplicateCount} possível(is) duplicado(s)</strong><small>Nenhum registro existente será alterado.</small></span></label></form>`,
+      subtitle: `${preview.fileName} · aba ${preview.sheetName} · cabeçalho na linha ${preview.headerRow}`,
+      body: `<div class="atlas-v2-import-summary"><div><i data-lucide="sheet"></i><span><strong>${preview.headers.length}</strong><small>colunas detectadas</small></span></div><div><i data-lucide="rows-3"></i><span><strong>${preview.rows.length}</strong><small>linhas válidas</small></span></div><div><i data-lucide="copy-check"></i><span><strong>${duplicateCount}</strong><small>possíveis duplicados</small></span></div></div><form id="atlas-v2-import-confirm-form"><div class="atlas-v2-import-mapping">${preview.headers.map((header) => `<label><span><strong>${escapeHtml(header)}</strong><small>${escapeHtml(String(preview.rows[0]?.[header] ?? '').slice(0, 60))} · ${escapeHtml(COLUMN_TYPES[preview.inferredTypes[header]]?.label || preview.inferredTypes[header])}</small></span><i data-lucide="arrow-right"></i><select name="map:${attr(header)}">${importMappingOptions(context, header, preview.mapping[header], preview.inferredTypes[header])}</select></label>`).join('')}</div><div class="atlas-v2-import-sample"><strong>Prévia do que foi lido</strong><div><table><thead><tr>${preview.headers.map((header) => `<th>${escapeHtml(header)}</th>`).join('')}</tr></thead><tbody>${samples.map((row) => `<tr>${preview.headers.map((header) => `<td>${escapeHtml(String(row[header] ?? '').slice(0, 80))}</td>`).join('')}</tr>`).join('')}</tbody></table></div></div><label class="atlas-v2-check-row"><input name="skipDuplicates" type="checkbox" ${preview.skipDuplicates ? 'checked' : ''}><span><strong>Ignorar ${duplicateCount} possível(is) duplicado(s)</strong><small>Revise o mapeamento acima antes de confirmar.</small></span></label></form>`,
       actions: `<button class="atlas-v2-button atlas-v2-button-quiet" type="button" data-action="import">Voltar</button><button class="atlas-v2-button atlas-v2-button-primary" type="submit" form="atlas-v2-import-confirm-form"><i data-lucide="file-check-2"></i>Confirmar importação</button>`,
     });
   }
 
-  function confirmImport(form) {
+  function importedColumnValue(columnEntry, rawValue) {
+    const value = String(rawValue ?? '').trim();
+    if (columnEntry.type === 'checkbox') return /^(sim|true|yes|1|x|ok)$/i.test(value);
+    if (columnEntry.type === 'date') return importDateValue(value);
+    if (['number', 'currency', 'percentage'].includes(columnEntry.type)) {
+      const number = Number(value.replace(/\./g, '').replace(',', '.').replace(/[^\d.-]/g, ''));
+      return Number.isFinite(number) ? number : '';
+    }
+    return rawValue ?? '';
+  }
+
+  function importGroupForValue(boardEntry, fallbackGroup, value) {
+    const name = String(value ?? '').trim();
+    if (!name) return fallbackGroup;
+    const existing = boardEntry.groups.find((entry) => normalizeSearchText(entry.name) === normalizeSearchText(name));
+    if (existing) return existing;
+    const colors = ['#0f6cbd', '#7a5aa6', '#b87503', '#07846c', '#b42335', '#4573c4'];
+    const created = group(id('group'), name, colors[boardEntry.groups.length % colors.length], []);
+    created.order = boardEntry.groups.length;
+    boardEntry.groups.push(created);
+    return created;
+  }
+
+  async function confirmImport(form) {
     const context = findBoard();
     const preview = runtime.importPreview;
     if (!context || !preview) return;
-    const target = context.board.groups.find((entry) => entry.id === preview.groupId);
-    if (!target) return toast('O grupo de destino não está mais disponível.', true);
+    const fallbackGroup = context.board.groups.find((entry) => entry.id === preview.groupId);
+    if (!fallbackGroup) return toast('O grupo de destino não está mais disponível.', true);
     const data = new FormData(form);
     const mapping = {};
     preview.headers.forEach((header) => { mapping[header] = String(data.get(`map:${header}`) || ''); });
     const nameHeader = preview.headers.find((header) => mapping[header] === '__name__') || preview.headers[0];
+    const groupHeader = preview.headers.find((header) => mapping[header] === '__group__');
+    const parentHeader = preview.headers.find((header) => mapping[header] === '__parent__');
+    const initialGroupCount = context.board.groups.length;
+    const createdColumnIds = [];
+    preview.headers.forEach((header) => {
+      if (!mapping[header].startsWith('__new__:')) return;
+      const inferredType = mapping[header].slice('__new__:'.length);
+      const values = preview.rows.map((row) => String(row[header] ?? '').trim()).filter(Boolean);
+      const options = ['status', 'select'].includes(inferredType)
+        ? [...new Set(values)].slice(0, 50).map((label) => inferredType === 'status' ? { label, background: STATUS_FALLBACK_BACKGROUNDS[createdColumnIds.length % STATUS_FALLBACK_BACKGROUNDS.length] } : label)
+        : [];
+      const newColumn = column(id('column'), header, inferredType, { options });
+      newColumn.order = context.board.columns.length;
+      context.board.columns.push(newColumn);
+      createdColumnIds.push(newColumn.id);
+      mapping[header] = newColumn.id;
+    });
     const existingNames = new Set(flatBoardItems(context.board).map((entry) => normalizeSearchText(entry.item.name)));
     const createdIds = [];
+    const importedParents = new Map();
     let skipped = 0;
-    preview.rows.forEach((row) => {
+    closeOverlay();
+    setOperationProgress('Organizando dados da planilha', 5, `0 de ${preview.rows.length}`);
+    preview.rows.forEach((row, rowIndex) => {
       const name = String(row[nameHeader] || 'Item importado').trim() || 'Item importado';
-      if (data.get('skipDuplicates') && existingNames.has(normalizeSearchText(name))) {
+      const target = importGroupForValue(context.board, fallbackGroup, groupHeader ? row[groupHeader] : '');
+      const parentName = parentHeader ? String(row[parentHeader] ?? '').trim() : '';
+      const duplicateKey = normalizeSearchText(`${target.id}|${parentName}|${name}`);
+      if (data.get('skipDuplicates') && (existingNames.has(duplicateKey) || (!parentName && existingNames.has(normalizeSearchText(name))))) {
         skipped += 1;
         return;
       }
@@ -7341,27 +8335,76 @@ window.__ATLAS_VERSION__ = '2.1.0 OFICIAL';
       context.board.columns.forEach((columnEntry) => { newItem.values[columnEntry.id] = columnEntry.type === 'checkbox' ? false : ''; });
       preview.headers.forEach((header) => {
         const columnId = mapping[header];
-        if (columnId && columnId !== '__name__') newItem.values[columnId] = row[header] ?? '';
+        const columnEntry = context.board.columns.find((entry) => entry.id === columnId);
+        if (columnEntry) newItem.values[columnId] = importedColumnValue(columnEntry, row[header]);
       });
-      target.items.push(newItem);
+      if (parentName) {
+        const parentKey = `${target.id}:${normalizeSearchText(parentName)}`;
+        let parent = importedParents.get(parentKey)
+          || target.items.find((entry) => normalizeSearchText(entry.name) === normalizeSearchText(parentName));
+        if (!parent) {
+          parent = item(id('item'), target.id, parentName, {});
+          parent.order = nextItemOrder(target.items);
+          context.board.columns.forEach((columnEntry) => { parent.values[columnEntry.id] = columnEntry.type === 'checkbox' ? false : ''; });
+          target.items.push(parent);
+          createdIds.push(parent.id);
+        }
+        importedParents.set(parentKey, parent);
+        parent.subitems = parent.subitems || [];
+        newItem.order = nextItemOrder(parent.subitems);
+        parent.subitems.push(newItem);
+        parent.subitemsExpanded = true;
+      } else {
+        newItem.order = nextItemOrder(target.items);
+        target.items.push(newItem);
+      }
       createdIds.push(newItem.id);
-      existingNames.add(normalizeSearchText(name));
+      existingNames.add(duplicateKey);
+      setOperationProgress('Organizando dados da planilha', 8 + ((rowIndex + 1) / preview.rows.length) * 42, `${rowIndex + 1} de ${preview.rows.length}`);
     });
     context.board.settings = context.board.settings || {};
     context.board.settings.import_batches = Array.isArray(context.board.settings.import_batches) ? context.board.settings.import_batches : [];
     context.board.settings.import_batches.push({
       id: id('import'),
       fileName: preview.fileName,
-      groupId: target.id,
+      groupId: fallbackGroup.id,
       itemIds: createdIds,
+      columnIds: createdColumnIds,
       createdAt: new Date().toISOString(),
       rolledBackAt: null,
     });
     context.board.settings.import_batches = context.board.settings.import_batches.slice(-20);
     runtime.importPreview = null;
-    closeOverlay();
-    saveData(`${createdIds.length} item(ns) importado(s)${skipped ? ` · ${skipped} duplicado(s) ignorado(s)` : ''}`, { importBatch: createdIds });
+    saveData('', { remote: false });
     render();
+    try {
+      setOperationProgress('Enviando importação ao servidor', 55, `${createdIds.length} registro(s)`);
+      if (runtime.remoteMode && runtime.authClient) {
+        const structureChanged = createdColumnIds.length > 0 || context.board.groups.length !== initialGroupCount;
+        if (structureChanged) await syncRemoteData();
+        else await persistRemoteItemsSoon(context, createdIds);
+      }
+      else saveData();
+      setOperationProgress('Importação concluída', 100, `${createdIds.length} registro(s) · ${createdColumnIds.length} nova(s) coluna(s)`);
+      toast(`${createdIds.length} item(ns) importado(s)${skipped ? ` · ${skipped} duplicado(s) ignorado(s)` : ''}`);
+    } catch (error) {
+      setOperationProgress('Importação salva localmente', 100, 'A sincronização será repetida automaticamente.');
+    } finally {
+      clearOperationProgress();
+    }
+  }
+
+  function removeImportedItems(collection, ids) {
+    let removed = 0;
+    for (let index = collection.length - 1; index >= 0; index -= 1) {
+      const entry = collection[index];
+      removed += removeImportedItems(entry.subitems || [], ids);
+      if (ids.has(entry.id)) {
+        collection.splice(index, 1);
+        removed += 1;
+      }
+    }
+    return removed;
   }
 
   function rollbackImport(batchId) {
@@ -7369,12 +8412,8 @@ window.__ATLAS_VERSION__ = '2.1.0 OFICIAL';
     const batches = Array.isArray(context?.board?.settings?.import_batches) ? context.board.settings.import_batches : [];
     const batch = batches.find((entry) => entry.id === batchId && !entry.rolledBackAt);
     if (!batch || !requirePermission('delete', context, 'desfazer esta importação')) return;
-    const target = context.board.groups.find((entry) => entry.id === batch.groupId);
-    if (!target) return toast('O grupo original desta importação não existe mais.', true);
     const ids = new Set(batch.itemIds || []);
-    const before = target.items.length;
-    target.items = target.items.filter((entry) => !ids.has(entry.id));
-    const removed = before - target.items.length;
+    const removed = context.board.groups.reduce((total, groupEntry) => total + removeImportedItems(groupEntry.items, ids), 0);
     batch.rolledBackAt = new Date().toISOString();
     closeOverlay();
     saveData(`${removed} registro(s) da importação foram removidos`, { scope: 'board' });
@@ -8089,8 +9128,8 @@ window.__ATLAS_VERSION__ = '2.1.0 OFICIAL';
     if (action === 'overlay-backdrop' && event.target !== target) return;
     const context = findBoard();
     const protectedActions = {
-      'add-item': 'create', 'add-item-to-group': 'create', 'add-subitem': 'create', 'duplicate-item': 'create', import: 'create',
-      'bulk-move': 'edit', sort: 'edit', 'rename-work': 'edit',
+      'add-item': 'create', 'add-item-to-group': 'create', 'add-subitem': 'create', 'add-work-element': 'create', 'duplicate-item': 'create', import: 'create',
+      'bulk-move': 'edit', 'bulk-edit': 'edit', sort: 'edit', 'rename-work': 'edit',
       'delete-item': 'delete', 'bulk-delete': 'delete', 'delete-work': 'delete', 'confirm-delete-work': 'delete',
       'add-group': 'configure', 'add-column': 'configure', 'group-menu': 'configure', 'edit-group': 'configure', 'duplicate-group': 'configure', 'delete-group': 'configure',
       'board-settings': 'configure', 'edit-column': 'configure', 'edit-status-colors': 'configure', 'move-column': 'configure', 'delete-column': 'configure', 'edit-workspace': 'configure', automations: 'configure', 'automation-new': 'configure', 'automation-edit': 'configure', 'automation-toggle': 'configure', 'automation-delete': 'configure', 'automation-confirm-delete': 'configure', 'automation-templates': 'configure', 'automation-use-template': 'configure', 'automation-run': 'configure', 'automation-history': 'configure',
@@ -8189,6 +9228,7 @@ window.__ATLAS_VERSION__ = '2.1.0 OFICIAL';
       'add-item': () => addItem(context.board.groups[0]?.id),
       'add-item-to-group': () => addItem(target.dataset.groupId),
       'add-subitem': () => addSubitem(target.dataset.itemId, target.dataset.workSector || ''),
+      'add-work-element': () => addWorkElement(target.dataset.itemId, target.dataset.workSector || ''),
       'toggle-subitems': () => {
         const found = findItem(context.board, target.dataset.itemId);
         if (found && visibleSubitems(context.board, found.item).length) {
@@ -8216,7 +9256,15 @@ window.__ATLAS_VERSION__ = '2.1.0 OFICIAL';
       'delete-group': () => deleteGroup(target.dataset.groupId),
       'duplicate-item': () => duplicateItem(target.dataset.itemId),
       'delete-item': () => deleteItems([target.dataset.itemId]),
-      'clear-selection': () => { runtime.selectedItems.clear(); render(); },
+      'select-all-items': () => {
+        const allIds = flatBoardItems(context.board).map((entry) => entry.item.id);
+        const everySelected = allIds.length > 0 && allIds.every((itemId) => runtime.selectedItems.has(itemId));
+        runtime.selectedItems.clear();
+        if (!everySelected) allIds.forEach((itemId) => runtime.selectedItems.add(itemId));
+        refreshSelectionUi(context.board);
+      },
+      'clear-selection': () => { runtime.selectedItems.clear(); refreshSelectionUi(context.board); },
+      'bulk-edit': openBulkEditModal,
       'bulk-move': () => {
         const destination = document.getElementById('atlas-v2-bulk-group')?.value;
         if (destination) moveItems([...runtime.selectedItems], destination);
@@ -8274,6 +9322,8 @@ window.__ATLAS_VERSION__ = '2.1.0 OFICIAL';
       'admin-health-check': runSystemHealthCheck,
       'admin-new-storage': () => openStorageConnectionModal(),
       'admin-edit-storage': () => openStorageConnectionModal(target.dataset.storageId),
+      'admin-organize-storage': () => { void openOrganizeStorageModal(target.dataset.storageId); },
+      'admin-confirm-organize-storage': () => organizeStorageConnection(target.dataset.storageId),
       'admin-new-user': openAdminUserModal,
       'admin-approve-user': () => approveAdminUser(target.dataset.userId),
       'admin-delete-user': () => openDeleteAdminUser(target.dataset.userId),
@@ -8312,6 +9362,10 @@ window.__ATLAS_VERSION__ = '2.1.0 OFICIAL';
       updateColumnEditorVisibility();
       return;
     }
+    if (target.closest('#atlas-v2-bulk-edit-form') && (target.name === 'fieldId' || target.name === 'operation')) {
+      updateBulkEditorValue();
+      return;
+    }
     if (target.matches('[name="driveName"], [name="driveSector"], [name="driveEmail"], [name="driveFolderUrl"], [name="driveAppScriptUrl"]')) {
       const form = target.closest('form');
       if (form?.elements?.driveVerified) form.elements.driveVerified.value = '0';
@@ -8335,13 +9389,16 @@ window.__ATLAS_VERSION__ = '2.1.0 OFICIAL';
     }
     if (target.matches('[data-action="select-item"]')) {
       if (target.checked) runtime.selectedItems.add(target.dataset.itemId); else runtime.selectedItems.delete(target.dataset.itemId);
-      render();
+      refreshSelectionUi(context.board);
       return;
     }
     if (target.matches('[data-action="select-group"]')) {
       const groupEntry = context.board.groups.find((entry) => entry.id === target.dataset.groupId);
-      groupEntry?.items.forEach((entry) => target.checked ? runtime.selectedItems.add(entry.id) : runtime.selectedItems.delete(entry.id));
-      render();
+      groupEntry?.items.forEach((entry) => itemTreeIds(entry, []).forEach((itemId) => {
+        if (target.checked) runtime.selectedItems.add(itemId);
+        else runtime.selectedItems.delete(itemId);
+      }));
+      refreshSelectionUi(context.board);
       return;
     }
     if (target.matches('[data-item-value]')) {
@@ -8397,16 +9454,22 @@ window.__ATLAS_VERSION__ = '2.1.0 OFICIAL';
     const target = event.target;
     if (target.id === 'atlas-v2-nav-search') {
       runtime.navSearch = target.value;
-      renderNavigation();
-      refreshIcons(document.getElementById('atlas-v2-navigation'));
+      clearTimeout(runtime.navSearchTimer);
+      runtime.navSearchTimer = setTimeout(() => {
+        renderNavigation();
+        refreshIcons(document.getElementById('atlas-v2-navigation'));
+      }, 90);
     } else if (target.id === 'atlas-v2-board-search') {
       runtime.boardSearch = target.value;
-      const context = findBoard();
-      if (!context) return;
-      if (context.board.activeView === 'works') selectWorkFromContextSearch(context.board);
-      renderBoardContent(context.board);
-      refreshIcons(document.getElementById('atlas-v2-board-content'));
-      if (context.board.activeView === 'works') revealContextSearchWork(context.board, true);
+      clearTimeout(runtime.boardSearchTimer);
+      runtime.boardSearchTimer = setTimeout(() => {
+        const context = findBoard();
+        if (!context) return;
+        if (context.board.activeView === 'works') selectWorkFromContextSearch(context.board);
+        renderBoardContent(context.board);
+        refreshIcons(document.getElementById('atlas-v2-board-content'));
+        if (context.board.activeView === 'works') revealContextSearchWork(context.board, true);
+      }, 90);
     } else if (target.matches('[data-status-color-input]')) {
       const preview = target.closest('[data-status-color-row]')?.querySelector('[data-status-color-preview]');
       if (preview) {
@@ -8525,6 +9588,7 @@ window.__ATLAS_VERSION__ = '2.1.0 OFICIAL';
     if (form.id === 'atlas-v2-board-settings-form') submitBoardSettings(form);
     if (form.id === 'atlas-v2-import-form') submitImport(form);
     if (form.id === 'atlas-v2-import-confirm-form') confirmImport(form);
+    if (form.id === 'atlas-v2-bulk-edit-form') submitBulkEdit(form);
     if (form.id === 'atlas-v2-dashboard-widget-form') submitDashboardWidget(form);
     if (form.id === 'atlas-v2-filter-form') submitAdvancedFilters(form);
     if (form.id === 'atlas-v2-rename-work-form') submitRenameWork(form);

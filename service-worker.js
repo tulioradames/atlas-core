@@ -1,4 +1,4 @@
-const ATLAS_CACHE = 'atlas-v2-1-0-oficial-shell-v3';
+const ATLAS_CACHE = 'atlas-v2-2-0-dev-shell-v8';
 const ATLAS_SHELL = [
   './',
   './index.html',
@@ -8,7 +8,6 @@ const ATLAS_SHELL = [
   './config/config.js',
   './assets/vendor/lucide.min.js',
   './assets/vendor/supabase.min.js',
-  './assets/vendor/xlsx.full.min.js',
   './assets/icons/icon-192.png',
   './assets/icons/icon-512.png',
 ];

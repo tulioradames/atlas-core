@@ -12,7 +12,7 @@
   <meta name="application-name" content="Atlas 2.1">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="assets/icons/favicon.ico">
-  <link rel="stylesheet" href="css/v2.css?v=2.1.0">
+  <link rel="stylesheet" href="css/v2.css?v=2.2.0">
 </head>
 <body class="atlas-v2-auth-locked">
   <div class="atlas-v2-auth-root" id="atlas-v2-auth-root" aria-live="polite"></div>
@@ -116,10 +116,11 @@
             <i data-lucide="search"></i>
             <input id="atlas-v2-board-search" type="search" placeholder="Filtrar itens" autocomplete="off">
           </label>
-          <button class="atlas-v2-button atlas-v2-button-quiet" type="button" data-action="filter"><i data-lucide="list-filter"></i><span>Filtrar</span></button>
-          <button class="atlas-v2-button atlas-v2-button-quiet" type="button" data-action="sort"><i data-lucide="arrow-up-down"></i><span>Ordenar</span></button>
+          <button class="atlas-v2-button atlas-v2-button-quiet" type="button" data-action="filter" title="Filtrar registros" aria-label="Filtrar registros"><i data-lucide="list-filter"></i><span>Filtrar</span></button>
+          <button class="atlas-v2-button atlas-v2-button-quiet" type="button" data-action="sort" title="Ordenar registros" aria-label="Ordenar registros"><i data-lucide="arrow-up-down"></i><span>Ordenar</span></button>
         </div>
         <div class="atlas-v2-toolbar-secondary">
+          <button class="atlas-v2-icon-button" type="button" data-action="select-all-items" title="Selecionar todos os elementos e subelementos" aria-label="Selecionar todos os elementos e subelementos"><i data-lucide="list-checks"></i></button>
           <button class="atlas-v2-icon-button" type="button" data-action="automations" title="Automações" aria-label="Automações"><i data-lucide="workflow"></i></button>
           <button class="atlas-v2-icon-button" type="button" data-action="import" title="Importar planilha" aria-label="Importar planilha"><i data-lucide="file-up"></i></button>
           <button class="atlas-v2-icon-button atlas-v2-field-mode-button" type="button" data-action="field-mode-toggle" title="Modo de campo" aria-label="Ativar modo de campo"><i data-lucide="smartphone"></i></button>
@@ -136,18 +137,22 @@
       <footer class="atlas-v2-footer">
         <span>Atlas · Smart Field Management · Criado por Túlio Radamés</span>
         <span id="atlas-v2-save-state"><i data-lucide="cloud-check"></i>Alterações salvas</span>
-          <span>V2.1.0 Oficial</span>
+          <span>V2.2.0 Desenvolvimento</span>
       </footer>
     </main>
   </div>
 
   <div id="atlas-v2-overlay-root"></div>
+  <div class="atlas-v2-operation-progress" id="atlas-v2-operation-progress" hidden role="status" aria-live="polite">
+    <div><span id="atlas-v2-operation-label">Processando</span><strong id="atlas-v2-operation-percent">0%</strong></div>
+    <progress id="atlas-v2-operation-meter" max="100" value="0"></progress>
+    <small id="atlas-v2-operation-detail"></small>
+  </div>
   <div class="atlas-v2-toast-region" id="atlas-v2-toast-region" aria-live="polite"></div>
 
-  <script src="config/config.js?v=2.1.0"></script>
+  <script src="config/config.js?v=2.2.0"></script>
   <script src="assets/vendor/supabase.min.js"></script>
   <script src="assets/vendor/lucide.min.js"></script>
-  <script src="assets/vendor/xlsx.full.min.js"></script>
-  <script src="js/v2.js?v=2.1.0.1"></script>
+  <script src="js/v2.js?v=2.2.0-perf7"></script>
 </body>
 </html>
