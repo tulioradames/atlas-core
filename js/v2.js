@@ -1,7 +1,64 @@
 (function atlasV2Official() {
   'use strict';
 
-window.__ATLAS_VERSION__ = '2.2.0 DESENVOLVIMENTO';
+window.__ATLAS_VERSION__ = '2.3.0 OFICIAL';
+
+  // ---------------------------------------------------------------------------
+  // VERSAO DOS ARQUIVOS WEB - fonte unica.
+  //
+  // Ao publicar uma versao nova, altere ATLAS_BUILD aqui e use exatamente a
+  // mesma string nas querystrings ?v= do index.html (css/v2.css, js/v2.js e
+  // config/config.js) e nos icones do manifest.webmanifest.
+  //
+  // O service-worker.js NAO precisa ser editado: ele le a versao do proprio
+  // parametro ?v= do registro e deriva dela o nome do cache e as URLs do
+  // pre-cache. tests/static-audit.cjs falha se index.html e ATLAS_BUILD
+  // divergirem, que era a causa dos casos de "publiquei mas continua igual".
+  // ---------------------------------------------------------------------------
+  const ATLAS_BUILD = '2.3.0';
+  window.__ATLAS_BUILD__ = ATLAS_BUILD;
+
+  // Changelog exibido na tela de Início. Mantido a mao a cada entrega -
+  // nao ha nenhum processo automatico de build que gere isto sozinho.
+  // Ordem: mais recente primeiro.
+  const CHANGELOG = [
+    {
+      version: 'V2.3.0 Oficial',
+      date: '2026-08-06',
+      notes: [
+        'Tela de Início: saudação por horário, versão atual e histórico de atualizações.',
+        'Controle de acesso por obra: administradores podem liberar ou bloquear o acesso de um usuário a um item específico de um quadro.',
+        'Correção: reordenar grupos e colunas de um quadro agora é salvo de verdade (antes revertia ao atualizar o site).',
+        'Correção: falso "conflito de atualização" que travava a sincronização de colunas mais antigas.',
+        'Campo de moeda com máscara automática em R$ (centavos para cima) e cálculo correto em fórmulas.',
+        'Ícones de módulo personalizáveis, com um pequeno acervo de opções.',
+        'Fórmulas atualizam em tempo real enquanto os campos referenciados são preenchidos.',
+        'Limite de upload de arquivos aumentado de 15 MB para 30 MB.',
+      ],
+    },
+    {
+      version: 'V2.2.0 Desenvolvimento',
+      date: '2026-07-30',
+      notes: [
+        'Correção crítica: sincronização em segundo plano podia apagar valores e anexos de itens ainda não abertos na sessão.',
+        'Correção crítica: restaurar itens da lixeira podia perder valores de subitens nunca abertos antes da exclusão.',
+        'Revisão completa do código-fonte, com dezenas de correções de dados, permissões e importação.',
+        'Ambiente de homologação separado da produção para testar mudanças com segurança.',
+      ],
+    },
+  ];
+
+  function greetingForHour(hour) {
+    if (hour >= 5 && hour < 12) return 'Bom dia';
+    if (hour >= 12 && hour < 18) return 'Boa tarde';
+    return 'Boa noite';
+  }
+
+  function formatChangelogDate(value) {
+    const date = new Date(`${value}T00:00:00`);
+    if (Number.isNaN(date.getTime())) return value;
+    return date.toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
+  }
 
   const STORAGE_KEY = 'atlas-v2-official-data';
   const THEME_KEY = 'atlas-v2-theme';
@@ -160,7 +217,7 @@ window.__ATLAS_VERSION__ = '2.2.0 DESENVOLVIMENTO';
     notificationsLoading: false,
     notificationFilter: 'all',
     dataRevision: 0,
-    page: 'board',
+    page: 'home',
     adminTab: 'overview',
     selectedItems: new Set(),
     boardSearch: '',
@@ -202,7 +259,7 @@ window.__ATLAS_VERSION__ = '2.2.0 DESENVOLVIMENTO';
       script.src = source;
       script.async = true;
       script.onload = resolve;
-      script.onerror = () => reject(new Error(`NÃ£o foi possÃ­vel carregar ${source}.`));
+      script.onerror = () => reject(new Error(`Não foi possível carregar ${source}.`));
       document.head.appendChild(script);
     });
     runtime.assetLoads.set(source, operation);
@@ -858,6 +915,7 @@ window.__ATLAS_VERSION__ = '2.2.0 DESENVOLVIMENTO';
       parsed.system = parsed.system && typeof parsed.system === 'object' ? parsed.system : defaults.system;
       parsed.workspaces.forEach((workspace) => {
         if (workspace.storageConnectionId === undefined) workspace.storageConnectionId = null;
+        if (!Array.isArray(workspace.modules)) workspace.modules = [];
         workspace.modules.forEach((module) => {
           if (module.open === undefined) module.open = false;
           if (module.storageConnectionId === undefined) {
@@ -865,6 +923,7 @@ window.__ATLAS_VERSION__ = '2.2.0 DESENVOLVIMENTO';
               ? 'storage-documentacao'
               : module.id === 'mod-expansoes' ? 'storage-expansoes' : null;
           }
+          if (!Array.isArray(module.boards)) module.boards = [];
           module.boards.forEach((boardEntry) => {
         boardEntry.columns = Array.isArray(boardEntry.columns) ? boardEntry.columns.map((entry) => ({
           ...entry,
@@ -872,6 +931,7 @@ window.__ATLAS_VERSION__ = '2.2.0 DESENVOLVIMENTO';
         })) : [];
         boardEntry.views = Array.isArray(boardEntry.views) ? boardEntry.views : ['table', 'kanban'];
         if (!boardEntry.views.includes('gantt')) boardEntry.views.push('gantt');
+        if (!Array.isArray(boardEntry.groups)) boardEntry.groups = [];
         if (boardEntry.id === 'board-rede-obras' && Number(boardEntry.exampleVersion || 0) < 3) {
           const currentItems = boardEntry.groups.flatMap((groupEntry) => groupEntry.items || []);
           if (!currentItems.length) {
@@ -908,7 +968,7 @@ window.__ATLAS_VERSION__ = '2.2.0 DESENVOLVIMENTO';
         const knownFields = new Set();
         parsed.workspaces.forEach((workspace) => workspace.modules.forEach((module) => module.boards.forEach((boardEntry) => {
           boardEntry.columns.forEach((entry) => {
-            const key = `${entry.name.toLowerCase()}::${entry.type}`;
+            const key = `${String(entry.name || '').toLowerCase()}::${entry.type}`;
             if (knownFields.has(key)) return;
             knownFields.add(key);
             parsed.fieldTemplates.push({ ...deepClone(entry), id: id('field-template'), source: boardEntry.name });
@@ -920,8 +980,33 @@ window.__ATLAS_VERSION__ = '2.2.0 DESENVOLVIMENTO';
       }
       return parsed;
     } catch (error) {
-      console.warn('Atlas V2: dados locais inválidos, usando estrutura inicial.', error);
-      return seedData();
+      // Nunca descartar em silencio: o conteudo original e preservado em uma
+      // chave de recuperacao antes de cair para a estrutura inicial, e a falha
+      // fica visivel em Administracao > Sistema > Central de erros.
+      console.error('Atlas V2: falha ao ler os dados locais. O conteudo anterior foi preservado para recuperacao.', error);
+      let preservedAt = '';
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (raw) {
+          preservedAt = `${STORAGE_KEY}-recuperacao`;
+          localStorage.setItem(preservedAt, raw);
+        }
+      } catch (storageError) {
+        console.error('Atlas V2: nao foi possivel preservar a copia de recuperacao.', storageError);
+        preservedAt = '';
+      }
+      const fallback = seedData();
+      fallback.errors = Array.isArray(fallback.errors) ? fallback.errors : [];
+      fallback.errors.unshift({
+        id: id('error'),
+        title: 'Os dados locais não puderam ser lidos',
+        detail: preservedAt
+          ? `O Atlas iniciou com a estrutura inicial. O conteúdo anterior foi preservado em ${preservedAt} e pode ser recuperado. Detalhe técnico: ${error?.message || error}`
+          : `O Atlas iniciou com a estrutura inicial e não foi possível preservar uma cópia do conteúdo anterior. Detalhe técnico: ${error?.message || error}`,
+        createdAt: new Date().toISOString(),
+      });
+      runtime.localDataRecovery = { key: preservedAt, message: error?.message || String(error) };
+      return fallback;
     }
   }
 
@@ -962,8 +1047,7 @@ window.__ATLAS_VERSION__ = '2.2.0 DESENVOLVIMENTO';
     return rows;
   }
 
-  async function readRemoteAccessRules() {
-    const commonOptions = { order: ['user_id', 'id'] };
+  async function readRemoteAccessRulesLegacy(commonOptions) {
     try {
       const rows = await readRemoteTable('atlas_v2_access_rules', {
         ...commonOptions,
@@ -980,6 +1064,34 @@ window.__ATLAS_VERSION__ = '2.2.0 DESENVOLVIMENTO';
         ...commonOptions,
         select: 'id,user_id,workspace_id,module_id,board_id,nivel',
       });
+    }
+  }
+
+  async function readRemoteAccessRules() {
+    const commonOptions = { order: ['user_id', 'id'] };
+    try {
+      const rows = await readRemoteTable('atlas_v2_access_rules', {
+        ...commonOptions,
+        select: 'id,user_id,workspace_id,module_id,board_id,group_id,column_id,item_id,nivel',
+      });
+      runtime.accessRuleScopeColumnsSupported = true;
+      runtime.accessRuleItemColumnSupported = true;
+      return rows;
+    } catch (error) {
+      const message = `${error?.code || ''} ${error?.message || ''} ${error?.details || ''}`;
+      if (!/42703/.test(message) || !/item_id/i.test(message)) {
+        if (!/42703|group_id|column_id/i.test(message)) throw error;
+        runtime.accessRuleScopeColumnsSupported = false;
+        runtime.accessRuleItemColumnSupported = false;
+        console.warn('Atlas V2: permissões por grupo/coluna ainda não estão no banco; usando compatibilidade por área, módulo e quadro.');
+        return readRemoteTable('atlas_v2_access_rules', {
+          ...commonOptions,
+          select: 'id,user_id,workspace_id,module_id,board_id,nivel',
+        });
+      }
+      runtime.accessRuleItemColumnSupported = false;
+      console.warn('Atlas V2: permissões por obra (item) ainda não estão no banco; usando compatibilidade por área, módulo, quadro, grupo e coluna.');
+      return readRemoteAccessRulesLegacy(commonOptions);
     }
   }
 
@@ -1364,6 +1476,7 @@ window.__ATLAS_VERSION__ = '2.2.0 DESENVOLVIMENTO';
         return;
       }
       if (control.type === 'checkbox') control.checked = Boolean(value);
+      else if (columnEntry.type === 'currency') control.value = formatCurrencyDisplay(value);
       else control.value = value ?? '';
       if (columnEntry.type === 'status') {
         const details = optionDetails(columnEntry, value);
@@ -1878,9 +1991,24 @@ window.__ATLAS_VERSION__ = '2.2.0 DESENVOLVIMENTO';
     if (!workspaceRows.length) return null;
 
     const local = runtime.data?.workspaces?.length ? runtime.data : loadData();
+    // O fallback precisa ser o MESMO quadro que activeBoardId vai receber mais
+    // abaixo: o primeiro quadro ativo, do primeiro modulo ativo, da primeira
+    // area ativa. Usar boardRows[0] (lista plana ordenada por module_id, um uuid)
+    // podia escolher um quadro diferente do que a interface acabaria abrindo, e o
+    // prefetch de valores era feito para o quadro errado.
+    const firstVisibleBoardId = (() => {
+      for (const workspace of workspaceRows.filter((entry) => entry.ativo)) {
+        const modules = moduleRows.filter((entry) => entry.ativo && entry.workspace_id === workspace.id);
+        for (const module of modules) {
+          const board = boardRows.find((entry) => entry.ativo && entry.module_id === module.id);
+          if (board) return board.id;
+        }
+      }
+      return boardRows.find((entry) => entry.ativo)?.id || boardRows[0]?.id;
+    })();
     const preferredBoardId = boardRows.some((entry) => entry.id === local.activeBoardId)
       ? local.activeBoardId
-      : boardRows[0]?.id;
+      : firstVisibleBoardId;
     const activeItemIds = itemRows
       .filter((entry) => entry.board_id === preferredBoardId && !entry.parent_item_id)
       .map((entry) => entry.id);
@@ -2028,14 +2156,18 @@ window.__ATLAS_VERSION__ = '2.2.0 DESENVOLVIMENTO';
       ...local,
       schemaVersion: 2,
       activeWorkspaceId: workspaces.some((entry) => entry.id === local.activeWorkspaceId) ? local.activeWorkspaceId : workspaces[0]?.id,
-      activeBoardId: boards.has(local.activeBoardId) ? local.activeBoardId : workspaces[0]?.modules?.[0]?.boards?.[0]?.id,
+      // Mantido alinhado com preferredBoardId (acima) para que o prefetch de
+      // valores seja feito exatamente para o quadro que sera aberto.
+      activeBoardId: boards.has(local.activeBoardId)
+        ? local.activeBoardId
+        : (boards.has(preferredBoardId) ? preferredBoardId : workspaces[0]?.modules?.[0]?.boards?.[0]?.id),
       workspaces,
       storageConnections: storageRows.map(mapRemoteStorage),
       accessRules: accessRows.map((entry) => ({
         id: entry.id,
         userId: entry.user_id,
-        scopeType: entry.column_id ? 'column' : entry.group_id ? 'group' : entry.board_id ? 'board' : entry.module_id ? 'module' : 'workspace',
-        scopeId: entry.column_id || entry.group_id || entry.board_id || entry.module_id || entry.workspace_id,
+        scopeType: entry.item_id ? 'item' : entry.column_id ? 'column' : entry.group_id ? 'group' : entry.board_id ? 'board' : entry.module_id ? 'module' : 'workspace',
+        scopeId: entry.item_id || entry.column_id || entry.group_id || entry.board_id || entry.module_id || entry.workspace_id,
         level: entry.nivel,
       })),
       boardMembers: memberRows.map((entry) => ({ boardId: entry.board_id, userId: entry.user_id, role: entry.role })),
@@ -2119,10 +2251,24 @@ window.__ATLAS_VERSION__ = '2.2.0 DESENVOLVIMENTO';
       runtime.data.auditLog = activityRows.map(mapRemoteAuditEntry);
       runtime.data.trash = trashRows.map(mapRemoteTrashEntry);
       runtime.deferredHydrated = true;
+      runtime.deferredHydrationAttempts = 0;
       scheduleBootstrapCacheWrite(runtime.data);
       render();
     } catch (error) {
-      console.warn('Atlas V2: anexos e complementos serão carregados na próxima atualização.', error);
+      // Falhar aqui deixava histórico, lixeira, integrações e modelos de campo
+      // vazios pelo resto da sessão, sem nenhum aviso: o usuário via "não há
+      // nada" em vez de "não foi possível carregar". Agora há nova tentativa
+      // com espera crescente e um aviso quando as tentativas se esgotam.
+      console.error('Atlas V2: falha ao carregar histórico, lixeira e complementos.', error);
+      runtime.deferredHydrationAttempts = Number(runtime.deferredHydrationAttempts || 0) + 1;
+      if (runtime.deferredHydrationAttempts <= 4) {
+        const delay = Math.min(30000, 1500 * (2 ** (runtime.deferredHydrationAttempts - 1)));
+        clearTimeout(runtime.deferredHydrationTimer);
+        runtime.deferredHydrationTimer = setTimeout(() => { void hydrateDeferredRemoteData(); }, delay);
+      } else if (!runtime.deferredHydrationNotified) {
+        runtime.deferredHydrationNotified = true;
+        toast('Não foi possível carregar histórico, lixeira e integrações. Atualize a página para tentar novamente.', true);
+      }
     } finally {
       runtime.deferredHydration = false;
     }
@@ -2181,7 +2327,8 @@ window.__ATLAS_VERSION__ = '2.2.0 DESENVOLVIMENTO';
       });
     });
     (data.accessRules || []).forEach((entry) => {
-      if (runtime.accessRuleScopeColumnsSupported === false && ['group', 'column'].includes(entry.scopeType)) return;
+      if (runtime.accessRuleScopeColumnsSupported === false && ['group', 'column', 'item'].includes(entry.scopeType)) return;
+      if (runtime.accessRuleItemColumnSupported === false && entry.scopeType === 'item') return;
       const rule = {
         id: entry.id,
         user_id: entry.userId,
@@ -2193,6 +2340,9 @@ window.__ATLAS_VERSION__ = '2.2.0 DESENVOLVIMENTO';
       if (runtime.accessRuleScopeColumnsSupported !== false) {
         rule.group_id = entry.scopeType === 'group' ? entry.scopeId : null;
         rule.column_id = entry.scopeType === 'column' ? entry.scopeId : null;
+      }
+      if (runtime.accessRuleItemColumnSupported !== false) {
+        rule.item_id = entry.scopeType === 'item' ? entry.scopeId : null;
       }
       rows.atlas_v2_access_rules.push(rule);
     });
@@ -2314,7 +2464,27 @@ window.__ATLAS_VERSION__ = '2.2.0 DESENVOLVIMENTO';
 
   async function commitRemoteItemValueChange(context, found, columnEntry, previousValue, nextValue) {
     if (!runtime.authClient || !runtime.remoteMode) return false;
+    // Havia uma sincronizacao geral agendada? Ela e cancelada aqui de proposito,
+    // para nao reenviar o quadro inteiro junto com esta RPC. Mas precisa ser
+    // reagendada no final: outras alteracoes pendentes (renomear grupo, mover
+    // coluna, reordenar) ficariam sem nenhum timer ativo e seriam perdidas se a
+    // aba fosse fechada antes de outro evento agendar um novo envio.
+    // Reagendar e seguro porque applyRemoteItemContext atualiza a baseline
+    // remota com o resultado da RPC, entao o diff deste item fica vazio.
+    const hadPendingSync = Boolean(runtime.remoteSyncTimer);
     clearTimeout(runtime.remoteSyncTimer);
+    runtime.remoteSyncTimer = null;
+    try {
+      return await runCommitRemoteItemValueChange(context, found, columnEntry, previousValue, nextValue);
+    } finally {
+      if (hadPendingSync || runtime.remoteSyncQueued) {
+        runtime.remoteSyncQueued = false;
+        scheduleRemoteSync();
+      }
+    }
+  }
+
+  async function runCommitRemoteItemValueChange(context, found, columnEntry, previousValue, nextValue) {
     for (let attempt = 0; runtime.remoteSyncing && attempt < 100; attempt += 1) {
       await new Promise((resolve) => setTimeout(resolve, 100));
     }
@@ -2474,6 +2644,27 @@ window.__ATLAS_VERSION__ = '2.2.0 DESENVOLVIMENTO';
     ];
     if (!templates.length) return [];
     const currentRows = await fetchCurrentRemoteRows(table, templates);
+    if (table === 'atlas_v2_columns') {
+      // Colunas antigas foram gravadas com "configuracoes" enxuto (ex.: {}),
+      // mas remoteRows() sempre reconstroi esse campo com os valores padrao
+      // que mapRemoteColumn aplicaria (options/formula/format/decimals -
+      // inclusive as 5 opcoes padrao de status quando a coluna e do tipo
+      // "status" e nao tem opcoes salvas). Sem reaplicar exatamente essa
+      // mesma reconstrucao aqui, a comparacao abaixo comparava o "{}" cru do
+      // banco com a versao expandida e ACHAVA um conflito em toda edicao
+      // dessas colunas antigas (renomear, reordenar, etc.), mesmo sem
+      // ninguem mais ter alterado nada - cancelando a sincronizacao inteira.
+      currentRows.forEach((row) => {
+        const mapped = mapRemoteColumn(row);
+        row.configuracoes = {
+          ...(mapped.settings || {}),
+          options: mapped.options || [],
+          formula: mapped.formula || '',
+          format: mapped.format || 'number',
+          decimals: Number(mapped.decimals ?? 2),
+        };
+      });
+    }
     const currentByKey = new Map(currentRows.map((row) => [remoteKey(table, row), row]));
     const conflicts = [];
 
@@ -2522,17 +2713,16 @@ window.__ATLAS_VERSION__ = '2.2.0 DESENVOLVIMENTO';
       changes[table] = next[table].filter((row) => before.get(remoteKey(table, row)) !== JSON.stringify(row));
       removals[table] = [...before.keys()].filter((key) => {
         if (after.has(key)) return false;
-        // CRITICO (hotfix 2026-08-03): remoteRows(runtime.data) percorre TODA a
-        // arvore de dados em memoria, mas o carregamento sob demanda (V2.2.0)
-        // deixa os valores de itens nao abertos nesta sessao vazios ({}) ate
-        // serem hidratados. Sem esta guarda, um sync disparado por QUALQUER
-        // acao (duplicar, mover, restaurar da lixeira) apagava de verdade, no
-        // Supabase, os valores de itens que o usuario simplesmente nunca abriu
-        // nesta sessao - confundindo "nao carregado" com "usuario apagou o
-        // campo". So um item presente em runtime.loadedItemValues teve seus
-        // valores efetivamente buscados do servidor, e so nesse caso a
-        // ausencia de uma chave aqui reflete uma remocao real feita pelo
-        // usuario.
+        // CRITICO: remoteRows(runtime.data) percorre TODA a arvore de dados em
+        // memoria, mas o carregamento sob demanda (V2.2.0) deixa os valores de
+        // itens nao abertos nesta sessao vazios ({}) ate serem hidratados. Sem
+        // esta guarda, um sync disparado por QUALQUER acao (duplicar, mover,
+        // restaurar da lixeira) apagava de verdade, no Supabase, os valores de
+        // itens que o usuario simplesmente nunca abriu nesta sessao -
+        // confundindo "nao carregado" com "usuario apagou o campo". So um item
+        // presente em runtime.loadedItemValues teve seus valores efetivamente
+        // buscados do servidor, e so nesse caso a ausencia de uma chave aqui
+        // reflete uma remocao real feita pelo usuario.
         if (table === 'atlas_v2_item_values') {
           const itemId = key.split(':')[0];
           if (!runtime.loadedItemValues.has(itemId)) return false;
@@ -2626,7 +2816,9 @@ window.__ATLAS_VERSION__ = '2.2.0 DESENVOLVIMENTO';
       runtime.remoteRows = next;
       runtime.remoteRows.atlas_v2_attachments = attachmentBaseline;
       const automationApplied = await refreshAutomationEffectsAfterSync(changes, syncStartedAt);
-      if (indicator) indicator.innerHTML = `<i data-lucide="cloud-check"></i>${automationApplied ? 'Automação aplicada' : 'Alterações sincronizadas'}`;
+      // "cloud-check" nao existe na versao do Lucide empacotada: o icone nao era
+      // desenhado e o console acusava o nome invalido a cada sincronizacao.
+      if (indicator) indicator.innerHTML = `<i data-lucide="circle-check-big"></i>${automationApplied ? 'Automação aplicada' : 'Alterações sincronizadas'}`;
       setOperationProgress('Sincronização concluída', 100, `${totalUnits} alteração(ões) enviada(s)`);
       clearOperationProgress();
       return true;
@@ -2828,7 +3020,7 @@ window.__ATLAS_VERSION__ = '2.2.0 DESENVOLVIMENTO';
           refreshIcons(indicator);
           return;
         }
-        indicator.innerHTML = `<i data-lucide="${runtime.remoteMode ? 'cloud-check' : 'hard-drive'}"></i>${runtime.remoteMode ? 'Alterações enviadas para sincronização' : 'Alterações salvas'}`;
+        indicator.innerHTML = `<i data-lucide="${runtime.remoteMode ? 'cloud-upload' : 'hard-drive'}"></i>${runtime.remoteMode ? 'Alterações enviadas para sincronização' : 'Alterações salvas'}`;
         refreshIcons(indicator);
       }, 240);
     }
@@ -2864,11 +3056,12 @@ window.__ATLAS_VERSION__ = '2.2.0 DESENVOLVIMENTO';
     if (rule.scopeType === 'board') return rule.scopeId === context.board?.id;
     if (rule.scopeType === 'group') return rule.scopeId === context.groupId;
     if (rule.scopeType === 'column') return rule.scopeId === context.columnId;
+    if (rule.scopeType === 'item') return rule.scopeId === context.itemId;
     return false;
   }
 
   function ruleSpecificity(rule) {
-    return { workspace: 1, module: 2, board: 3, group: 4, column: 5 }[rule?.scopeType] || 0;
+    return { workspace: 1, module: 2, board: 3, group: 4, column: 5, item: 6 }[rule?.scopeType] || 0;
   }
 
   function permissionRule(userId, context) {
@@ -2920,6 +3113,8 @@ window.__ATLAS_VERSION__ = '2.2.0 DESENVOLVIMENTO';
     if (avatar) avatar.textContent = initials;
     if (name) name.textContent = user.name || user.email;
     if (role) role.textContent = roleLabel(user.role);
+    const footerVersion = document.getElementById('atlas-v2-footer-version');
+    if (footerVersion) footerVersion.textContent = window.ATNX_CONFIG?.V2_VERSION || ATLAS_BUILD;
     renderNotificationDot();
   }
 
@@ -2936,7 +3131,7 @@ window.__ATLAS_VERSION__ = '2.2.0 DESENVOLVIMENTO';
   }
 
   function authVersion() {
-    return window.ATNX_CONFIG?.V2_VERSION || 'V2.2.0 Desenvolvimento';
+    return window.ATNX_CONFIG?.V2_VERSION || 'V2.3.0 Oficial';
   }
 
   function authFeatureList() {
@@ -3097,6 +3292,18 @@ window.__ATLAS_VERSION__ = '2.2.0 DESENVOLVIMENTO';
     }
     if (app) app.hidden = false;
     document.body.classList.remove('atlas-v2-auth-locked');
+    // Se os dados locais nao puderam ser lidos no boot, avisar agora que a
+    // interface existe. O detalhe completo fica em Sistema > Central de erros.
+    if (runtime.localDataRecovery && !runtime.localDataRecoveryNotified) {
+      runtime.localDataRecoveryNotified = true;
+      const recoveryKey = runtime.localDataRecovery.key;
+      setTimeout(() => toast(
+        recoveryKey
+          ? 'Os dados locais não puderam ser lidos e o Atlas iniciou com a estrutura inicial. Uma cópia do conteúdo anterior foi preservada. Veja Sistema > Central de erros.'
+          : 'Os dados locais não puderam ser lidos e o Atlas iniciou com a estrutura inicial. Veja Sistema > Central de erros.',
+        true,
+      ), 400);
+    }
   }
 
   function authErrorMessage(error) {
@@ -3209,8 +3416,20 @@ window.__ATLAS_VERSION__ = '2.2.0 DESENVOLVIMENTO';
 
   function registerAtlasPwa() {
     if (!('serviceWorker' in navigator) || !/^https?:$/.test(window.location.protocol)) return;
-      navigator.serviceWorker.register('./service-worker.js?v=2.2.0-dev-7', { scope: './' }).catch((error) => {
+    // ATLAS_BUILD e a unica fonte da versao dos arquivos web. O Service Worker
+    // deriva dele o nome do cache e as URLs do pre-cache. As querystrings do
+    // index.html usam a mesma string, e tests/static-audit.cjs falha se
+    // divergirem.
+    navigator.serviceWorker.register(`./service-worker.js?v=${ATLAS_BUILD}`, { scope: './' }).catch((error) => {
       console.warn('Atlas V2.2: PWA indisponível.', error);
+    });
+    // Um Service Worker novo assume o controle desta aba imediatamente
+    // (skipWaiting + clients.claim), mas o JavaScript em memoria continua sendo
+    // o antigo. Avisar em vez de deixar a aba em estado misto e silencioso.
+    navigator.serviceWorker.addEventListener('message', (event) => {
+      if (event.data?.type !== 'atlas-sw-activated') return;
+      if (event.data.build === ATLAS_BUILD) return;
+      toast('Uma versão nova do Atlas foi publicada. Recarregue a página para usá-la.', true);
     });
   }
 
@@ -3495,6 +3714,13 @@ window.__ATLAS_VERSION__ = '2.2.0 DESENVOLVIMENTO';
         }
         if (event === 'SIGNED_OUT') {
           stopRealtime();
+          // Limpar sessao e perfil tambem aqui. Este evento dispara em qualquer
+          // encerramento vindo do Supabase (token de renovacao expirado, logout
+          // em outra aba), e nao apenas no botao Sair. Sem a limpeza, um perfil
+          // antigo (possivelmente admin) continuava em runtime depois da tela de
+          // login voltar.
+          runtime.authSession = null;
+          runtime.authProfile = null;
           renderAuth('login');
         }
       });
@@ -3796,7 +4022,14 @@ window.__ATLAS_VERSION__ = '2.2.0 DESENVOLVIMENTO';
         options.push({ value: `module:${module.id}`, label: `Módulo · ${module.name}` });
         module.boards.forEach((boardEntry) => {
           options.push({ value: `board:${boardEntry.id}`, label: `Quadro · ${boardEntry.name}` });
-          boardEntry.groups.forEach((groupEntry) => options.push({ value: `group:${groupEntry.id}`, label: `Grupo · ${boardEntry.name} / ${groupEntry.name}` }));
+          boardEntry.groups.forEach((groupEntry) => {
+            options.push({ value: `group:${groupEntry.id}`, label: `Grupo · ${boardEntry.name} / ${groupEntry.name}` });
+            const visitItems = (entries, depth) => (entries || []).forEach((itemEntry) => {
+              options.push({ value: `item:${itemEntry.id}`, label: `Obra · ${boardEntry.name} / ${'—'.repeat(depth)}${depth ? ' ' : ''}${itemEntry.name || 'Sem nome'}` });
+              visitItems(itemEntry.subitems, depth + 1);
+            });
+            visitItems(groupEntry.items, 0);
+          });
           boardEntry.columns.forEach((columnEntry) => options.push({ value: `column:${columnEntry.id}`, label: `Coluna · ${boardEntry.name} / ${columnEntry.name}` }));
         });
       });
@@ -3805,6 +4038,10 @@ window.__ATLAS_VERSION__ = '2.2.0 DESENVOLVIMENTO';
   }
 
   function scopeName(scopeType, scopeId) {
+    if (scopeType === 'item') {
+      const found = findItemContextById(scopeId);
+      return found ? `${found.board.name} / ${found.found.item.name || 'Sem nome'}` : 'Obra removida';
+    }
     if (scopeType === 'workspace') return runtime.data.workspaces.find((entry) => entry.id === scopeId)?.name || 'Área removida';
     for (const workspace of runtime.data.workspaces) {
       const module = workspace.modules.find((entry) => entry.id === scopeId);
@@ -3821,6 +4058,45 @@ window.__ATLAS_VERSION__ = '2.2.0 DESENVOLVIMENTO';
       }
     }
     return 'Estrutura removida';
+  }
+
+  function firstName(name) {
+    return String(name || '').trim().split(/\s+/)[0] || 'usuário';
+  }
+
+  function renderHomePage() {
+    document.body.classList.add('atlas-v2-home-page');
+    const breadcrumb = document.getElementById('atlas-v2-breadcrumb');
+    const root = document.getElementById('atlas-v2-board-content');
+    const selection = document.getElementById('atlas-v2-selection-bar');
+    if (breadcrumb) breadcrumb.innerHTML = '<span>Atlas</span><span><i data-lucide="chevron-right"></i><b>Início</b></span>';
+    if (selection) selection.hidden = true;
+    if (!root) return;
+    root.className = 'atlas-v2-board-content atlas-v2-home-content';
+    const user = currentUser();
+    const greeting = greetingForHour(new Date().getHours());
+    const version = window.ATNX_CONFIG?.V2_VERSION || ATLAS_BUILD;
+    const latest = CHANGELOG[0];
+    root.innerHTML = `<section class="atlas-v2-home-shell">
+      <header class="atlas-v2-home-hero">
+        <span class="atlas-v2-home-kicker">ATLAS</span>
+        <h1>${escapeHtml(greeting)}, ${escapeHtml(firstName(user?.name))}</h1>
+        <p>Escolha uma área, módulo ou quadro no menu ao lado para começar a trabalhar.</p>
+      </header>
+      <div class="atlas-v2-home-grid">
+        <section class="atlas-v2-home-card atlas-v2-home-version-card">
+          <header><i data-lucide="rocket"></i><h2>Versão atual</h2></header>
+          <strong class="atlas-v2-home-version">${escapeHtml(version)}</strong>
+          <small>Última atualização em ${latest ? escapeHtml(formatChangelogDate(latest.date)) : '—'}</small>
+        </section>
+        <section class="atlas-v2-home-card atlas-v2-home-changelog">
+          <header><i data-lucide="sparkles"></i><h2>Atualizações desta versão</h2></header>
+          <div class="atlas-v2-home-changelog-list">
+            ${latest ? `<article><ul>${latest.notes.map((note) => `<li>${escapeHtml(note)}</li>`).join('')}</ul></article>` : ''}
+          </div>
+        </section>
+      </div>
+    </section>`;
   }
 
   function renderAdminPage() {
@@ -3864,6 +4140,10 @@ window.__ATLAS_VERSION__ = '2.2.0 DESENVOLVIMENTO';
   }
 
   async function openAdminTab(tab) {
+    // Mesma guarda das outras acoes administrativas. Hoje so e acionada por uma
+    // interface ja protegida, mas esta funcao faz uma leitura direta no Supabase
+    // e nao deve depender apenas de quem a chama.
+    if (!requirePermission('admin', null, 'abrir a administração')) return;
     runtime.adminTab = tab || 'overview';
     if (runtime.adminTab === 'system' && runtime.remoteMode && runtime.authClient) {
       const { data, error } = await runtime.authClient
@@ -3928,7 +4208,7 @@ window.__ATLAS_VERSION__ = '2.2.0 DESENVOLVIMENTO';
     const matrix = Object.entries(ROLE_DEFINITIONS).map(([key, role]) => `<tr><td><strong>${role.label}</strong><small>${role.description}</small></td>${permissions.map(([permission]) => `<td>${role.permissions.includes(permission) ? '<i class="is-allowed" data-lucide="check"></i>' : '<i class="is-denied" data-lucide="minus"></i>'}</td>`).join('')}</tr>`).join('');
     const userOptions = runtime.data.users.filter((entry) => entry.status !== 'blocked').map((entry) => `<option value="${attr(entry.id)}">${escapeHtml(entry.name)} · ${roleLabel(entry.role)}</option>`).join('');
     const scopes = scopeOptions().map((entry) => `<option value="${attr(entry.value)}">${escapeHtml(entry.label)}</option>`).join('');
-    const rules = runtime.data.accessRules.map((rule) => { const user = runtime.data.users.find((entry) => entry.id === rule.userId); return `<tr><td>${escapeHtml(user?.name || 'Usuário removido')}</td><td>${escapeHtml({ workspace: 'Área', module: 'Módulo', board: 'Quadro', group: 'Grupo', column: 'Coluna' }[rule.scopeType] || rule.scopeType)}</td><td>${escapeHtml(scopeName(rule.scopeType, rule.scopeId))}</td><td><span class="atlas-v2-admin-level is-${attr(rule.level)}">${escapeHtml(ACCESS_LEVELS[rule.level]?.label || rule.level)}</span></td><td><button class="atlas-v2-admin-icon-danger" type="button" data-action="admin-delete-rule" data-rule-id="${attr(rule.id)}" title="Remover regra"><i data-lucide="x"></i></button></td></tr>`; }).join('');
+    const rules = runtime.data.accessRules.map((rule) => { const user = runtime.data.users.find((entry) => entry.id === rule.userId); return `<tr><td>${escapeHtml(user?.name || 'Usuário removido')}</td><td>${escapeHtml({ workspace: 'Área', module: 'Módulo', board: 'Quadro', group: 'Grupo', column: 'Coluna', item: 'Obra' }[rule.scopeType] || rule.scopeType)}</td><td>${escapeHtml(scopeName(rule.scopeType, rule.scopeId))}</td><td><span class="atlas-v2-admin-level is-${attr(rule.level)}">${escapeHtml(ACCESS_LEVELS[rule.level]?.label || rule.level)}</span></td><td><button class="atlas-v2-admin-icon-danger" type="button" data-action="admin-delete-rule" data-rule-id="${attr(rule.id)}" title="Remover regra"><i data-lucide="x"></i></button></td></tr>`; }).join('');
     return `<div class="atlas-v2-admin-section-head"><div><span>AUTORIZAÇÃO</span><h2>Perfis e permissões</h2><p>O perfil define a base; regras específicas ajustam uma área, módulo ou quadro.</p></div></div>
       <section class="atlas-v2-admin-block"><header><div><span>MATRIZ</span><h3>Permissões por perfil</h3></div></header><div class="atlas-v2-admin-table-wrap"><table class="atlas-v2-admin-table atlas-v2-permission-matrix"><thead><tr><th>Perfil</th>${permissions.map(([, label]) => `<th>${label}</th>`).join('')}</tr></thead><tbody>${matrix}</tbody></table></div></section>
       <section class="atlas-v2-admin-block"><header><div><span>EXCEÇÕES</span><h3>Acesso granular</h3></div></header><form id="atlas-v2-admin-permission-form" class="atlas-v2-admin-rule-form"><label><span>Usuário</span><select name="userId">${userOptions}</select></label><label><span>Estrutura</span><select name="scope">${scopes}</select></label><label><span>Nível</span><select name="level">${Object.entries(ACCESS_LEVELS).map(([key, value]) => `<option value="${key}">${value.label}</option>`).join('')}</select></label><button class="atlas-v2-button atlas-v2-button-primary" type="submit"><i data-lucide="plus"></i>Aplicar regra</button></form><div class="atlas-v2-admin-table-wrap"><table class="atlas-v2-admin-table"><thead><tr><th>Usuário</th><th>Escopo</th><th>Destino</th><th>Nível</th><th></th></tr></thead><tbody>${rules || '<tr><td colspan="5">Nenhuma regra específica. Os perfis padrão estão sendo utilizados.</td></tr>'}</tbody></table></div></section>`;
@@ -4141,6 +4421,14 @@ window.__ATLAS_VERSION__ = '2.2.0 DESENVOLVIMENTO';
     syncAuthUsersFromSupabase({ notify: false });
   }
 
+  function openHome() {
+    runtime.page = 'home';
+    runtime.selectedItems.clear();
+    closeOverlay();
+    closeSidebar();
+    render();
+  }
+
   function openUserMenu() {
     const user = currentUser();
     openModal({
@@ -4152,6 +4440,20 @@ window.__ATLAS_VERSION__ = '2.2.0 DESENVOLVIMENTO';
   }
 
   function openAdminUserModal() {
+    // Com o Supabase conectado, a conta precisa nascer no Auth. Isso so acontece
+    // quando a propria pessoa usa "Solicitar cadastro" na tela de entrada: o
+    // frontend nao tem (e nao deve ter) credencial administrativa para criar
+    // contas. Cadastrar aqui criaria apenas uma linha local, que desapareceria
+    // na proxima sincronizacao de perfis.
+    if (runtime.remoteMode) {
+      openModal({
+        title: 'Como liberar um novo acesso',
+        subtitle: 'A conta é criada pela própria pessoa e liberada aqui por um administrador.',
+        body: '<div class="atlas-v2-admin-note"><p>Peça para a pessoa abrir o Atlas e usar <strong>Primeiro acesso? Solicitar cadastro</strong> na tela de entrada, com o e-mail corporativo dela.</p><p>Assim que o cadastro for enviado, ela aparece nesta aba como <strong>Pendente</strong>. Use então o botão <strong>Liberar</strong> e defina o perfil de acesso.</p><p>O Atlas não cria contas a partir daqui por segurança: a criação de contas exige credencial administrativa do banco, que nunca fica disponível no navegador.</p></div>',
+        actions: '<button class="atlas-v2-button atlas-v2-button-primary" type="button" data-action="close-overlay">Entendi</button>',
+      });
+      return;
+    }
     openModal({
       title: 'Cadastrar acesso',
       subtitle: 'O usuário será criado como Visualizador aguardando liberação.',
@@ -4162,6 +4464,12 @@ window.__ATLAS_VERSION__ = '2.2.0 DESENVOLVIMENTO';
 
   function submitAdminUser(form) {
     if (!requirePermission('admin', null, 'cadastrar usuários')) return;
+    if (runtime.remoteMode) {
+      // Guarda extra: nao criar registro fantasma se este formulario for
+      // acionado com o Supabase conectado. Ver openAdminUserModal.
+      toast('Com o Supabase conectado, a conta precisa ser criada pela própria pessoa em "Solicitar cadastro". Depois libere o acesso aqui.', true);
+      return;
+    }
     const data = new FormData(form);
     const email = String(data.get('email') || '').trim().toLowerCase();
     if (runtime.data.users.some((entry) => entry.email.toLowerCase() === email)) {
@@ -4289,19 +4597,45 @@ window.__ATLAS_VERSION__ = '2.2.0 DESENVOLVIMENTO';
     return null;
   }
 
+  // Acervo pequeno e fixo de icones para modulos - todos ja existentes no
+  // pacote do Lucide usado pelo Atlas, entao nao ha risco de escolher um
+  // nome de icone que nao renderize.
+  const MODULE_ICON_CHOICES = [
+    ['folder', 'Pasta'],
+    ['boxes', 'Módulos'],
+    ['folder-tree', 'Estrutura'],
+    ['layout-grid', 'Grade'],
+    ['layout-dashboard', 'Painel'],
+    ['table-2', 'Tabela'],
+    ['briefcase-business', 'Operação'],
+    ['route', 'Rota'],
+    ['network', 'Rede'],
+    ['list-tree', 'Hierarquia'],
+    ['layers-3', 'Camadas'],
+    ['database', 'Dados'],
+  ];
+
   function openRenameStructure(type, targetId) {
     const found = findStructure(type, targetId);
     if (!found) return;
-    openModal({ title: `Renomear ${{ workspace: 'área', module: 'módulo', board: 'quadro' }[type] || 'estrutura'}`, subtitle: found.entry.name, body: `<form id="atlas-v2-admin-structure-form"><input type="hidden" name="type" value="${attr(type)}"><input type="hidden" name="targetId" value="${attr(targetId)}"><label class="atlas-v2-field"><span>Novo nome</span><input name="name" value="${attr(found.entry.name)}" maxlength="80" required autofocus></label></form>`, actions: '<button class="atlas-v2-button atlas-v2-button-quiet" type="button" data-action="close-overlay">Cancelar</button><button class="atlas-v2-button atlas-v2-button-primary" type="submit" form="atlas-v2-admin-structure-form">Salvar nome</button>' });
+    const iconPicker = type === 'module'
+      ? `<div class="atlas-v2-field is-wide"><span>Ícone do módulo</span><div class="atlas-v2-choice-grid">${MODULE_ICON_CHOICES.map(([iconName, label]) => choice('icon', iconName, iconName, label, (found.entry.icon || 'folder') === iconName)).join('')}</div></div>`
+      : '';
+    openModal({ title: `Renomear ${{ workspace: 'área', module: 'módulo', board: 'quadro' }[type] || 'estrutura'}`, subtitle: found.entry.name, body: `<form id="atlas-v2-admin-structure-form" class="atlas-v2-form-grid"><input type="hidden" name="type" value="${attr(type)}"><input type="hidden" name="targetId" value="${attr(targetId)}"><label class="atlas-v2-field"><span>Novo nome</span><input name="name" value="${attr(found.entry.name)}" maxlength="80" required autofocus></label>${iconPicker}</form>`, actions: '<button class="atlas-v2-button atlas-v2-button-quiet" type="button" data-action="close-overlay">Cancelar</button><button class="atlas-v2-button atlas-v2-button-primary" type="submit" form="atlas-v2-admin-structure-form">Salvar</button>' });
   }
 
   function submitRenameStructure(form) {
     if (!requirePermission('admin', null, 'renomear estruturas')) return;
     const data = new FormData(form);
-    const found = findStructure(String(data.get('type') || ''), String(data.get('targetId') || ''));
+    const type = String(data.get('type') || '');
+    const found = findStructure(type, String(data.get('targetId') || ''));
     const name = String(data.get('name') || '').trim();
     if (!found || !name) return;
     found.entry.name = name;
+    if (type === 'module') {
+      const icon = String(data.get('icon') || '').trim();
+      if (icon) found.entry.icon = icon;
+    }
     closeOverlay();
     saveData('Estrutura renomeada', { scope: 'system' });
     render();
@@ -4504,11 +4838,11 @@ window.__ATLAS_VERSION__ = '2.2.0 DESENVOLVIMENTO';
       batches.get(key).fileIds.push(row.file_id);
     });
 
-    for (const batch of batches.values()) {
+    const runBatch = async (batch, batchAction) => {
       const response = await fetch(batch.connection.appScriptUrl, {
         method: 'POST',
         body: JSON.stringify({
-          action,
+          action: batchAction,
           rootFolderId: batch.connection.folderId,
           connectionId: batch.connection.id,
           boardId: batch.boardId || null,
@@ -4521,6 +4855,41 @@ window.__ATLAS_VERSION__ = '2.2.0 DESENVOLVIMENTO';
       if (!response.ok || !result?.success) {
         const detail = result?.failures?.[0]?.error || result?.error || 'O conector não confirmou a operação.';
         throw new Error(detail);
+      }
+    };
+
+    // Quando os anexos estao espalhados por mais de uma conta de Drive, uma
+    // falha na segunda conta deixava os arquivos da primeira ja excluidos, sem
+    // nenhuma compensacao: o Atlas cancelava a exclusao e o Drive ficava num
+    // estado diferente do declarado. Agora as contas ja concluidas sao
+    // revertidas antes de propagar o erro.
+    const inverseAction = action === 'delete' ? 'undodelete' : (action === 'undodelete' ? 'delete' : '');
+    const completed = [];
+    for (const batch of batches.values()) {
+      try {
+        await runBatch(batch, action);
+        completed.push(batch);
+      } catch (error) {
+        if (completed.length && inverseAction) {
+          const failedToCompensate = [];
+          for (const done of completed) {
+            try { await runBatch(done, inverseAction); }
+            catch (compensationError) {
+              failedToCompensate.push(`${done.connection.name || done.connection.id}: ${compensationError.message || compensationError}`);
+            }
+          }
+          if (failedToCompensate.length) {
+            runtime.data.errors = Array.isArray(runtime.data.errors) ? runtime.data.errors : [];
+            runtime.data.errors.unshift({
+              id: id('error'),
+              title: 'Arquivos do Drive ficaram em estado inconsistente',
+              detail: `A operação falhou em uma conta de Drive e não foi possível reverter as contas já processadas. Verifique manualmente: ${failedToCompensate.join(' · ')}`,
+              createdAt: new Date().toISOString(),
+            });
+            throw new Error(`${error.message || error} Além disso, alguns arquivos já processados não puderam ser revertidos: ${failedToCompensate.join(' · ')}`);
+          }
+        }
+        throw error;
       }
     }
   }
@@ -4557,11 +4926,13 @@ window.__ATLAS_VERSION__ = '2.2.0 DESENVOLVIMENTO';
     ];
   }
 
-  // Hotfix 2026-08-03: marca como "carregados" todos os itens dentro do que
-  // acabou de ser restaurado da lixeira. Sem isso, o proximo sync completo
-  // trataria esses itens como "nao carregados nesta sessao" e a guarda nova de
-  // syncRemoteData (acima) descartaria justamente as mudancas que deveriam ser
-  // reenviadas ao Supabase.
+  // Marca como "carregados" todos os itens dentro do que acabou de ser
+  // restaurado da lixeira. O payload da lixeira ja traz os valores completos
+  // (era o item real no momento da exclusao), mas sem isso o proximo sync
+  // completo trataria esses itens como "nao carregados nesta sessao" e a
+  // guarda de syncRemoteData descartaria justamente as mudancas que deveriam
+  // ser reenviadas ao Supabase - ou, pior, uma futura hidratacao os trataria
+  // como vazios.
   function markRestoredValuesLoaded(node) {
     if (!node || typeof node !== 'object') return;
     if (isUuid(node.id) && node.values && typeof node.values === 'object') {
@@ -4624,13 +4995,36 @@ window.__ATLAS_VERSION__ = '2.2.0 DESENVOLVIMENTO';
       saveData(`${entry.name} restaurado`, { scope: 'system', remote: false });
       render();
     } catch (error) {
+      let driveRollbackFailed = null;
       if (driveRestored) {
-        try { await syncTrashEntriesWithDrive([entry], 'trash'); } catch (_) {}
+        // Se o "re-excluir" tambem falhar, o Drive fica em um estado diferente do
+        // que a estrutura local passa a declarar. Isso precisa ficar visivel.
+        try { await syncTrashEntriesWithDrive([entry], 'trash'); }
+        catch (rollbackError) { driveRollbackFailed = rollbackError; }
       }
       runtime.data = snapshot;
       persistLocalBackup(runtime.data);
+      // Reagendar a gravacao do cache de bootstrap com o snapshot revertido.
+      // Sem isso, um timer agendado antes da falha ainda gravaria a versao
+      // "restaurada" por cima, e o proximo login mostraria um item inexistente.
+      scheduleBootstrapCacheWrite(runtime.data, 0);
+      if (driveRollbackFailed) {
+        runtime.data.errors = Array.isArray(runtime.data.errors) ? runtime.data.errors : [];
+        runtime.data.errors.unshift({
+          id: id('error'),
+          title: 'O Drive não voltou ao estado anterior',
+          detail: `A restauração de "${entry.name}" foi desfeita no Atlas, mas os arquivos no Drive não puderam ser movidos de volta para a lixeira. Verifique o Drive deste setor. Detalhe técnico: ${driveRollbackFailed.message || driveRollbackFailed}`,
+          createdAt: new Date().toISOString(),
+        });
+        persistLocalBackup(runtime.data);
+      }
       render();
-      toast(`A restauração foi desfeita para preservar os dados: ${error.message || error}`, true);
+      toast(
+        driveRollbackFailed
+          ? `A restauração foi desfeita, mas os arquivos no Drive não voltaram ao estado anterior. Veja Sistema > Central de erros. Detalhe: ${error.message || error}`
+          : `A restauração foi desfeita para preservar os dados: ${error.message || error}`,
+        true,
+      );
     }
   }
 
@@ -4735,6 +5129,17 @@ window.__ATLAS_VERSION__ = '2.2.0 DESENVOLVIMENTO';
   }
 
   function render() {
+    if (runtime.page === 'home') {
+      document.body.classList.remove('atlas-v2-admin-page', 'atlas-v2-mobile-card-view');
+      renderIdentity();
+      const workspace = currentWorkspace();
+      if (workspace) renderWorkspace(workspace);
+      renderNavigation();
+      renderHomePage();
+      refreshIcons();
+      return;
+    }
+
     const context = findBoard();
     if (!context) {
       const firstWorkspace = runtime.data.workspaces[0];
@@ -4749,12 +5154,12 @@ window.__ATLAS_VERSION__ = '2.2.0 DESENVOLVIMENTO';
     renderWorkspace(context.workspace);
     renderNavigation();
     if (runtime.page === 'admin') {
-      document.body.classList.remove('atlas-v2-mobile-card-view');
+      document.body.classList.remove('atlas-v2-mobile-card-view', 'atlas-v2-home-page');
       renderAdminPage();
       refreshIcons();
       return;
     }
-    document.body.classList.remove('atlas-v2-admin-page');
+    document.body.classList.remove('atlas-v2-admin-page', 'atlas-v2-home-page');
     const content = document.getElementById('atlas-v2-board-content');
     if (content) content.className = 'atlas-v2-board-content';
     renderBoardHeader(context);
@@ -4779,7 +5184,7 @@ window.__ATLAS_VERSION__ = '2.2.0 DESENVOLVIMENTO';
 
   function renderBoardRoute(context, options = {}) {
     if (!context) return;
-    document.body.classList.remove('atlas-v2-admin-page');
+    document.body.classList.remove('atlas-v2-admin-page', 'atlas-v2-home-page');
     if (options.workspaceChanged) {
       renderWorkspace(context.workspace);
       renderNavigation();
@@ -4907,7 +5312,7 @@ window.__ATLAS_VERSION__ = '2.2.0 DESENVOLVIMENTO';
   }
 
   function visibleSubitems(boardEntry, itemEntry) {
-    return itemEntry.subitems || [];
+    return (itemEntry.subitems || []).filter((entry) => !entry.archived);
   }
 
   function normalizeSearchText(value) {
@@ -4982,6 +5387,9 @@ window.__ATLAS_VERSION__ = '2.2.0 DESENVOLVIMENTO';
     const query = contextualItemSearch(boardEntry);
     const sectorMatches = query && contextualSectorMatch(groupEntry.name, query);
     return groupEntry.items.filter((entry) => {
+      // Itens arquivados ficam fora das visualizacoes, mas continuam nos dados
+      // (e no Supabase, com arquivado=true), portanto sao recuperaveis.
+      if (entry.archived) return false;
       if (boardEntry.activeView === 'works' && runtime.workFilter && entry.id !== runtime.workFilter) return false;
       if (!itemMatchesAdvancedFilters(boardEntry, groupEntry, entry)) return false;
       const children = visibleSubitems(boardEntry, entry);
@@ -5208,7 +5616,19 @@ window.__ATLAS_VERSION__ = '2.2.0 DESENVOLVIMENTO';
     const boardScroll = document.getElementById('atlas-v2-board-scroll');
     const root = document.getElementById('atlas-v2-board-content');
     const boardId = String(root?.dataset?.boardId || runtime.data?.activeBoardId || '');
-    if (runtime.pendingBoardUiState?.boardId === boardId) return runtime.pendingBoardUiState.state;
+    if (runtime.pendingBoardUiState?.boardId === boardId) {
+      // Ha uma restauracao pendente para este mesmo quadro (render em rajada).
+      // Reaproveitar o snapshot evita perder a posicao original, mas ele nao pode
+      // ser propagado cru: se o usuario digitou depois da captura anterior, o
+      // valor/cursor atuais do campo em foco precisam substituir os antigos, ou a
+      // restauracao reescreveria o texto antigo por cima do que foi digitado.
+      const pendingState = runtime.pendingBoardUiState.state;
+      if (pendingState && root && root.contains(document.activeElement)) {
+        const liveFocus = focusDescriptor(document.activeElement);
+        if (liveFocus) pendingState.focus = liveFocus;
+      }
+      return pendingState;
+    }
     if (!boardScroll || !root) return runtime.boardUiStates.get(boardId) || null;
     const scrollers = [...root.querySelectorAll('.atlas-v2-table-wrap, .atlas-v2-work-tabs, .atlas-v2-gantt-scroll')]
       .map((element, index) => ({
@@ -5379,14 +5799,21 @@ window.__ATLAS_VERSION__ = '2.2.0 DESENVOLVIMENTO';
     </tr>`;
   }
 
-  function formulaColumnValue(boardEntry, itemEntry, columnEntry) {
+  // Nucleo comum do calculo da formula. resolveValue decide de onde vem o
+  // valor de cada coluna referenciada - do modelo (found.item.values, o dado
+  // ja confirmado) ou do proprio campo em tela (para a previa ao vivo,
+  // enquanto o usuario ainda esta digitando e o valor ainda nao foi salvo).
+  function evaluateFormula(boardEntry, columnEntry, resolveValue) {
     const expression = String(columnEntry.formula || '').trim();
     if (!expression) return '';
     const replaced = expression.replace(/\{([^}]+)\}/g, (_, rawName) => {
       const name = String(rawName || '').trim().toLowerCase();
       const source = boardEntry.columns.find((entry) => entry.id !== columnEntry.id && entry.name.toLowerCase() === name);
-      const value = source ? itemEntry.values?.[source.id] : 0;
-      const numeric = Number(String(value ?? '').replace(',', '.'));
+      const value = source ? resolveValue(source) : 0;
+      // Valor de checkbox e booleano (true/false); String(true) vira "true",
+      // que Number() nao converte (fica NaN e cairia sempre em '0', mesmo
+      // marcado). Precisa virar 1/0 antes de tentar converter como numero.
+      const numeric = typeof value === 'boolean' ? (value ? 1 : 0) : Number(String(value ?? '').replace(',', '.'));
       return Number.isFinite(numeric) ? String(numeric) : '0';
     });
     if (!/^[\d+\-*/().%\s]+$/.test(replaced)) return 'Fórmula inválida';
@@ -5403,12 +5830,79 @@ window.__ATLAS_VERSION__ = '2.2.0 DESENVOLVIMENTO';
     }
   }
 
+  function formulaColumnValue(boardEntry, itemEntry, columnEntry) {
+    return evaluateFormula(boardEntry, columnEntry, (source) => itemEntry.values?.[source.id]);
+  }
+
+  // Formata um numero guardado (ex.: 1500.5) como "R$ 1.500,50" para exibir
+  // no campo. Vazio/invalido mostra vazio, nao "R$ 0,00", para nao sugerir
+  // que o campo ja tem um valor quando na verdade esta em branco.
+  function formatCurrencyDisplay(rawValue) {
+    if (rawValue === '' || rawValue === null || rawValue === undefined) return '';
+    const numeric = Number(rawValue);
+    if (!Number.isFinite(numeric)) return '';
+    return numeric.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  }
+
+  // Mascara "de centavos para cima", igual a maioria dos apps bancarios BR:
+  // cada digito novo entra pela direita, os dois ultimos digitos sempre sao
+  // os centavos. Recebe o texto atual do campo (ja formatado ou nao) e
+  // devolve o texto formatado a partir dos digitos nele contidos.
+  function maskCurrencyInput(rawText) {
+    const digits = String(rawText || '').replace(/\D/g, '').replace(/^0+(?=\d)/, '');
+    if (!digits) return '';
+    const cents = parseInt(digits, 10);
+    return (cents / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  }
+
+  // Converte o texto exibido ("R$ 1.500,50") de volta para um numero simples
+  // (1500.5), que e o que fica guardado em item.values - formulas, filtros e
+  // ordenacao continuam enxergando um numero comum, sem saber da mascara.
+  function parseCurrencyInput(displayText) {
+    const digits = String(displayText || '').replace(/\D/g, '');
+    if (!digits) return '';
+    return (parseInt(digits, 10) / 100).toFixed(2);
+  }
+
+  // Mesmo calculo, mas lendo cada coluna referenciada direto do campo em tela
+  // (se ele existir e ainda nao tiver sido substituido pelo valor confirmado).
+  // Usado para atualizar a formula a cada tecla digitada, sem esperar o
+  // usuario sair do campo ou apertar Enter.
+  function formulaColumnValueLive(boardEntry, itemEntry, columnEntry) {
+    return evaluateFormula(boardEntry, columnEntry, (source) => {
+      const field = document.querySelector(`[data-item-value="${cssAttrValue(itemEntry.id)}"][data-column-id="${cssAttrValue(source.id)}"]`);
+      if (!field) return itemEntry.values?.[source.id];
+      if (field.matches('select')) return field.value;
+      if (field.type === 'checkbox') return field.checked ? 1 : 0;
+      if (source.type === 'currency') return parseCurrencyInput(field.value);
+      return field.value;
+    });
+  }
+
+  // Escapa um valor para uso dentro de um seletor de atributo CSS.
+  function cssAttrValue(value) {
+    const text = String(value ?? '');
+    return typeof CSS !== 'undefined' && CSS.escape ? CSS.escape(text) : text.replace(/["\\]/g, '\\$&');
+  }
+
+  function updateFormulaCellsLive(itemId) {
+    const context = findBoard();
+    const found = context && findItem(context.board, itemId);
+    if (!found) return;
+    const outputs = document.querySelectorAll(`.atlas-v2-formula-cell[data-item-value="${cssAttrValue(itemId)}"]`);
+    outputs.forEach((output) => {
+      const columnEntry = context.board.columns.find((entry) => entry.id === output.dataset.columnId);
+      if (!columnEntry) return;
+      output.textContent = formulaColumnValueLive(context.board, found.item, columnEntry);
+    });
+  }
+
   function renderCell(columnEntry, itemEntry) {
     const value = itemEntry.values?.[columnEntry.id] ?? '';
     const common = `data-item-value="${attr(itemEntry.id)}" data-column-id="${attr(columnEntry.id)}"`;
     if (columnEntry.type === 'formula') {
       const context = findBoard();
-      return `<output class="atlas-v2-formula-cell" title="${attr(columnEntry.formula || '')}">${escapeHtml(formulaColumnValue(context?.board || { columns: [] }, itemEntry, columnEntry))}</output>`;
+      return `<output class="atlas-v2-formula-cell" ${common} title="${attr(columnEntry.formula || '')}">${escapeHtml(formulaColumnValue(context?.board || { columns: [] }, itemEntry, columnEntry))}</output>`;
     }
     if (columnEntry.type === 'status' || columnEntry.type === 'select') {
       const details = optionDetails(columnEntry, value);
@@ -5431,8 +5925,15 @@ window.__ATLAS_VERSION__ = '2.2.0 DESENVOLVIMENTO';
         : (typeof value === 'object' ? JSON.stringify(value) : value);
       return `<input class="atlas-v2-cell-input" type="text" ${common} value="${attr(periodValue)}" placeholder="AAAA-MM-DD - AAAA-MM-DD">`;
     }
-    if (['number', 'percentage', 'currency'].includes(columnEntry.type)) {
-      return `<input class="atlas-v2-cell-input" type="number" ${common} value="${attr(value)}" step="${columnEntry.type === 'currency' ? '0.01' : '1'}">`;
+    if (columnEntry.type === 'currency') {
+      // Campo de texto (nao "number"): o navegador nunca deixaria digitar
+      // "R$" ou separadores num input number. O valor guardado no item
+      // continua sendo um numero simples (para formulas, ordenacao e
+      // filtros funcionarem sem mudanca); so a tela mostra formatado.
+      return `<input class="atlas-v2-cell-input" type="text" inputmode="decimal" ${common} value="${attr(formatCurrencyDisplay(value))}" placeholder="R$ 0,00">`;
+    }
+    if (['number', 'percentage'].includes(columnEntry.type)) {
+      return `<input class="atlas-v2-cell-input" type="number" ${common} value="${attr(value)}" step="1">`;
     }
     if (columnEntry.type === 'file') {
       const files = normalizeImageEntries(value);
@@ -5770,10 +6271,30 @@ window.__ATLAS_VERSION__ = '2.2.0 DESENVOLVIMENTO';
     return [];
   }
 
-  function storageFolderPath(context, found, columnEntry) {
+  /**
+   * Decide, de forma unica, se o anexo pertence a hierarquia de Obras
+   * (Cidade > Setor > Registro > Campo). Antes storageFolderPath e
+   * uploadAttachmentToStorage usavam critérios diferentes para a mesma
+   * pergunta, e podiam discordar: um calculava o caminho como obra e o outro
+   * enviava os campos legados como se nao fosse, produzindo pastas diferentes
+   * para arquivos do mesmo item.
+   */
+  function storageSectorization(context, found) {
     const lineage = itemLineage(found.group?.items, found.item.id);
     const sectorColumnId = context.board.settings?.works_sector_column_id;
-    const isSectorizedWork = Boolean(sectorColumnId && lineage.length);
+    const rootId = lineage[0]?.id;
+    // A raiz da linhagem precisa ser de fato um item de primeiro nivel do grupo
+    // (uma "obra"/cidade). Nao basta o quadro ter uma coluna de setor.
+    const rootIsWorkItem = Boolean(rootId && (found.group?.items || []).some((entry) => entry.id === rootId));
+    return {
+      lineage,
+      sectorColumnId,
+      isSectorizedWork: Boolean(sectorColumnId && lineage.length && rootIsWorkItem),
+    };
+  }
+
+  function storageFolderPath(context, found, columnEntry) {
+    const { lineage, sectorColumnId, isSectorizedWork } = storageSectorization(context, found);
 
     if (isSectorizedWork) {
       const city = lineage[0]?.name || found.parent?.name || found.item.name || 'Sem cidade';
@@ -5982,7 +6503,9 @@ window.__ATLAS_VERSION__ = '2.2.0 DESENVOLVIMENTO';
     const parentName = found.parent?.name || found.item.name;
     const isSubitem = Boolean(found.parent);
     const folderPath = storageFolderPath(context, found, columnEntry);
-    const isSectorizedWork = Boolean(context.board.settings?.works_sector_column_id);
+    // Mesmo critério usado por storageFolderPath, para que o caminho calculado e
+    // os campos legados enviados ao conector nunca discordem.
+    const { isSectorizedWork } = storageSectorization(context, found);
     const cityName = isSectorizedWork ? folderPath[0] : '';
     const sectorName = isSectorizedWork ? folderPath[1] : (found.group?.name || context.module.name || 'Itens');
     const payload = {
@@ -6154,9 +6677,11 @@ window.__ATLAS_VERSION__ = '2.2.0 DESENVOLVIMENTO';
         } else {
           added.push({ id: id('image'), name: prepared.name, mimeType: prepared.mimeType, size: prepared.size, dataUrl: prepared.dataUrl, localOnly: true, uploadedAt: new Date().toISOString() });
         }
+        // Gravar na celula a cada arquivo concluido, e nao so no final: assim uma
+        // falha no meio do lote nao apaga da tela o que ja foi enviado de fato.
+        found.item.values[columnEntry.id] = [...current, ...added];
         setOperationProgress(`${file.name} concluído`, fileBase + fileShare, `${fileIndex + 1} de ${files.length}`);
       }
-      found.item.values[columnEntry.id] = [...current, ...added];
       if (connected) {
         saveData(`${imageColumn ? 'Imagens' : 'Arquivos'} enviados e sincronizados`, { remote: false, itemId: found.item.id });
       } else {
@@ -6166,8 +6691,26 @@ window.__ATLAS_VERSION__ = '2.2.0 DESENVOLVIMENTO';
       if (!patchRealtimeImageCell({ ...context, found }, columnEntry.id)) render();
       setOperationProgress(`${imageColumn ? 'Imagens' : 'Arquivos'} enviados`, 100, `${added.length} arquivo(s) concluído(s)`);
     } catch (error) {
-      runtime.data.errors.unshift({ id: id('error'), title: 'Falha no envio de arquivo', detail: error.message || String(error), createdAt: new Date().toISOString() });
-      toast(error.message || 'Não foi possível enviar os arquivos.', true);
+      // Falhar no meio do lote nao pode descartar o que ja subiu: os arquivos
+      // anteriores estao no Drive e ja foram gravados em atlas_v2_attachments.
+      // Eles sao mantidos na celula e o erro informa quantos falharam.
+      const pendingCount = files.length - added.length;
+      runtime.data.errors.unshift({
+        id: id('error'),
+        title: 'Falha no envio de arquivo',
+        detail: added.length
+          ? `${added.length} de ${files.length} arquivo(s) foram enviados e mantidos. Falha a partir do arquivo ${added.length + 1}: ${error.message || String(error)}`
+          : (error.message || String(error)),
+        createdAt: new Date().toISOString(),
+      });
+      if (added.length) {
+        if (connected) saveData('Envio parcial de arquivos', { remote: false, itemId: found.item.id });
+        else saveData('Envio parcial de arquivos');
+        if (!patchRealtimeImageCell({ ...context, found }, columnEntry.id)) render();
+        toast(`${added.length} arquivo(s) foram enviados. ${pendingCount} falharam: ${error.message || error}`, true);
+      } else {
+        toast(error.message || 'Não foi possível enviar os arquivos.', true);
+      }
       setOperationProgress('Falha no envio', 100, error.message || String(error));
     } finally {
       target.disabled = false;
@@ -6344,7 +6887,15 @@ window.__ATLAS_VERSION__ = '2.2.0 DESENVOLVIMENTO';
 
   function flatBoardItems(boardEntry) {
     const rows = [];
+    // Um admin pode restringir o acesso de um usuario a uma obra (item)
+    // especifica via Admin > Permissoes. Filtrar aqui, na funcao central de
+    // onde toda a UI (tabela/kanban/gantt/selecao em massa) le a lista de
+    // itens, garante que a obra bloqueada some de toda a interface de uma vez
+    // so, em vez de precisar repetir o filtro em cada tela. Se o item pai
+    // esta bloqueado, os subitens dele tambem ficam ocultos (nao visitamos).
+    const boardContext = findBoard(boardEntry.id) || { board: boardEntry };
     const visit = (entries, groupEntry, parent = null) => (entries || []).forEach((itemEntry) => {
+      if (!hasPermission('view', { ...boardContext, groupId: groupEntry.id, itemId: itemEntry.id })) return;
       rows.push({ item: itemEntry, group: groupEntry, parent });
       visit(itemEntry.subitems, groupEntry, itemEntry);
     });
@@ -7056,6 +7607,10 @@ window.__ATLAS_VERSION__ = '2.2.0 DESENVOLVIMENTO';
   async function submitBulkEdit(form) {
     const context = findBoard();
     if (!context || !runtime.selectedItems.size) return;
+    // Reverificar no envio, como fazem as edicoes de campo individuais. A guarda
+    // do clique acontece ao abrir o modal; a permissao pode ter mudado (ou o
+    // quadro ativo pode ser outro) entre abrir e confirmar.
+    if (!requirePermission('edit', context, 'editar vários registros')) return;
     const data = new FormData(form);
     const fieldId = String(data.get('fieldId') || '');
     const operation = String(data.get('operation') || 'set');
@@ -7200,9 +7755,8 @@ window.__ATLAS_VERSION__ = '2.2.0 DESENVOLVIMENTO';
     const context = findBoard();
     const found = context && findItem(context.board, itemId);
     if (!found || found.parent) return;
-    // Hotfix 2026-08-03: mesma razao de deleteItems - garantir que os subitens
-    // desta obra estejam com os valores carregados antes de fotografar o item
-    // para a lixeira.
+    // Mesma razao de deleteItems: garantir que os subitens desta obra estejam
+    // com os valores carregados antes de fotografar o item para a lixeira.
     if (runtime.remoteMode && runtime.authClient) {
       try { await hydrateBoardRemoteData(context.board.id, { itemIds: itemTreeIds(found.item, []) }); }
       catch (error) { console.warn('Atlas V2: nao foi possivel confirmar os valores antes de excluir.', error); }
@@ -7290,13 +7844,24 @@ window.__ATLAS_VERSION__ = '2.2.0 DESENVOLVIMENTO';
   async function deleteItems(itemIds) {
     const context = findBoard();
     if (!context) return;
+    // Um admin pode bloquear o acesso de um usuario a uma obra especifica.
+    // Numa exclusao em massa, so removemos as obras que o usuario realmente
+    // tem permissao de excluir; as demais ficam de fora, com um aviso.
+    const evaluatedIds = itemIds.map((itemId) => {
+      const found = findItem(context.board, itemId);
+      return { itemId, allowed: Boolean(found) && hasPermission('delete', { ...context, groupId: found.group.id, itemId }) };
+    });
+    const deniedCount = evaluatedIds.filter((entry) => !entry.allowed).length;
+    itemIds = evaluatedIds.filter((entry) => entry.allowed).map((entry) => entry.itemId);
+    if (deniedCount) toast(`Sem permissão para excluir ${deniedCount} obra(s); a ação foi aplicada apenas ao restante.`, true);
+    if (!itemIds.length) return;
     const parentIds = new Set(itemIds.filter((itemId) => { const found = findItem(context.board, itemId); return found && !found.parent; }));
-    // Hotfix 2026-08-03: o retrato salvo na lixeira e montado a partir do que
-    // ja esta na memoria do navegador. Subitens nunca abertos nesta sessao
-    // ficam com valores vazios ({}) por conta do carregamento sob demanda -
-    // sem esta hidratacao, o botao "Restaurar" da lixeira nunca traria de
-    // volta esses valores, mesmo que o dado real continuasse existindo no
-    // Supabase ate o instante da exclusao.
+    // O retrato salvo na lixeira e montado a partir do que ja esta na memoria
+    // do navegador. Subitens nunca abertos nesta sessao ficam com valores
+    // vazios ({}) por conta do carregamento sob demanda - sem esta hidratacao,
+    // o botao "Restaurar" da lixeira nunca traria de volta esses valores,
+    // mesmo que o dado real continuasse existindo no Supabase ate o instante
+    // da exclusao.
     if (runtime.remoteMode && runtime.authClient) {
       const idsToHydrate = itemIds.flatMap((itemId) => {
         const found = findItem(context.board, itemId);
@@ -7350,11 +7915,16 @@ window.__ATLAS_VERSION__ = '2.2.0 DESENVOLVIMENTO';
     const context = findBoard();
     const found = context && findItem(context.board, itemId);
     if (!found) return;
+    if (!requirePermission('create', { ...context, groupId: found.group.id, itemId }, 'duplicar esta obra')) return;
     const copy = duplicateItemTree(found.item, found.parent?.id || null, true);
     if (found.parent) copy.subitems = [];
     const index = found.collection.findIndex((entry) => entry.id === itemId);
     found.collection.splice(index + 1, 0, copy);
     const ids = itemTreeIds(copy, []);
+    // Registrar as copias como "valores ja carregados", igual addItem/addSubitem
+    // fazem. Sem isso a hidratacao remota disparada pelo render logo abaixo trata
+    // os itens novos como nao carregados e zera os valores recem-copiados.
+    ids.forEach((newId) => runtime.loadedItemValues.add(String(newId)));
     saveData('Item duplicado', { remote: false });
     persistRemoteItemsSoon(context, ids);
     render();
@@ -7364,6 +7934,11 @@ window.__ATLAS_VERSION__ = '2.2.0 DESENVOLVIMENTO';
     const context = findBoard();
     const target = context?.board.groups.find((entry) => entry.id === targetGroupId);
     if (!target) return;
+    itemIds = itemIds.filter((itemId) => {
+      const found = findItem(context.board, itemId);
+      return found && hasPermission('edit', { ...context, groupId: found.group.id, itemId });
+    });
+    if (!itemIds.length) return;
     const moving = [];
     context.board.groups.forEach((groupEntry) => {
       groupEntry.items = groupEntry.items.filter((entry) => {
@@ -7386,6 +7961,11 @@ window.__ATLAS_VERSION__ = '2.2.0 DESENVOLVIMENTO';
     moving.forEach((entry) => {
       const oldGroupId = entry.groupId;
       entry.groupId = targetGroupId;
+      // Recalcular a ordem no grupo de destino. Mantendo a ordem antiga, um item
+      // com valor menor que os existentes "pulava" para o topo na proxima
+      // ordenacao vinda do realtime, em vez de ficar onde foi solto.
+      entry.parentId = null;
+      entry.order = nextItemOrder(target.items);
       target.items.push(entry);
       runLocalAutomations('group_changed', context.board, entry, { oldGroupId, newGroupId: targetGroupId });
     });
@@ -7895,6 +8475,7 @@ window.__ATLAS_VERSION__ = '2.2.0 DESENVOLVIMENTO';
     if (from < 0 || to < 0 || to >= columns.length) return;
     const [entry] = columns.splice(from, 1);
     columns.splice(to, 0, entry);
+    columns.forEach((columnEntry, index) => { columnEntry.order = index; });
     saveData('Coluna reorganizada');
     openBoardSettings();
   }
@@ -7963,11 +8544,25 @@ window.__ATLAS_VERSION__ = '2.2.0 DESENVOLVIMENTO';
     const copy = deepClone(source);
     copy.id = id('group');
     copy.name = `${copy.name} - cópia`;
-    copy.items.forEach((entry) => { entry.id = id('item'); entry.groupId = copy.id; });
+    // Regenerar o ID de toda a arvore, nao apenas dos itens de primeiro nivel.
+    // Trocar so o pai deixava os subitens da copia com o MESMO id dos subitens
+    // originais, o que fazia findItem devolver o item errado e provocava
+    // conflito de chave ao gravar no Supabase.
+    copy.items = (Array.isArray(copy.items) ? copy.items : []).map((entry) => {
+      const itemCopy = duplicateItemTree(entry, null, false);
+      itemCopy.groupId = copy.id;
+      (itemCopy.subitems || []).forEach((child) => { child.groupId = copy.id; });
+      return itemCopy;
+    });
+    const newIds = copy.items.flatMap((entry) => itemTreeIds(entry, []));
+    // Mesma protecao de duplicateItem: sem isso a hidratacao remota zera os
+    // valores copiados logo depois do render.
+    newIds.forEach((newId) => runtime.loadedItemValues.add(String(newId)));
     const index = context.board.groups.findIndex((entry) => entry.id === groupId);
     context.board.groups.splice(index + 1, 0, copy);
     closeOverlay();
-    saveData('Grupo duplicado');
+    saveData('Grupo duplicado', { remote: false });
+    persistRemoteItemsSoon(context, newIds);
     render();
   }
 
@@ -8138,6 +8733,43 @@ window.__ATLAS_VERSION__ = '2.2.0 DESENVOLVIMENTO';
     return `${String(year).padStart(4, '0')}-${String(match[2]).padStart(2, '0')}-${String(match[1]).padStart(2, '0')}`;
   }
 
+  /**
+   * Converte um numero de planilha respeitando o formato usado no arquivo.
+   * O parser anterior assumia sempre o formato brasileiro e removia todos os
+   * pontos, o que transformava "1,234.56" em 1.23456 e "1.5" em 15 — valores
+   * plausiveis e errados, importados sem nenhum aviso.
+   * Retorna null quando o texto nao representa um numero.
+   */
+  function parseImportNumber(rawValue) {
+    if (typeof rawValue === 'number') return Number.isFinite(rawValue) ? rawValue : null;
+    const cleaned = String(rawValue ?? '').trim().replace(/[^\d.,+-]/g, '');
+    if (!cleaned || !/\d/.test(cleaned)) return null;
+    const lastComma = cleaned.lastIndexOf(',');
+    const lastDot = cleaned.lastIndexOf('.');
+    const digitsAfter = (position) => cleaned.length - position - 1;
+    const occurrences = (character) => cleaned.split(character).length - 1;
+    let normalized = cleaned;
+    if (lastComma >= 0 && lastDot >= 0) {
+      // Os dois separadores presentes: o ultimo a aparecer e o decimal.
+      normalized = lastComma > lastDot
+        ? cleaned.replace(/\./g, '').replace(',', '.')
+        : cleaned.replace(/,/g, '');
+    } else if (lastComma >= 0) {
+      // Apenas virgula: decimal no padrao brasileiro, exceto quando ha varias
+      // virgulas (milhar) ou exatamente tres casas apos uma unica virgula.
+      normalized = occurrences(',') === 1 && digitsAfter(lastComma) !== 3
+        ? cleaned.replace(',', '.')
+        : cleaned.replace(/,/g, '');
+    } else if (lastDot >= 0) {
+      // Apenas ponto: decimal se for um unico ponto sem grupo de tres casas.
+      normalized = occurrences('.') === 1 && digitsAfter(lastDot) !== 3
+        ? cleaned
+        : cleaned.replace(/\./g, '');
+    }
+    const number = Number(normalized);
+    return Number.isFinite(number) ? number : null;
+  }
+
   function inferImportType(header, rows) {
     const key = normalizeSearchText(header);
     const values = rows.map((row) => String(row[header] ?? '').trim()).filter(Boolean).slice(0, 100);
@@ -8149,7 +8781,7 @@ window.__ATLAS_VERSION__ = '2.2.0 DESENVOLVIMENTO';
     if (values.length && values.filter((value) => /^(sim|nao|não|true|false|yes|no|0|1)$/i.test(value)).length / values.length >= 0.85) return 'checkbox';
     if (/percent|progresso|andamento/.test(key)) return 'percentage';
     if (/valor|custo|preco|preço|orcamento|orçamento/.test(key)) return 'currency';
-    if (/quantidade|total|numero|número|km|metragem/.test(key) || (values.length && values.filter((value) => Number.isFinite(Number(value.replace(/\./g, '').replace(',', '.')))).length / values.length >= 0.8)) return 'number';
+    if (/quantidade|total|numero|número|km|metragem/.test(key) || (values.length && values.filter((value) => parseImportNumber(value) !== null).length / values.length >= 0.8)) return 'number';
     const unique = new Set(values.map(normalizeSearchText));
     if (/status|situacao|situação|prioridade/.test(key)) return 'status';
     if (values.length >= 3 && unique.size <= Math.min(20, Math.ceil(values.length * 0.35))) return 'select';
@@ -8271,22 +8903,32 @@ window.__ATLAS_VERSION__ = '2.2.0 DESENVOLVIMENTO';
     if (columnEntry.type === 'checkbox') return /^(sim|true|yes|1|x|ok)$/i.test(value);
     if (columnEntry.type === 'date') return importDateValue(value);
     if (['number', 'currency', 'percentage'].includes(columnEntry.type)) {
-      const number = Number(value.replace(/\./g, '').replace(',', '.').replace(/[^\d.-]/g, ''));
-      return Number.isFinite(number) ? number : '';
+      const number = parseImportNumber(rawValue);
+      return number === null ? '' : number;
     }
     return rawValue ?? '';
   }
 
-  function importGroupForValue(boardEntry, fallbackGroup, value) {
+  // Com create=false apenas localiza, sem criar nada. Usado para montar a chave
+  // de duplicidade antes de decidir se a linha sera realmente importada, para
+  // nao deixar grupos vazios criados por linhas que acabam ignoradas.
+  function importGroupForValue(boardEntry, fallbackGroup, value, { create = true } = {}) {
     const name = String(value ?? '').trim();
     if (!name) return fallbackGroup;
     const existing = boardEntry.groups.find((entry) => normalizeSearchText(entry.name) === normalizeSearchText(name));
     if (existing) return existing;
+    if (!create) return null;
     const colors = ['#0f6cbd', '#7a5aa6', '#b87503', '#07846c', '#b42335', '#4573c4'];
     const created = group(id('group'), name, colors[boardEntry.groups.length % colors.length], []);
     created.order = boardEntry.groups.length;
     boardEntry.groups.push(created);
     return created;
+  }
+
+  // Chave de duplicidade usada tanto para os itens que ja existem no quadro
+  // quanto para as linhas da planilha, com o mesmo formato nos dois lados.
+  function importDuplicateKey(groupKey, parentName, itemName) {
+    return normalizeSearchText(`${groupKey}|${parentName || ''}|${itemName || ''}`);
   }
 
   async function confirmImport(form) {
@@ -8316,21 +8958,34 @@ window.__ATLAS_VERSION__ = '2.2.0 DESENVOLVIMENTO';
       createdColumnIds.push(newColumn.id);
       mapping[header] = newColumn.id;
     });
-    const existingNames = new Set(flatBoardItems(context.board).map((entry) => normalizeSearchText(entry.item.name)));
+    // A chave dos itens que ja existem precisa ter exatamente o mesmo formato da
+    // chave calculada por linha (grupo|pai|nome). Antes o conjunto guardava
+    // apenas o nome, entao a comparacao nunca casava: subitens jamais eram
+    // checados e itens de primeiro nivel eram ignorados so por existir outro
+    // item com o mesmo nome em qualquer outro grupo.
+    const existingNames = new Set(flatBoardItems(context.board)
+      .map((entry) => importDuplicateKey(entry.group?.id || '', entry.parent?.name || '', entry.item.name)));
+    const skipDuplicates = Boolean(data.get('skipDuplicates'));
     const createdIds = [];
     const importedParents = new Map();
+    const groupIdsBeforeImport = new Set(context.board.groups.map((entry) => entry.id));
     let skipped = 0;
     closeOverlay();
     setOperationProgress('Organizando dados da planilha', 5, `0 de ${preview.rows.length}`);
     preview.rows.forEach((row, rowIndex) => {
       const name = String(row[nameHeader] || 'Item importado').trim() || 'Item importado';
-      const target = importGroupForValue(context.board, fallbackGroup, groupHeader ? row[groupHeader] : '');
+      const groupValue = groupHeader ? row[groupHeader] : '';
       const parentName = parentHeader ? String(row[parentHeader] ?? '').trim() : '';
-      const duplicateKey = normalizeSearchText(`${target.id}|${parentName}|${name}`);
-      if (data.get('skipDuplicates') && (existingNames.has(duplicateKey) || (!parentName && existingNames.has(normalizeSearchText(name))))) {
+      // Localizar o grupo sem criar: se a linha for ignorada como duplicada, um
+      // grupo novo nao deve ficar para tras vazio.
+      const existingTarget = importGroupForValue(context.board, fallbackGroup, groupValue, { create: false });
+      const groupKey = existingTarget ? existingTarget.id : `novo:${normalizeSearchText(String(groupValue ?? ''))}`;
+      const duplicateKey = importDuplicateKey(groupKey, parentName, name);
+      if (skipDuplicates && existingNames.has(duplicateKey)) {
         skipped += 1;
         return;
       }
+      const target = existingTarget || importGroupForValue(context.board, fallbackGroup, groupValue);
       const newItem = item(id('item'), target.id, name, {});
       context.board.columns.forEach((columnEntry) => { newItem.values[columnEntry.id] = columnEntry.type === 'checkbox' ? false : ''; });
       preview.headers.forEach((header) => {
@@ -8362,6 +9017,15 @@ window.__ATLAS_VERSION__ = '2.2.0 DESENVOLVIMENTO';
       existingNames.add(duplicateKey);
       setOperationProgress('Organizando dados da planilha', 8 + ((rowIndex + 1) / preview.rows.length) * 42, `${rowIndex + 1} de ${preview.rows.length}`);
     });
+    // Grupos criados automaticamente durante esta importacao, para que o
+    // "desfazer lote" tambem possa remove-los quando ficarem vazios.
+    const createdGroupIds = context.board.groups
+      .filter((entry) => !groupIdsBeforeImport.has(entry.id))
+      .map((entry) => entry.id);
+    // Mesma protecao usada em addItem/duplicateItem: sem isso a hidratacao
+    // remota disparada pelo render trata os itens importados como nao
+    // carregados e limpa os valores que acabaram de ser preenchidos.
+    createdIds.forEach((newId) => runtime.loadedItemValues.add(String(newId)));
     context.board.settings = context.board.settings || {};
     context.board.settings.import_batches = Array.isArray(context.board.settings.import_batches) ? context.board.settings.import_batches : [];
     context.board.settings.import_batches.push({
@@ -8370,6 +9034,7 @@ window.__ATLAS_VERSION__ = '2.2.0 DESENVOLVIMENTO';
       groupId: fallbackGroup.id,
       itemIds: createdIds,
       columnIds: createdColumnIds,
+      groupIds: createdGroupIds,
       createdAt: new Date().toISOString(),
       rolledBackAt: null,
     });
@@ -8414,9 +9079,39 @@ window.__ATLAS_VERSION__ = '2.2.0 DESENVOLVIMENTO';
     if (!batch || !requirePermission('delete', context, 'desfazer esta importação')) return;
     const ids = new Set(batch.itemIds || []);
     const removed = context.board.groups.reduce((total, groupEntry) => total + removeImportedItems(groupEntry.items, ids), 0);
+
+    // Desfazer tambem a estrutura criada pelo lote. Antes so os itens eram
+    // removidos: as colunas novas e os grupos criados automaticamente ficavam
+    // no quadro para sempre, mesmo com a interface dizendo que o lote foi
+    // revertido por completo.
+    const columnIds = new Set((batch.columnIds || []).filter(Boolean));
+    let removedColumns = 0;
+    if (columnIds.size) {
+      const before = context.board.columns.length;
+      context.board.columns = context.board.columns.filter((entry) => !columnIds.has(entry.id));
+      removedColumns = before - context.board.columns.length;
+      const clearValues = (entries = []) => entries.forEach((entry) => {
+        columnIds.forEach((columnId) => { delete entry.values?.[columnId]; });
+        clearValues(entry.subitems || []);
+      });
+      context.board.groups.forEach((groupEntry) => clearValues(groupEntry.items));
+    }
+
+    const groupIds = new Set((batch.groupIds || []).filter(Boolean));
+    let removedGroups = 0;
+    if (groupIds.size) {
+      const before = context.board.groups.length;
+      // Preservar grupos que receberam conteudo depois da importacao.
+      context.board.groups = context.board.groups.filter((entry) => !(groupIds.has(entry.id) && !(entry.items || []).length));
+      removedGroups = before - context.board.groups.length;
+    }
+
     batch.rolledBackAt = new Date().toISOString();
     closeOverlay();
-    saveData(`${removed} registro(s) da importação foram removidos`, { scope: 'board' });
+    const details = [`${removed} registro(s)`];
+    if (removedColumns) details.push(`${removedColumns} coluna(ns)`);
+    if (removedGroups) details.push(`${removedGroups} grupo(s) vazio(s)`);
+    saveData(`Importação revertida: ${details.join(' · ')} removido(s)`, { scope: 'board' });
     render();
   }
 
@@ -8789,7 +9484,10 @@ window.__ATLAS_VERSION__ = '2.2.0 DESENVOLVIMENTO';
       }
       if (action.type === 'rename_item') itemEntry.name = templateText(action.value, context) || itemEntry.name;
       if (action.type === 'create_subitem') { const child = item(id('subitem'), itemEntry.groupId, templateText(action.name || 'Novo subitem', context), {}); boardEntry.columns.forEach((columnEntry) => { child.values[columnEntry.id] = columnEntry.type === 'checkbox' ? false : ''; }); itemEntry.subitems = itemEntry.subitems || []; itemEntry.subitems.push(child); }
-      if (action.type === 'archive_item') { const found = findItem(boardEntry, itemEntry.id); if (found) found.collection.splice(found.collection.indexOf(found.item), 1); }
+      // Arquivar precisa ser reversivel, como no resto do Atlas e como o motor
+      // remoto faz (update arquivado=true). Antes o item era removido do array
+      // na hora, sem flag e sem lixeira: nao havia nenhuma forma de recuperar.
+      if (action.type === 'archive_item') { const found = findItem(boardEntry, itemEntry.id); if (found) found.item.archived = true; }
       if (action.type === 'notify') {
         runtime.data.notifications = runtime.data.notifications || [];
         runtime.data.notifications.unshift({ id: id('notification'), userId: action.userId || currentUser()?.id || '', boardId: boardEntry.id, itemId: itemEntry.id, title: templateText(action.title || 'Atualização automática', context), message: templateText(action.message || '', context), type: 'automation', readAt: null, createdAt: new Date().toISOString() });
@@ -9137,6 +9835,7 @@ window.__ATLAS_VERSION__ = '2.2.0 DESENVOLVIMENTO';
     if (protectedActions[action] && !requirePermission(protectedActions[action], context, 'executar esta ação')) return;
 
     const actions = {
+      'go-home': () => { event.preventDefault(); openHome(); },
       'open-sidebar': openSidebar,
       'close-sidebar': closeSidebar,
       'toggle-sidebar': toggleSidebar,
@@ -9406,7 +10105,7 @@ window.__ATLAS_VERSION__ = '2.2.0 DESENVOLVIMENTO';
       const found = findItem(context.board, target.dataset.itemValue);
       if (!found) return;
       const columnEntry = context.board.columns.find((entry) => entry.id === target.dataset.columnId);
-      if (!requirePermission('edit', { ...context, groupId: found.item.groupId, columnId: target.dataset.columnId }, 'editar este campo')) {
+      if (!requirePermission('edit', { ...context, groupId: found.item.groupId, columnId: target.dataset.columnId, itemId: found.item.id }, 'editar este campo')) {
         render();
         return;
       }
@@ -9425,6 +10124,8 @@ window.__ATLAS_VERSION__ = '2.2.0 DESENVOLVIMENTO';
       const previousValue = found.item.values[target.dataset.columnId];
       if (target.type === 'checkbox') {
         found.item.values[target.dataset.columnId] = target.checked;
+      } else if (columnEntry?.type === 'currency') {
+        found.item.values[target.dataset.columnId] = parseCurrencyInput(target.value);
       } else {
         found.item.values[target.dataset.columnId] = target.value;
       }
@@ -9479,6 +10180,20 @@ window.__ATLAS_VERSION__ = '2.2.0 DESENVOLVIMENTO';
       }
     } else if (target.id === 'atlas-v2-global-search-input') {
       renderGlobalResults(target.value);
+    } else if (target.matches('[data-item-value][data-column-id]') && target.dataset.itemValue) {
+      const liveContext = findBoard();
+      const liveColumn = liveContext?.board?.columns?.find((entry) => entry.id === target.dataset.columnId);
+      if (liveColumn?.type === 'currency') {
+        const cursorFromEnd = target.value.length - (target.selectionEnd ?? target.value.length);
+        target.value = maskCurrencyInput(target.value);
+        const newPos = Math.max(0, target.value.length - cursorFromEnd);
+        target.setSelectionRange(newPos, newPos);
+      }
+      // Atualiza colunas de formula a cada tecla digitada, sem esperar o
+      // usuario sair do campo ou apertar Enter. Isso e so uma previa visual:
+      // o valor so e de fato salvo (e a formula recalculada "para valer") no
+      // commit normal do campo, no focusout/change de sempre.
+      updateFormulaCellsLive(target.dataset.itemValue);
     }
   }
 
@@ -9503,6 +10218,10 @@ window.__ATLAS_VERSION__ = '2.2.0 DESENVOLVIMENTO';
     const found = findItem(context.board, target.dataset.itemValue);
     const columnEntry = context.board.columns.find((entry) => entry.id === target.dataset.columnId);
     if (!found || columnEntry?.type !== 'date') return;
+    if (!requirePermission('edit', { ...context, groupId: found.item.groupId, columnId: columnEntry.id, itemId: found.item.id }, 'editar este campo')) {
+      render();
+      return;
+    }
 
     const previousValue = found.item.values?.[columnEntry.id] ?? '';
     const nextValue = String(target.value || '').trim();
@@ -9554,7 +10273,7 @@ window.__ATLAS_VERSION__ = '2.2.0 DESENVOLVIMENTO';
     if (!requirePermission('edit', context, 'editar registros')) { render(); return; }
     const found = context && findItem(context.board, target.dataset.itemName);
     if (!found) return;
-    if (!requirePermission('edit', { ...context, groupId: found.item.groupId }, 'editar este registro')) {
+    if (!requirePermission('edit', { ...context, groupId: found.item.groupId, itemId: found.item.id }, 'editar este registro')) {
       render();
       return;
     }
@@ -9757,6 +10476,7 @@ window.__ATLAS_VERSION__ = '2.2.0 DESENVOLVIMENTO';
       if (from >= 0 && to >= 0 && from !== to) {
         const [entry] = context.board.groups.splice(from, 1);
         context.board.groups.splice(to, 0, entry);
+        context.board.groups.forEach((groupEntry, index) => { groupEntry.order = index; });
         saveData('Grupo reorganizado');
         render();
       }
@@ -9767,6 +10487,7 @@ window.__ATLAS_VERSION__ = '2.2.0 DESENVOLVIMENTO';
       if (from >= 0 && to >= 0 && from !== to) {
         const [entry] = context.board.columns.splice(from, 1);
         context.board.columns.splice(to, 0, entry);
+        context.board.columns.forEach((columnEntry, index) => { columnEntry.order = index; });
         saveData('Coluna reorganizada');
         render();
       }

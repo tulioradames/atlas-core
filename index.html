@@ -6,13 +6,15 @@
   <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate">
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
-  <title>Atlas 2.1 | Smart Field Management</title>
-  <meta name="description" content="Atlas 2.1 — plataforma configurável de gestão operacional, campo e arquivos.">
+  <title>Atlas | Smart Field Management</title>
+  <meta name="description" content="Atlas — plataforma configurável de gestão operacional, campo e arquivos.">
   <meta name="author" content="Túlio Radamés">
-  <meta name="application-name" content="Atlas 2.1">
+  <meta name="application-name" content="Atlas">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="assets/icons/favicon.ico">
-  <link rel="stylesheet" href="css/v2.css?v=2.2.0">
+  <!-- A querystring ?v= abaixo deve ser sempre igual a ATLAS_BUILD em js/v2.js.
+       tests/static-audit.cjs falha se divergirem. -->
+  <link rel="stylesheet" href="css/v2.css?v=2.3.0">
 </head>
 <body class="atlas-v2-auth-locked">
   <div class="atlas-v2-auth-root" id="atlas-v2-auth-root" aria-live="polite"></div>
@@ -20,7 +22,7 @@
   <div class="atlas-v2-app" id="atlas-v2-app" hidden>
     <aside class="atlas-v2-sidebar" id="atlas-v2-sidebar" aria-label="Navegação principal">
       <header class="atlas-v2-sidebar-head">
-        <a class="atlas-v2-brand" href="index.html" aria-label="Atlas 2.1">
+        <a class="atlas-v2-brand" href="index.html" aria-label="Atlas" data-action="go-home" title="Ir para o início">
           <img src="assets/brand/atnx-logo-horizontal.svg" alt="Atlas">
         </a>
         <button class="atlas-v2-icon-button atlas-v2-sidebar-toggle" type="button" data-action="toggle-sidebar" title="Recolher menu" aria-label="Recolher menu">
@@ -136,8 +138,8 @@
 
       <footer class="atlas-v2-footer">
         <span>Atlas · Smart Field Management · Criado por Túlio Radamés</span>
-        <span id="atlas-v2-save-state"><i data-lucide="cloud-check"></i>Alterações salvas</span>
-          <span>V2.2.0 Desenvolvimento</span>
+        <span id="atlas-v2-save-state"><i data-lucide="circle-check-big"></i>Alterações salvas</span>
+          <span id="atlas-v2-footer-version">V2.3.0 Oficial</span>
       </footer>
     </main>
   </div>
@@ -150,9 +152,9 @@
   </div>
   <div class="atlas-v2-toast-region" id="atlas-v2-toast-region" aria-live="polite"></div>
 
-  <script src="config/config.js?v=2.2.0"></script>
+  <script src="config/config.js?v=2.3.0"></script>
   <script src="assets/vendor/supabase.min.js"></script>
   <script src="assets/vendor/lucide.min.js"></script>
-  <script src="js/v2.js?v=2.2.0-perf7"></script>
+  <script src="js/v2.js?v=2.3.0"></script>
 </body>
 </html>

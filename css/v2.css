@@ -2394,7 +2394,7 @@ body.atlas-v2-board-loading .atlas-v2-board-content {
   position: fixed;
   z-index: 460;
   right: 16px;
-  bottom: 42px;
+  bottom: 112px;
   display: grid;
   width: min(390px, calc(100vw - 32px));
   gap: 7px;
@@ -3665,6 +3665,147 @@ body.atlas-v2-admin-page .atlas-v2-selection-bar {
   display: none !important;
 }
 
+body.atlas-v2-home-page .atlas-v2-main {
+  grid-template-rows: var(--v2-topbar-height) minmax(0, 1fr) 28px;
+}
+
+body.atlas-v2-home-page .atlas-v2-board-head,
+body.atlas-v2-home-page .atlas-v2-board-toolbar,
+body.atlas-v2-home-page .atlas-v2-selection-bar {
+  display: none !important;
+}
+
+.atlas-v2-home-content {
+  width: 100%;
+  min-width: 0;
+  padding: 0 0 56px;
+  color: var(--v2-text);
+}
+
+.atlas-v2-home-shell {
+  display: grid;
+  gap: 20px;
+  max-width: 960px;
+  margin: 0 auto;
+  padding: clamp(18px, 3vw, 38px);
+}
+
+.atlas-v2-home-hero {
+  display: grid;
+  gap: 6px;
+}
+
+.atlas-v2-home-kicker {
+  color: var(--v2-atlas);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+}
+
+.atlas-v2-home-hero h1 {
+  margin: 0;
+  font-size: clamp(26px, 4vw, 38px);
+  line-height: 1.1;
+}
+
+.atlas-v2-home-hero p {
+  margin: 4px 0 0;
+  color: var(--v2-muted);
+  font-size: 14px;
+}
+
+.atlas-v2-home-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.atlas-v2-home-card {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--v2-line);
+  border-radius: 3px;
+  background: var(--v2-surface);
+  padding: 18px;
+}
+
+.atlas-v2-home-card > header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  color: var(--v2-atlas);
+}
+
+.atlas-v2-home-card > header i {
+  width: 18px;
+  height: 18px;
+}
+
+.atlas-v2-home-card > header h2 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--v2-text);
+}
+
+.atlas-v2-home-version {
+  display: block;
+  font-size: 22px;
+  color: var(--v2-text);
+}
+
+.atlas-v2-home-version-card small {
+  display: block;
+  margin-top: 6px;
+  color: var(--v2-muted);
+  font-size: 12px;
+}
+
+.atlas-v2-home-changelog-list {
+  display: grid;
+  gap: 16px;
+  max-height: 420px;
+  overflow-y: auto;
+}
+
+.atlas-v2-home-changelog-list article > header {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.atlas-v2-home-changelog-list article > header strong {
+  color: var(--v2-text);
+  font-size: 13px;
+}
+
+.atlas-v2-home-changelog-list article > header small {
+  color: var(--v2-muted);
+  font-size: 11px;
+}
+
+.atlas-v2-home-changelog-list ul {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 4px;
+}
+
+.atlas-v2-home-changelog-list li {
+  color: var(--v2-muted);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+@media (max-width: 860px) {
+  .atlas-v2-home-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 .atlas-v2-admin-content {
   width: 100%;
   min-width: 0;
@@ -4552,7 +4693,7 @@ body.atlas-v2-admin-page .atlas-v2-selection-bar {
 @media (max-width: 560px) {
   .atlas-v2-operation-progress {
     right: 10px;
-    bottom: 72px;
+    bottom: 142px;
     width: calc(100vw - 20px);
   }
   .atlas-v2-topbar {
@@ -4607,10 +4748,6 @@ body.atlas-v2-admin-page .atlas-v2-selection-bar {
   .atlas-v2-toolbar-main > [data-action="filter"],
   .atlas-v2-toolbar-main > [data-action="sort"] {
     display: none;
-  }
-
-  .atlas-v2-board-content {
-    min-width: 820px;
   }
 
   .atlas-v2-group {
@@ -4900,7 +5037,7 @@ body.atlas-v2-admin-page .atlas-v2-selection-bar {
 }
 
 body.atlas-v2-offline #atlas-v2-save-state {
-  color: #ffb020;
+  color: var(--v2-amber);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -6376,9 +6513,9 @@ body.atlas-v2-right-dragging * {
   background: var(--v2-surface);
 }
 
-.atlas-v2-sla-chip.is-late { color: #ff5f79; }
-.atlas-v2-sla-chip.is-warning { color: #ffb020; }
-.atlas-v2-sla-chip.is-ok { color: #4fd095; }
+.atlas-v2-sla-chip.is-late { color: var(--v2-red); }
+.atlas-v2-sla-chip.is-warning { color: var(--v2-amber); }
+.atlas-v2-sla-chip.is-ok { color: var(--v2-green); }
 
 .atlas-v2-view-heading {
   display: flex;
@@ -6527,7 +6664,7 @@ body.atlas-v2-right-dragging * {
   width: 34px;
   height: 34px;
   place-items: center;
-  color: var(--v2-danger);
+  color: var(--v2-red);
   border: 1px solid var(--v2-line);
   background: transparent;
 }
@@ -6568,8 +6705,8 @@ body.atlas-v2-right-dragging * {
   align-items: center;
   gap: 12px;
   padding: 12px;
-  border: 1px solid color-mix(in srgb, var(--v2-warning) 52%, var(--v2-line));
-  background: color-mix(in srgb, var(--v2-warning) 8%, var(--v2-surface));
+  border: 1px solid color-mix(in srgb, var(--v2-amber) 52%, var(--v2-line));
+  background: color-mix(in srgb, var(--v2-amber) 8%, var(--v2-surface));
 }
 
 .atlas-v2-import-rollback > span {
@@ -6729,8 +6866,8 @@ body.atlas-v2-right-dragging * {
   white-space: nowrap;
 }
 
-.atlas-v2-item-history del { color: #ff7389; }
-.atlas-v2-item-history ins { color: #58d99c; }
+.atlas-v2-item-history del { color: var(--v2-red); }
+.atlas-v2-item-history ins { color: var(--v2-green); }
 
 .atlas-v2-item-history > article > button {
   display: grid;
@@ -6761,8 +6898,8 @@ body.atlas-v2-right-dragging * {
   color: var(--v2-muted);
 }
 
-.atlas-v2-health-check.is-ok > svg { color: #4fd095; }
-.atlas-v2-health-check.is-error > svg { color: #ff5f79; }
+.atlas-v2-health-check.is-ok > svg { color: var(--v2-green); }
+.atlas-v2-health-check.is-error > svg { color: var(--v2-red); }
 .atlas-v2-health-check.is-running > svg { color: var(--v2-atlas); animation: atlas-v2-spin 900ms linear infinite; }
 
 .atlas-v2-health-check strong,
@@ -7017,9 +7154,9 @@ body.atlas-v2-right-dragging * {
   border: 1px solid currentColor;
 }
 
-.atlas-v2-field-card > header b.is-late { color: #ff6780; }
-.atlas-v2-field-card > header b.is-warning { color: #ffb020; }
-.atlas-v2-field-card > header b.is-ok { color: #55d69a; }
+.atlas-v2-field-card > header b.is-late { color: var(--v2-red); }
+.atlas-v2-field-card > header b.is-warning { color: var(--v2-amber); }
+.atlas-v2-field-card > header b.is-ok { color: var(--v2-green); }
 
 .atlas-v2-field-card-fields {
   display: grid;
@@ -7169,7 +7306,7 @@ body.atlas-v2-right-dragging * {
   .atlas-v2-board-content,
   .atlas-v2-board-content.is-mobile-vertical-view {
     width: 100%;
-    min-width: 0 !important;
+    min-width: 0;
     max-width: 100%;
   }
 
