@@ -1,7 +1,7 @@
 (function atlasV2Official() {
   'use strict';
 
-window.__ATLAS_VERSION__ = '2.3.0 OFICIAL';
+window.__ATLAS_VERSION__ = '2.3.1 OFICIAL';
 
   // ---------------------------------------------------------------------------
   // VERSAO DOS ARQUIVOS WEB - fonte unica.
@@ -15,13 +15,20 @@ window.__ATLAS_VERSION__ = '2.3.0 OFICIAL';
   // pre-cache. tests/static-audit.cjs falha se index.html e ATLAS_BUILD
   // divergirem, que era a causa dos casos de "publiquei mas continua igual".
   // ---------------------------------------------------------------------------
-  const ATLAS_BUILD = '2.3.0';
+  const ATLAS_BUILD = '2.3.1';
   window.__ATLAS_BUILD__ = ATLAS_BUILD;
 
   // Changelog exibido na tela de Início. Mantido a mao a cada entrega -
   // nao ha nenhum processo automatico de build que gere isto sozinho.
   // Ordem: mais recente primeiro.
   const CHANGELOG = [
+    {
+      version: 'V2.3.1 Oficial',
+      date: '2026-08-10',
+      notes: [
+        'Correção: fórmulas que referenciam outra coluna de fórmula (ex.: uma fórmula usada dentro de outra) agora calculam corretamente, em vez de ficar sempre em branco.',
+      ],
+    },
     {
       version: 'V2.3.0 Oficial',
       date: '2026-08-06',
@@ -3131,7 +3138,7 @@ window.__ATLAS_VERSION__ = '2.3.0 OFICIAL';
   }
 
   function authVersion() {
-    return window.ATNX_CONFIG?.V2_VERSION || 'V2.3.0 Oficial';
+    return window.ATNX_CONFIG?.V2_VERSION || 'V2.3.1 Oficial';
   }
 
   function authFeatureList() {
@@ -5799,35 +5806,61 @@ window.__ATLAS_VERSION__ = '2.3.0 OFICIAL';
     </tr>`;
   }
 
-  // Nucleo comum do calculo da formula. resolveValue decide de onde vem o
-  // valor de cada coluna referenciada - do modelo (found.item.values, o dado
-  // ja confirmado) ou do proprio campo em tela (para a previa ao vivo,
-  // enquanto o usuario ainda esta digitando e o valor ainda nao foi salvo).
-  function evaluateFormula(boardEntry, columnEntry, resolveValue) {
+  // Nucleo comum do calculo da formula, em numero puro (sem formatacao) -
+  // usado tanto para o resultado final quanto para resolver, recursivamente,
+  // uma coluna-fonte que e ela mesma uma formula (o resultado de uma formula
+  // nunca fica salvo em item.values, so e calculado na hora, entao nao tem
+  // como resolveValue encontra-lo la - precisa ser recalculado aqui).
+  // Retorna undefined para formula com sintaxe invalida (ou referencia
+  // circular: A depende de B que depende de A) - um sentinela dedicado, pois
+  // NaN tambem e um resultado ARITMETICO legitimo (ex.: 0/0) e nao pode ser
+  // usado para sinalizar "sintaxe invalida" sem colidir com esse caso. Para
+  // resultado numerico (finito ou nao - Infinity, -Infinity, NaN de calculo)
+  // retorna o numero normalmente; quem chama decide o texto exibido.
+  function evaluateFormulaNumeric(boardEntry, columnEntry, resolveValue, visited) {
     const expression = String(columnEntry.formula || '').trim();
-    if (!expression) return '';
+    if (!expression) return null;
+    if (visited.has(columnEntry.id)) return undefined;
+    visited.add(columnEntry.id);
     const replaced = expression.replace(/\{([^}]+)\}/g, (_, rawName) => {
       const name = String(rawName || '').trim().toLowerCase();
       const source = boardEntry.columns.find((entry) => entry.id !== columnEntry.id && entry.name.toLowerCase() === name);
-      const value = source ? resolveValue(source) : 0;
+      let value;
+      if (!source) {
+        value = 0;
+      } else if (source.type === 'formula') {
+        const nested = evaluateFormulaNumeric(boardEntry, source, resolveValue, visited);
+        value = Number.isFinite(nested) ? nested : 0;
+      } else {
+        value = resolveValue(source);
+      }
       // Valor de checkbox e booleano (true/false); String(true) vira "true",
       // que Number() nao converte (fica NaN e cairia sempre em '0', mesmo
       // marcado). Precisa virar 1/0 antes de tentar converter como numero.
       const numeric = typeof value === 'boolean' ? (value ? 1 : 0) : Number(String(value ?? '').replace(',', '.'));
       return Number.isFinite(numeric) ? String(numeric) : '0';
     });
-    if (!/^[\d+\-*/().%\s]+$/.test(replaced)) return 'Fórmula inválida';
+    if (!/^[\d+\-*/().%\s]+$/.test(replaced)) return undefined;
     try {
-      const result = Function(`"use strict"; return (${replaced});`)();
-      if (!Number.isFinite(Number(result))) return '';
-      const decimals = Math.min(6, Math.max(0, Number(columnEntry.decimals ?? 2)));
-      const number = Number(result);
-      if (columnEntry.format === 'currency') return number.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: decimals });
-      if (columnEntry.format === 'percentage') return `${number.toLocaleString('pt-BR', { maximumFractionDigits: decimals })}%`;
-      return number.toLocaleString('pt-BR', { maximumFractionDigits: decimals });
+      return Number(Function(`"use strict"; return (${replaced});`)());
     } catch (_) {
-      return 'Fórmula inválida';
+      return undefined;
     }
+  }
+
+  // resolveValue decide de onde vem o valor de cada coluna referenciada - do
+  // modelo (found.item.values, o dado ja confirmado) ou do proprio campo em
+  // tela (para a previa ao vivo, enquanto o usuario ainda esta digitando e o
+  // valor ainda nao foi salvo).
+  function evaluateFormula(boardEntry, columnEntry, resolveValue) {
+    if (!String(columnEntry.formula || '').trim()) return '';
+    const result = evaluateFormulaNumeric(boardEntry, columnEntry, resolveValue, new Set());
+    if (result === undefined) return 'Fórmula inválida';
+    if (!Number.isFinite(result)) return '';
+    const decimals = Math.min(6, Math.max(0, Number(columnEntry.decimals ?? 2)));
+    if (columnEntry.format === 'currency') return result.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: decimals });
+    if (columnEntry.format === 'percentage') return `${result.toLocaleString('pt-BR', { maximumFractionDigits: decimals })}%`;
+    return result.toLocaleString('pt-BR', { maximumFractionDigits: decimals });
   }
 
   function formulaColumnValue(boardEntry, itemEntry, columnEntry) {
