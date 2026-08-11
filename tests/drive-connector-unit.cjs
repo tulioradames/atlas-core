@@ -106,4 +106,4 @@ assert(files.get('file-a').parent.parent.name === 'POP - CEARA MIRIM - RN', 'A p
 assert(files.get('file-a').parent.parent.parent.name === 'POP', 'A pasta do setor nao foi criada.');
 assert(files.get('file-a').parent.parent.parent.parent.name === 'Ceara Mirim - RN', 'A pasta da cidade nao foi criada.');
 
-console.log('Atlas V2.3.1: conector do Drive aprovado.');
+console.log('Atlas V2.3.2: conector do Drive aprovado.');

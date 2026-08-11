@@ -19,10 +19,10 @@ const completeSchema = read('supabase/ATLAS_V2_1_0_SCHEMA_COMPLETO.sql');
 const adminApproval = read('supabase/ATLAS_V2_2_0_APROVACAO_ADMIN.sql');
 const serviceWorker = read('service-worker.js');
 
-assert(app.includes("window.__ATLAS_VERSION__ = '2.3.1 OFICIAL'"), 'Versao interna divergente.');
-assert(config.includes('V2.3.1 Oficial'), 'Config sem a versao do pacote.');
+assert(app.includes("window.__ATLAS_VERSION__ = '2.3.2 OFICIAL'"), 'Versao interna divergente.');
+assert(config.includes('V2.3.2 Oficial'), 'Config sem a versao do pacote.');
 assert(index.includes('id="atlas-v2-footer-version"'), 'Rodape sem o elemento de versao (agora preenchido via JS a partir do config.js).');
-assert(manifest.includes('2.3.1'), 'Manifest sem a versao do pacote.');
+assert(manifest.includes('2.3.2'), 'Manifest sem a versao do pacote.');
 
 // ---------------------------------------------------------------------------
 // Consistencia da versao dos arquivos web.
@@ -273,4 +273,4 @@ localReferences.forEach((entry) => {
   assert(fs.existsSync(path.join(root, entry)), `Referencia local ausente: ${entry}`);
 });
 
-console.log('Atlas V2.3.1: auditoria estatica aprovada.');
+console.log('Atlas V2.3.2: auditoria estatica aprovada.');

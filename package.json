@@ -1,8 +1,8 @@
 {
   "name": "atlas-core",
-  "version": "2.3.1",
+  "version": "2.3.2",
   "private": true,
-  "description": "Atlas V2.3.1 Oficial - correção de fórmulas encadeadas, edição em massa, importação universal e sincronização com progresso",
+  "description": "Atlas V2.3.2 Oficial - correção de fórmulas encadeadas, edição em massa, importação universal e sincronização com progresso",
   "scripts": {
     "check:js": "node --check js/v2.js",
     "test": "node tests/static-audit.cjs",

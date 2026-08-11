@@ -94,8 +94,8 @@ try {
         bodyText: document.body.innerText,
         width: document.documentElement.scrollWidth,
       }));
-      if (state.version !== '2.3.1 OFICIAL') throw new Error(`Versao incorreta em ${viewport.name}.`);
-      if (!state.bodyText.includes('V2.3.1 Oficial')) throw new Error(`Rodape ausente em ${viewport.name}.`);
+      if (state.version !== '2.3.2 OFICIAL') throw new Error(`Versao incorreta em ${viewport.name}.`);
+      if (!state.bodyText.includes('V2.3.2 Oficial')) throw new Error(`Rodape ausente em ${viewport.name}.`);
       if (state.width < viewport.width) throw new Error(`Layout invalido em ${viewport.name}.`);
       if (viewport.name === 'desktop') {
         const selectableRows = await page.locator('[data-action="select-item"]').count();
@@ -234,7 +234,7 @@ try {
       text: document.body.innerText,
       sections: document.querySelectorAll('section.section').length,
     }));
-    if (!manualState.title.includes('V2.3.1')) throw new Error('Título do manual desatualizado.');
+    if (!manualState.title.includes('V2.3.2')) throw new Error('Título do manual desatualizado.');
     if (!manualState.text.includes('Recursos da V2.1')) throw new Error('Novidades ausentes do manual.');
     if (manualState.sections < 10) throw new Error('Manual interativo incompleto.');
     await manual.screenshot({
@@ -243,7 +243,7 @@ try {
     });
     await manual.close();
     if (errors.length) throw new Error(errors.join('\n'));
-    console.log('Atlas V2.3.1: smoke visual aprovado.');
+    console.log('Atlas V2.3.2: smoke visual aprovado.');
   } finally {
     await browser.close();
   }

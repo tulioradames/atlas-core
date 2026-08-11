@@ -1,7 +1,7 @@
 (function atlasV2Official() {
   'use strict';
 
-window.__ATLAS_VERSION__ = '2.3.1 OFICIAL';
+window.__ATLAS_VERSION__ = '2.3.2 OFICIAL';
 
   // ---------------------------------------------------------------------------
   // VERSAO DOS ARQUIVOS WEB - fonte unica.
@@ -15,13 +15,23 @@ window.__ATLAS_VERSION__ = '2.3.1 OFICIAL';
   // pre-cache. tests/static-audit.cjs falha se index.html e ATLAS_BUILD
   // divergirem, que era a causa dos casos de "publiquei mas continua igual".
   // ---------------------------------------------------------------------------
-  const ATLAS_BUILD = '2.3.1';
+  const ATLAS_BUILD = '2.3.2';
   window.__ATLAS_BUILD__ = ATLAS_BUILD;
 
   // Changelog exibido na tela de Início. Mantido a mao a cada entrega -
   // nao ha nenhum processo automatico de build que gere isto sozinho.
   // Ordem: mais recente primeiro.
   const CHANGELOG = [
+    {
+      version: 'V2.3.2 Oficial',
+      date: '2026-08-11',
+      notes: [
+        'Correção: campos do quadro perdiam o foco e o que estava sendo digitado quando uma atualização em tempo real chegava enquanto a pessoa editava - sobretudo ao voltar para a aba depois de estar fora dela.',
+        'Correção: automações que movem um item de grupo agora colocam o item ao final do grupo de destino, em vez de numa posição arbitrária.',
+        'Correção: campos de data não descartam mais o que estava sendo digitado quando a janela perde o foco no meio do preenchimento.',
+        'Correção: uma atualização completa do quadro não descarta mais, sem necessidade, valores já carregados de outros quadros ou subitens.',
+      ],
+    },
     {
       version: 'V2.3.1 Oficial',
       date: '2026-08-10',
@@ -1590,6 +1600,34 @@ window.__ATLAS_VERSION__ = '2.3.1 OFICIAL';
     }
   }
 
+  // renderBoardContent (chamada tanto por markRealtimeBoardDirty quanto pelo
+  // render() geral apos uma recarga completa) reconstroi o HTML inteiro da
+  // tabela do quadro (root.innerHTML = ...). Fazer isso enquanto a pessoa
+  // esta com um campo do quadro em foco destroi esse input, perdendo o foco
+  // e o que estava sendo digitado - a tela "pisca" e muda de lugar do nada.
+  // Acontecia sobretudo ao voltar o foco para a aba depois de estar fora
+  // dela: o retorno de foco dispara pollGlobalRealtimeChanges, que encontra
+  // mudancas acumuladas (proprias ou de outra pessoa) e cai numa renderizacao
+  // completa no meio de uma edicao em andamento.
+  function isEditingBoardField() {
+    if (runtime.page !== 'board') return false;
+    const root = document.getElementById('atlas-v2-board-content');
+    return Boolean(root?.contains(document.activeElement))
+      && Boolean(document.activeElement?.matches?.('[data-item-value], [data-item-name]'));
+  }
+
+  // Chama render() agora, ou adia se a pessoa estiver com outro campo do
+  // quadro em foco (ver isEditingBoardField). Usado nos pontos em que render()
+  // seria disparado por algo fora do proprio campo que a pessoa esta editando
+  // no momento - uma atualizacao de tempo real, ou o tratamento de erro de um
+  // OUTRO campo cujo envio falhou depois que a pessoa ja tinha seguido para
+  // este - para nao destruir a edicao em andamento por causa de algo nao
+  // relacionado a ela.
+  function renderSoon() {
+    if (isEditingBoardField()) { setTimeout(renderSoon, 400); return; }
+    render();
+  }
+
   function markRealtimeBoardDirty(boardId) {
     if (boardId) runtime.realtimeDirtyBoards.add(String(boardId));
     clearTimeout(runtime.realtimeRenderTimer);
@@ -1597,6 +1635,12 @@ window.__ATLAS_VERSION__ = '2.3.1 OFICIAL';
       runtime.realtimeRenderTimer = null;
       const activeBoardId = String(runtime.data?.activeBoardId || '');
       const shouldRender = runtime.realtimeDirtyBoards.has(activeBoardId);
+      // Reagenda em vez de renderizar; o quadro continua marcado como sujo e
+      // a atualizacao aparece assim que o campo perder o foco normalmente.
+      if (shouldRender && isEditingBoardField()) {
+        runtime.realtimeRenderTimer = setTimeout(() => markRealtimeBoardDirty(null), 400);
+        return;
+      }
       runtime.realtimeDirtyBoards.clear();
       scheduleBootstrapCacheWrite(runtime.data);
       if (!shouldRender || runtime.page !== 'board') return;
@@ -1977,6 +2021,15 @@ window.__ATLAS_VERSION__ = '2.3.1 OFICIAL';
     if (!runtime.authClient || !runtime.authSession?.user) return null;
     const includeAttachments = options.includeAttachments !== false;
     const includeExtras = options.includeExtras !== false;
+    // Instantaneo ANTES de qualquer await: esta funcao roda a cada atualizacao
+    // completa (bootstrap E qualquer eco de tempo real de grupos/colunas/
+    // quadros/automacoes em QUALQUER quadro), mas so busca item_values do
+    // quadro "preferido" da vez. Sem preservar o que ja estava carregado, um
+    // eco de tempo real vindo de outro quadro reiniciava loadedItemValues e
+    // zerava os valores em memoria de itens/subitens ja carregados noutro
+    // quadro - obrigando a rebuscar tudo de novo a cada eco, na contramao da
+    // otimizacao de carregamento sob demanda da V2.2.0.
+    const previouslyLoadedItemIds = new Set(runtime.loadedItemValues);
     const [
       workspaceRows, moduleRows, boardRows, groupRows, columnRows, itemRows,
       viewRows, storageRows, accessRows, memberRows, automationRows, fieldRows, integrationRows,
@@ -2032,15 +2085,31 @@ window.__ATLAS_VERSION__ = '2.3.1 OFICIAL';
     ]);
     const previousAttachmentRows = Array.isArray(runtime.remoteRows?.atlas_v2_attachments) ? runtime.remoteRows.atlas_v2_attachments : [];
     const itemTree = mapRemoteItemTree(itemRows, valueRows);
+    const localItems = new Map();
+    const visitLocalItems = (items = []) => items.forEach((itemEntry) => {
+      localItems.set(itemEntry.id, itemEntry);
+      visitLocalItems(itemEntry.subitems || []);
+    });
+    (local.workspaces || []).forEach((workspace) => (workspace.modules || []).forEach((module) => (module.boards || []).forEach((boardEntry) => (boardEntry.groups || []).forEach((groupEntry) => visitLocalItems(groupEntry.items || [])))));
+    // Item ja carregado antes, mas FORA do quadro preferido desta busca (esta
+    // rodada nao pediu atlas_v2_item_values dele, entao mapRemoteItemTree o
+    // deixou com values={} sem isso refletir o estado real do servidor):
+    // recupera do estado local anterior. So itens de fora de activeItemIds -
+    // um item QUE FEZ parte desta busca e voltou vazio ficou vazio de
+    // verdade (removido), e nao deve ser restaurado - ver comentario no topo
+    // da funcao.
+    const activeItemIdSet = new Set(activeItemIds.map(String));
+    const preservedItemIds = new Set();
+    itemTree.forEach((itemEntry, itemId) => {
+      if (activeItemIdSet.has(itemId) || !previouslyLoadedItemIds.has(itemId)) return;
+      const localItem = localItems.get(itemId);
+      if (!localItem) return;
+      itemEntry.values = { ...(localItem.values || {}) };
+      preservedItemIds.add(itemId);
+    });
     if (includeAttachments) {
       mergeRemoteAttachments(itemTree, attachmentRows, columnRows);
     } else {
-      const localItems = new Map();
-      const visitLocalItems = (items = []) => items.forEach((itemEntry) => {
-        localItems.set(itemEntry.id, itemEntry);
-        visitLocalItems(itemEntry.subitems || []);
-      });
-      (local.workspaces || []).forEach((workspace) => (workspace.modules || []).forEach((module) => (module.boards || []).forEach((boardEntry) => (boardEntry.groups || []).forEach((groupEntry) => visitLocalItems(groupEntry.items || [])))));
       const attachmentColumnIds = new Set(columnRows.filter((entry) => ['image', 'file'].includes(entry.tipo)).map((entry) => entry.id));
       itemTree.forEach((itemEntry, itemId) => {
         const localItem = localItems.get(itemId);
@@ -2200,7 +2269,7 @@ window.__ATLAS_VERSION__ = '2.3.1 OFICIAL';
     runtime.data = remote;
     runtime.remoteRows = remoteRows(remote);
     runtime.remoteRows.atlas_v2_attachments = includeAttachments ? (attachmentRows || []) : previousAttachmentRows;
-    runtime.loadedItemValues = new Set(activeItemIds.map(String));
+    runtime.loadedItemValues = new Set([...activeItemIds.map(String), ...preservedItemIds]);
     const preferredBoardItemIds = itemRows.filter((entry) => entry.board_id === preferredBoardId).map((entry) => String(entry.id));
     runtime.loadedBoardData = new Set(
       preferredBoardId && preferredBoardItemIds.every((itemId) => runtime.loadedItemValues.has(itemId))
@@ -3138,7 +3207,7 @@ window.__ATLAS_VERSION__ = '2.3.1 OFICIAL';
   }
 
   function authVersion() {
-    return window.ATNX_CONFIG?.V2_VERSION || 'V2.3.1 Oficial';
+    return window.ATNX_CONFIG?.V2_VERSION || 'V2.3.2 Oficial';
   }
 
   function authFeatureList() {
@@ -3391,7 +3460,11 @@ window.__ATLAS_VERSION__ = '2.3.1 OFICIAL';
       runtime.remoteReady = true;
       if (options.full === true) runtime.deferredHydrated = true;
       if (profile) upsertAuthenticatedUser(profile, authUser);
-      render();
+      // Os dados em memoria (runtime.data) ja estao atualizados nesse ponto -
+      // renderSoon so adia a atualizacao VISUAL enquanto a pessoa estiver com
+      // um campo do quadro em foco, para nao destruir o input e perder o que
+      // ela esta digitando (ver comentario junto de isEditingBoardField).
+      renderSoon();
       if (options.full !== true && !runtime.deferredHydrated) hydrateDeferredRemoteData();
     } catch (error) {
       runtime.remoteMode = Boolean(runtime.data?.workspaces?.length && runtime.remoteRows);
@@ -10171,7 +10244,7 @@ window.__ATLAS_VERSION__ = '2.3.1 OFICIAL';
         } catch (error) {
           found.item.values[target.dataset.columnId] = previousValue;
           toast(`Falha ao aplicar a alteração: ${error.message || error}`, true);
-          render();
+          renderSoon();
         } finally {
           if (target?.isConnected) target.disabled = false;
         }
@@ -10245,6 +10318,16 @@ window.__ATLAS_VERSION__ = '2.3.1 OFICIAL';
 
   async function commitDateFieldOnBlur(target) {
     if (target.dataset.dateCommitting === 'true') return;
+    // O input nativo de data reporta "badInput" quando o usuario ainda esta
+    // no meio de digitar (ex.: preencheu dia/mes mas nao o ano). Se o motivo
+    // do blur foi a JANELA perder o foco (trocar de aba, de app, clicar em
+    // outra coisa fora do site) - e nao uma escolha deliberada de sair deste
+    // campo dentro do proprio Atlas - validar aqui reverte o que a pessoa
+    // estava digitando e dispara um toast vermelho de erro do nada, mesmo
+    // sem ela ter terminado ou desistido do campo. So faz sentido validar
+    // quando o blur aconteceu com a janela ainda em foco (ou seja, o usuario
+    // realmente moveu o foco para outro elemento da pagina).
+    if (document.hidden || !document.hasFocus()) return;
     const context = findBoard();
     if (!context) return;
     if (!requirePermission('edit', context, 'editar registros')) { render(); return; }
@@ -10277,7 +10360,7 @@ window.__ATLAS_VERSION__ = '2.3.1 OFICIAL';
       } catch (error) {
         found.item.values[columnEntry.id] = previousValue;
         toast(`Falha ao aplicar a data: ${error.message || error}`, true);
-        render();
+        renderSoon();
       } finally {
         if (target?.isConnected) {
           target.disabled = false;
