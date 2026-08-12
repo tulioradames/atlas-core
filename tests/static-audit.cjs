@@ -19,10 +19,10 @@ const completeSchema = read('supabase/ATLAS_V2_1_0_SCHEMA_COMPLETO.sql');
 const adminApproval = read('supabase/ATLAS_V2_2_0_APROVACAO_ADMIN.sql');
 const serviceWorker = read('service-worker.js');
 
-assert(app.includes("window.__ATLAS_VERSION__ = '2.3.2 OFICIAL'"), 'Versao interna divergente.');
-assert(config.includes('V2.3.2 Oficial'), 'Config sem a versao do pacote.');
+assert(app.includes("window.__ATLAS_VERSION__ = '2.3.3 OFICIAL'"), 'Versao interna divergente.');
+assert(config.includes('V2.3.3 Oficial'), 'Config sem a versao do pacote.');
 assert(index.includes('id="atlas-v2-footer-version"'), 'Rodape sem o elemento de versao (agora preenchido via JS a partir do config.js).');
-assert(manifest.includes('2.3.2'), 'Manifest sem a versao do pacote.');
+assert(manifest.includes('2.3.3'), 'Manifest sem a versao do pacote.');
 
 // ---------------------------------------------------------------------------
 // Consistencia da versao dos arquivos web.
@@ -153,6 +153,12 @@ assert(app.includes('persistRemoteTrashEntry'), 'Lixeira remota ausente.');
 assert(app.includes('persistAuditEntry'), 'Auditoria remota ausente.');
 assert(app.includes('hydrateBoardRemoteData'), 'Carregamento por quadro ausente.');
 assert(app.includes('authenticated-polling'), 'Sincronizacao autenticada ausente.');
+// O canal Broadcast global era publico (private:false, sem RLS) - qualquer
+// cliente anonimo recebia mudancas de qualquer quadro, inclusive sem
+// permissao. Ainda nao ligado no frontend (tarefa #23, pendente de teste ao
+// vivo com login real antes de entrar numa release) - ver
+// ATLAS_V2_3_3_REALTIME_BROADCAST_PRIVADO.sql (aplicado so em homologacao,
+// canal por quadro + RLS, ainda sem o lado do frontend religado aqui).
 assert(!app.includes(".channel('atlas-v2-live:global'"), 'Broadcast publico ainda ativo no frontend.');
 assert(app.includes('renderCalendar'), 'Calendario V2.1 ausente.');
 assert(app.includes('renderDashboard'), 'Painel configuravel V2.1 ausente.');
@@ -262,6 +268,10 @@ assert(
     'ATLAS_V2_1_0_SCHEMA_COMPLETO.sql',
     'ATLAS_V2_1_0_VALIDAR.sql',
     'ATLAS_V2_2_0_APROVACAO_ADMIN.sql',
+    'ATLAS_V2_2_0_CORRECOES_CRITICAS.sql',
+    'ATLAS_V2_3_0_ACESSO_POR_OBRA.sql',
+    'ATLAS_V2_3_1_AUTOMACAO_DUPLICADA.sql',
+    'ATLAS_V2_3_1_MOVE_GROUP_ORDEM.sql',
   ]),
   'A pasta supabase contem SQL antigo ou inesperado.'
 );
@@ -273,4 +283,4 @@ localReferences.forEach((entry) => {
   assert(fs.existsSync(path.join(root, entry)), `Referencia local ausente: ${entry}`);
 });
 
-console.log('Atlas V2.3.2: auditoria estatica aprovada.');
+console.log('Atlas V2.3.3: auditoria estatica aprovada.');

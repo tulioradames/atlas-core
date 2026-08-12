@@ -1,7 +1,7 @@
 (function atlasV2Official() {
   'use strict';
 
-window.__ATLAS_VERSION__ = '2.3.2 OFICIAL';
+window.__ATLAS_VERSION__ = '2.3.3 OFICIAL';
 
   // ---------------------------------------------------------------------------
   // VERSAO DOS ARQUIVOS WEB - fonte unica.
@@ -15,13 +15,24 @@ window.__ATLAS_VERSION__ = '2.3.2 OFICIAL';
   // pre-cache. tests/static-audit.cjs falha se index.html e ATLAS_BUILD
   // divergirem, que era a causa dos casos de "publiquei mas continua igual".
   // ---------------------------------------------------------------------------
-  const ATLAS_BUILD = '2.3.2';
+  const ATLAS_BUILD = '2.3.3';
   window.__ATLAS_BUILD__ = ATLAS_BUILD;
 
   // Changelog exibido na tela de Início. Mantido a mao a cada entrega -
   // nao ha nenhum processo automatico de build que gere isto sozinho.
   // Ordem: mais recente primeiro.
   const CHANGELOG = [
+    {
+      version: 'V2.3.3 Oficial',
+      date: '2026-08-11',
+      notes: [
+        'Fórmulas: agora aceitam SE(condição;então;senão), com comparadores (> < >= <= = <>) e aninhamento.',
+        'Fórmulas: novas funções de agregação sobre subitens - SOMA, MEDIA, MINIMO, MAXIMO, CONT.',
+        'Correção: subitens recolhidos deixavam de carregar seus valores, aparecendo em branco e zerando as fórmulas que dependiam deles.',
+        'Correção: as atualizações em tempo real paravam de ser aplicadas de forma leve depois do primeiro salvamento da sessão, obrigando o quadro a recarregar por inteiro a cada alteração.',
+        'Automações: alterações passam a atualizar apenas a lista de automações, sem recarregar o quadro todo.',
+      ],
+    },
     {
       version: 'V2.3.2 Oficial',
       date: '2026-08-11',
@@ -223,6 +234,10 @@ window.__ATLAS_VERSION__ = '2.3.2 OFICIAL';
     itemPersistQueues: new Map(),
     loadedBoardData: new Set(),
     loadedItemValues: new Set(),
+    // Quadros cujos subitens ja foram buscados para alimentar formulas de
+    // agregacao - ver ensureBoardViewData. Trava de uma-vez-por-sessao para
+    // essa busca forcada nao repetir a cada render.
+    aggregationHydratedBoards: new Set(),
     boardDataLoading: new Map(),
     boardSearchTimer: null,
     navSearchTimer: null,
@@ -1583,7 +1598,13 @@ window.__ATLAS_VERSION__ = '2.3.2 OFICIAL';
           commit_timestamp: change?.changedAt || '',
           _changeFeedId: changeId,
         };
-        if (['atlas_v2_items', 'atlas_v2_item_values', 'atlas_v2_attachments'].includes(payload.table)) {
+        // Automacoes nao aparecem na tabela do quadro (so no modal de
+        // "Automacoes", lido sob demanda de runtime.data.automations) - por
+        // isso entram no caminho leve (patch direto no array em memoria), em
+        // vez do caminho pesado (queueRealtimeRefresh: refaz TODO o
+        // loadRemoteData e re-renderiza a pagina inteira por causa de uma
+        // automacao editada em algum canto).
+        if (['atlas_v2_items', 'atlas_v2_item_values', 'atlas_v2_attachments', 'atlas_v2_automations'].includes(payload.table)) {
           queueRealtimePayload(payload);
         } else {
           queueRealtimeRefresh(payload);
@@ -1834,6 +1855,39 @@ window.__ATLAS_VERSION__ = '2.3.2 OFICIAL';
     if (!patchRealtimeImageCell(context, columnId)) markRealtimeBoardDirty(context.board.id);
   }
 
+  // Automacoes nao aparecem na tabela do quadro - basta o patch direto no
+  // array em memoria, lido sob demanda pelo modal de Automacoes via
+  // boardAutomations(). Nao dispara renderBoardContent/markRealtimeBoardDirty
+  // (nada da tabela depende disso), mas SE o modal de Automacoes estiver
+  // aberto na hora, ele e re-renderizado - senao a pessoa ficaria olhando um
+  // dado velho sem nenhum sinal de que mudou.
+  function applyRealtimeAutomationPayload(payload) {
+    const row = payload.new && Object.keys(payload.new).length ? payload.new : payload.old;
+    if (!row?.id) return;
+    runtime.data.automations = runtime.data.automations || [];
+    if (payload.eventType === 'DELETE') {
+      runtime.data.automations = runtime.data.automations.filter((entry) => entry.id !== row.id);
+      refreshOpenAutomationsPanel();
+      return;
+    }
+    const mapped = {
+      id: row.id,
+      boardId: row.board_id,
+      name: row.nome || 'Automação',
+      trigger: row.gatilho || {},
+      conditions: Array.isArray(row.condicoes) ? row.condicoes : [],
+      actions: Array.isArray(row.acoes) ? row.acoes : [],
+      active: row.ativo !== false,
+      createdBy: row.criado_por || '',
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    };
+    const index = runtime.data.automations.findIndex((entry) => entry.id === row.id);
+    if (index >= 0) runtime.data.automations[index] = mapped;
+    else runtime.data.automations.push(mapped);
+    refreshOpenAutomationsPanel();
+  }
+
   async function flushRealtimePayloads() {
     runtime.realtimePayloadTimer = null;
     if (!runtime.authSession?.user || !runtime.remoteMode) return;
@@ -1848,6 +1902,7 @@ window.__ATLAS_VERSION__ = '2.3.2 OFICIAL';
         if (payload.table === 'atlas_v2_items') await applyRealtimeItemPayload(payload);
         else if (payload.table === 'atlas_v2_item_values') await applyRealtimeValuePayload(payload);
         else if (payload.table === 'atlas_v2_attachments') await applyRealtimeAttachmentPayload(payload);
+        else if (payload.table === 'atlas_v2_automations') applyRealtimeAutomationPayload(payload);
       } catch (error) {
         console.warn(`Atlas V2: atualização incremental de ${payload.table} falhou.`, error);
         runtime.remoteRefreshQueued = true;
@@ -2270,6 +2325,10 @@ window.__ATLAS_VERSION__ = '2.3.2 OFICIAL';
     runtime.remoteRows = remoteRows(remote);
     runtime.remoteRows.atlas_v2_attachments = includeAttachments ? (attachmentRows || []) : previousAttachmentRows;
     runtime.loadedItemValues = new Set([...activeItemIds.map(String), ...preservedItemIds]);
+    // loadedItemValues acabou de ser refeito: os subitens buscados para as
+    // formulas de agregacao podem ter saido dele, entao a trava tem de ser
+    // liberada para que ensureBoardViewData os busque de novo.
+    runtime.aggregationHydratedBoards.clear();
     const preferredBoardItemIds = itemRows.filter((entry) => entry.board_id === preferredBoardId).map((entry) => String(entry.id));
     runtime.loadedBoardData = new Set(
       preferredBoardId && preferredBoardItemIds.every((itemId) => runtime.loadedItemValues.has(itemId))
@@ -2441,7 +2500,20 @@ window.__ATLAS_VERSION__ = '2.3.2 OFICIAL';
   function scheduleRemoteSync() {
     if (!runtime.remoteMode || !runtime.authClient) return;
     clearTimeout(runtime.remoteSyncTimer);
-    runtime.remoteSyncTimer = setTimeout(syncRemoteData, 70);
+    // O timer precisa voltar a null AO DISPARAR. setTimeout devolve um id
+    // truthy, e varios pontos leem runtime.remoteSyncTimer como "ha um envio
+    // pendente" - flushRealtimePayloads, refreshRemoteApplication e o proprio
+    // reagendamento pos-flush. Sem zerar aqui, o id de um timer JA CONSUMIDO
+    // ficava para sempre em runtime.remoteSyncTimer depois do primeiro envio
+    // da sessao, e essas guardas passavam a valer para sempre: o caminho leve
+    // de tempo real (patch incremental de itens, valores, anexos) era adiado
+    // de 120 em 120ms indefinidamente e NUNCA aplicava, deixando tudo cair no
+    // caminho pesado (recarga completa) - justamente o que ele existe para
+    // evitar.
+    runtime.remoteSyncTimer = setTimeout(() => {
+      runtime.remoteSyncTimer = null;
+      void syncRemoteData();
+    }, 70);
   }
 
   function replaceRemoteBaselineRow(table, row) {
@@ -3207,7 +3279,7 @@ window.__ATLAS_VERSION__ = '2.3.2 OFICIAL';
   }
 
   function authVersion() {
-    return window.ATNX_CONFIG?.V2_VERSION || 'V2.3.2 Oficial';
+    return window.ATNX_CONFIG?.V2_VERSION || 'V2.3.3 Oficial';
   }
 
   function authFeatureList() {
@@ -3566,6 +3638,11 @@ window.__ATLAS_VERSION__ = '2.3.2 OFICIAL';
         const cachedBoard = findBoard(cached.activeBoardId)?.board;
         const cachedItemIds = cachedBoard ? flatBoardItems(cachedBoard).map(({ item }) => String(item.id)) : [];
         runtime.loadedItemValues = new Set(cachedItemIds);
+        // Atencao: cachedItemIds vem de flatBoardItems, ou seja, marca ate os
+        // SUBITENS como "valores carregados" mesmo quando o cache nao traz os
+        // valores deles - por isso as formulas de agregacao nao podem confiar
+        // em loadedItemValues (ver ensureBoardViewData).
+        runtime.aggregationHydratedBoards.clear();
         runtime.loadedBoardData = new Set(cached.activeBoardId && cachedItemIds.length ? [cached.activeBoardId] : []);
         upsertAuthenticatedUser(profile, authUser);
         unlockApplication();
@@ -5890,11 +5967,166 @@ window.__ATLAS_VERSION__ = '2.3.2 OFICIAL';
   // usado para sinalizar "sintaxe invalida" sem colidir com esse caso. Para
   // resultado numerico (finito ou nao - Infinity, -Infinity, NaN de calculo)
   // retorna o numero normalmente; quem chama decide o texto exibido.
-  function evaluateFormulaNumeric(boardEntry, columnEntry, resolveValue, visited) {
-    const expression = String(columnEntry.formula || '').trim();
+  // Resolve um operando de condicao do SE(): ou uma referencia {Coluna}
+  // (mesma resolucao usada no corpo da formula, incluindo colunas-formula
+  // encadeadas) ou um numero literal. NaN sinaliza operando invalido.
+  function resolveFormulaOperand(boardEntry, columnEntry, itemEntry, resolveValue, visited, raw) {
+    const trimmed = String(raw || '').trim();
+    const refMatch = trimmed.match(/^\{([^}]+)\}$/);
+    if (!refMatch) {
+      const numeric = Number(trimmed.replace(',', '.'));
+      return Number.isFinite(numeric) ? numeric : NaN;
+    }
+    const name = refMatch[1].trim().toLowerCase();
+    const source = boardEntry.columns.find((entry) => entry.id !== columnEntry.id && entry.name.toLowerCase() === name);
+    if (!source) return 0;
+    let value;
+    if (source.type === 'formula') {
+      const nested = evaluateFormulaNumeric(boardEntry, source, itemEntry, resolveValue, visited);
+      value = Number.isFinite(nested) ? nested : 0;
+    } else {
+      value = resolveValue(source);
+    }
+    const numeric = typeof value === 'boolean' ? (value ? 1 : 0) : Number(String(value ?? '').replace(',', '.'));
+    return Number.isFinite(numeric) ? numeric : 0;
+  }
+
+  // Avalia a condicao de um SE(condicao;entao;senao) - um unico comparador
+  // entre dois operandos (referencia {Coluna} ou numero literal). undefined
+  // sinaliza condicao malformada (formula invalida).
+  function evaluateFormulaCondition(boardEntry, columnEntry, itemEntry, resolveValue, visited, condition) {
+    const match = String(condition || '').match(/^(.+?)(<>|>=|<=|=|>|<)(.+)$/);
+    if (!match) return undefined;
+    const left = resolveFormulaOperand(boardEntry, columnEntry, itemEntry, resolveValue, visited, match[1]);
+    const right = resolveFormulaOperand(boardEntry, columnEntry, itemEntry, resolveValue, visited, match[3]);
+    if (!Number.isFinite(left) || !Number.isFinite(right)) return undefined;
+    switch (match[2]) {
+      case '>': return left > right;
+      case '<': return left < right;
+      case '>=': return left >= right;
+      case '<=': return left <= right;
+      case '=': return left === right;
+      case '<>': return left !== right;
+      default: return undefined;
+    }
+  }
+
+  // SOMA/MEDIA/MINIMO/MAXIMO/CONT({Coluna}) somam/agregam o valor daquela
+  // coluna entre os SUBITENS diretos do item sendo calculado (rollup, como
+  // em Monday/Excel). CONT conta os subitens, ignorando a coluna informada.
+  function aggregateSubitemColumn(boardEntry, itemEntry, operator, columnName) {
+    const subitems = Array.isArray(itemEntry?.subitems) ? itemEntry.subitems : [];
+    if (operator === 'CONT') return subitems.length;
+    const name = String(columnName || '').trim().toLowerCase();
+    const source = boardEntry.columns.find((entry) => entry.name.toLowerCase() === name);
+    if (!source || !subitems.length) return 0;
+    const values = subitems.map((subitem) => {
+      const value = source.type === 'formula'
+        ? evaluateFormulaNumeric(boardEntry, source, subitem, (col) => subitem.values?.[col.id], new Set())
+        : subitem.values?.[source.id];
+      // Celula vazia e IGNORADA, nao contada como zero (mesma convencao de
+      // planilha): senao um subitem em branco puxaria a MEDIA para baixo e
+      // zeraria o MINIMO. So vale para valor realmente ausente - um zero
+      // digitado de proposito continua entrando na conta.
+      if (value === '' || value === null || value === undefined) return null;
+      const numeric = typeof value === 'boolean' ? (value ? 1 : 0) : Number(String(value).replace(',', '.'));
+      return Number.isFinite(numeric) ? numeric : null;
+    }).filter((entry) => entry !== null);
+    if (!values.length) return 0;
+    switch (operator) {
+      case 'SOMA': return values.reduce((total, entry) => total + entry, 0);
+      case 'MEDIA': return values.reduce((total, entry) => total + entry, 0) / values.length;
+      case 'MINIMO': return Math.min(...values);
+      case 'MAXIMO': return Math.max(...values);
+      default: return 0;
+    }
+  }
+
+  // Divide os argumentos de uma chamada (separados por ";") respeitando
+  // parenteses internos - "SE(1;(A+B);2)" nao pode quebrar no ";" de dentro
+  // de um argumento que, por sua vez, contem parenteses de aritmetica.
+  function splitFormulaArgs(argsText) {
+    const parts = [];
+    let depth = 0;
+    let last = 0;
+    for (let i = 0; i < argsText.length; i += 1) {
+      const ch = argsText[i];
+      if (ch === '(') depth += 1;
+      else if (ch === ')') depth -= 1;
+      else if (ch === ';' && depth === 0) {
+        parts.push(argsText.slice(last, i));
+        last = i + 1;
+      }
+    }
+    parts.push(argsText.slice(last));
+    return parts;
+  }
+
+  // Encontra a chamada NOME(...) mais interna da expressao - isto e, cujo
+  // argumento nao contem nenhuma outra chamada SE/SOMA/MEDIA/MINIMO/MAXIMO/
+  // CONT ainda pendente. Usa contagem de profundidade de parenteses (nao um
+  // regex "sem parenteses dentro"), porque o proprio texto substituido de um
+  // SE aninhado ou de um argumento aritmetico como "({A}+{B})" pode conter
+  // parenteses legitimos - so a presenca de outra chamada de formula pendente
+  // dentro do argumento importa para decidir se e "mais interna" ou nao.
+  function findInnermostFormulaCall(expression, namePattern) {
+    const re = new RegExp(`\\b(${namePattern})\\(`, 'gi');
+    let match;
+    while ((match = re.exec(expression))) {
+      let depth = 1;
+      let i = match.index + match[0].length;
+      while (i < expression.length && depth > 0) {
+        if (expression[i] === '(') depth += 1;
+        else if (expression[i] === ')') depth -= 1;
+        i += 1;
+      }
+      if (depth !== 0) continue; // parenteses desbalanceados - formula invalida, ignora
+      const argsText = expression.slice(match.index + match[0].length, i - 1);
+      if (/\b(SE|SOMA|MEDIA|MINIMO|MAXIMO|CONT)\(/i.test(argsText)) continue; // ha chamada mais interna ainda por resolver
+      return { name: match[1].toUpperCase(), start: match.index, end: i, argsText };
+    }
+    return null;
+  }
+
+  // Resolve, numa unica passada, o SE(...) ou agregacao MAIS INTERNO da
+  // expressao. Repetir essa passada de fora resolve o aninhamento de dentro
+  // para fora. Retorna null quando nao ha mais nada para resolver.
+  function resolveInnermostFormulaCall(boardEntry, columnEntry, itemEntry, resolveValue, visited, expression) {
+    const aggregateCall = findInnermostFormulaCall(expression, 'SOMA|MEDIA|MINIMO|MAXIMO|CONT');
+    if (aggregateCall) {
+      const colMatch = aggregateCall.argsText.trim().match(/^\{([^{}]+)\}$/);
+      const result = colMatch ? aggregateSubitemColumn(boardEntry, itemEntry, aggregateCall.name, colMatch[1]) : 'ERRO';
+      return expression.slice(0, aggregateCall.start) + String(result) + expression.slice(aggregateCall.end);
+    }
+    const seCall = findInnermostFormulaCall(expression, 'SE');
+    if (seCall) {
+      const args = splitFormulaArgs(seCall.argsText);
+      const replacement = args.length === 3
+        ? (() => {
+          const condition = evaluateFormulaCondition(boardEntry, columnEntry, itemEntry, resolveValue, visited, args[0]);
+          if (condition === undefined) return null;
+          return condition ? args[1].trim() : args[2].trim();
+        })()
+        : null;
+      if (replacement === null) return expression.slice(0, seCall.start) + 'ERRO' + expression.slice(seCall.end);
+      return expression.slice(0, seCall.start) + `(${replacement})` + expression.slice(seCall.end);
+    }
+    return null;
+  }
+
+  function evaluateFormulaNumeric(boardEntry, columnEntry, itemEntry, resolveValue, visited) {
+    let expression = String(columnEntry.formula || '').trim();
     if (!expression) return null;
     if (visited.has(columnEntry.id)) return undefined;
     visited.add(columnEntry.id);
+    // Limite de seguranca contra formula malformada que nunca estabiliza
+    // (ex.: parenteses desbalanceados) - qualquer formula real resolve em
+    // poucas passadas mesmo com varios niveis de SE/agregacao aninhados.
+    for (let guard = 0; guard < 30; guard += 1) {
+      const next = resolveInnermostFormulaCall(boardEntry, columnEntry, itemEntry, resolveValue, visited, expression);
+      if (next === null) break;
+      expression = next;
+    }
     const replaced = expression.replace(/\{([^}]+)\}/g, (_, rawName) => {
       const name = String(rawName || '').trim().toLowerCase();
       const source = boardEntry.columns.find((entry) => entry.id !== columnEntry.id && entry.name.toLowerCase() === name);
@@ -5902,7 +6134,7 @@ window.__ATLAS_VERSION__ = '2.3.2 OFICIAL';
       if (!source) {
         value = 0;
       } else if (source.type === 'formula') {
-        const nested = evaluateFormulaNumeric(boardEntry, source, resolveValue, visited);
+        const nested = evaluateFormulaNumeric(boardEntry, source, itemEntry, resolveValue, visited);
         value = Number.isFinite(nested) ? nested : 0;
       } else {
         value = resolveValue(source);
@@ -5925,9 +6157,9 @@ window.__ATLAS_VERSION__ = '2.3.2 OFICIAL';
   // modelo (found.item.values, o dado ja confirmado) ou do proprio campo em
   // tela (para a previa ao vivo, enquanto o usuario ainda esta digitando e o
   // valor ainda nao foi salvo).
-  function evaluateFormula(boardEntry, columnEntry, resolveValue) {
+  function evaluateFormula(boardEntry, columnEntry, itemEntry, resolveValue) {
     if (!String(columnEntry.formula || '').trim()) return '';
-    const result = evaluateFormulaNumeric(boardEntry, columnEntry, resolveValue, new Set());
+    const result = evaluateFormulaNumeric(boardEntry, columnEntry, itemEntry, resolveValue, new Set());
     if (result === undefined) return 'Fórmula inválida';
     if (!Number.isFinite(result)) return '';
     const decimals = Math.min(6, Math.max(0, Number(columnEntry.decimals ?? 2)));
@@ -5937,7 +6169,7 @@ window.__ATLAS_VERSION__ = '2.3.2 OFICIAL';
   }
 
   function formulaColumnValue(boardEntry, itemEntry, columnEntry) {
-    return evaluateFormula(boardEntry, columnEntry, (source) => itemEntry.values?.[source.id]);
+    return evaluateFormula(boardEntry, columnEntry, itemEntry, (source) => itemEntry.values?.[source.id]);
   }
 
   // Formata um numero guardado (ex.: 1500.5) como "R$ 1.500,50" para exibir
@@ -5975,7 +6207,7 @@ window.__ATLAS_VERSION__ = '2.3.2 OFICIAL';
   // Usado para atualizar a formula a cada tecla digitada, sem esperar o
   // usuario sair do campo ou apertar Enter.
   function formulaColumnValueLive(boardEntry, itemEntry, columnEntry) {
-    return evaluateFormula(boardEntry, columnEntry, (source) => {
+    return evaluateFormula(boardEntry, columnEntry, itemEntry, (source) => {
       const field = document.querySelector(`[data-item-value="${cssAttrValue(itemEntry.id)}"][data-column-id="${cssAttrValue(source.id)}"]`);
       if (!field) return itemEntry.values?.[source.id];
       if (field.matches('select')) return field.value;
@@ -7009,10 +7241,23 @@ window.__ATLAS_VERSION__ = '2.3.2 OFICIAL';
     return rows;
   }
 
+  // Um quadro com coluna-formula de agregacao (SOMA/MEDIA/MINIMO/MAXIMO/CONT)
+  // precisa dos valores dos SUBITENS para calcular, mesmo os recolhidos - ver
+  // boardViewItemIds.
+  function boardHasSubitemAggregation(boardEntry) {
+    return (boardEntry?.columns || []).some((entry) => entry.type === 'formula'
+      && /\b(SOMA|MEDIA|MINIMO|MAXIMO|CONT)\s*\(/i.test(String(entry.formula || '')));
+  }
+
   function boardViewItemIds(boardEntry) {
     if (!boardEntry) return [];
     const allIds = () => flatBoardItems(boardEntry).map(({ item }) => item.id);
     if (Object.keys(runtime.searchFilters?.[boardEntry.id] || {}).length) return allIds();
+    // Sem os valores dos subitens recolhidos, uma formula de agregacao
+    // calcularia 0 silenciosamente (subitem.values vazio vira 0), mostrando um
+    // numero plausivel e ERRADO - por isso esses quadros carregam a arvore
+    // inteira, nao so o que esta visivel.
+    if (boardHasSubitemAggregation(boardEntry)) return allIds();
     if (boardEntry.activeView === 'works') {
       const selected = ensureWorkSelection(boardEntry);
       return selected ? itemTreeIds(selected.item, []) : [];
@@ -7029,6 +7274,21 @@ window.__ATLAS_VERSION__ = '2.3.2 OFICIAL';
 
   async function ensureBoardViewData(boardEntry, options = {}) {
     if (!runtime.remoteMode || !runtime.authClient || !boardEntry?.id) return true;
+    // Formula de agregacao (SOMA/MEDIA/...) le os valores dos SUBITENS, e
+    // loadedItemValues NAO e confiavel para eles: ao restaurar do cache de
+    // bootstrap o app marca a arvore inteira como "carregada" mesmo sem ter
+    // os valores dos filhos, entao a busca normal abaixo seria pulada e a
+    // agregacao somaria zeros silenciosamente. Aqui a busca e forcada uma
+    // unica vez por quadro/sessao (a trava evita repetir a cada render, ja
+    // que hydrate re-renderiza e cairia de volta aqui).
+    if (boardHasSubitemAggregation(boardEntry) && !runtime.aggregationHydratedBoards.has(boardEntry.id)) {
+      runtime.aggregationHydratedBoards.add(boardEntry.id);
+      return hydrateBoardRemoteData(boardEntry.id, {
+        itemIds: flatBoardItems(boardEntry).map(({ item }) => item.id),
+        force: true,
+        renderAfter: options.renderAfter !== false,
+      });
+    }
     const itemIds = options.full
       ? flatBoardItems(boardEntry).map(({ item }) => item.id)
       : boardViewItemIds(boardEntry);
@@ -8458,7 +8718,7 @@ window.__ATLAS_VERSION__ = '2.3.2 OFICIAL';
     openModal({
       title: existing ? 'Editar coluna' : 'Nova coluna',
       subtitle: 'Escolha como o dado será preenchido e exibido.',
-      body: `<form id="atlas-v2-column-form" class="atlas-v2-form-grid"><input type="hidden" name="columnId" value="${attr(columnId)}"><label class="atlas-v2-field is-wide"><span>Nome</span><input name="name" maxlength="70" required autofocus value="${attr(existing?.name || '')}" placeholder="Ex.: Responsável"></label><label class="atlas-v2-field"><span>Tipo</span><select name="type">${Object.entries(COLUMN_TYPES).map(([key, value]) => `<option value="${key}" ${existing?.type === key ? 'selected' : ''}>${escapeHtml(value.label)}</option>`).join('')}</select></label><label class="atlas-v2-field"><span>Largura</span><input name="width" type="number" min="90" max="420" step="10" value="${Number(existing?.width || 160)}"></label><label class="atlas-v2-field is-wide" data-column-options><span>Opções separadas por vírgula</span><input name="options" value="${attr((existing?.options || []).map((entry) => typeof entry === 'string' ? entry : entry.label).join(', '))}" placeholder="Ex.: Pendente, Em andamento, Concluído"></label><label class="atlas-v2-field is-wide" data-column-formula><span>Fórmula</span><input name="formula" value="${attr(existing?.formula || '')}" placeholder="Ex.: {Total lançado} / {Total projetado} * 100"><small>Utilize os nomes das colunas entre chaves. Disponíveis: ${escapeHtml(formulaHelp || 'crie primeiro uma coluna numérica')}.</small></label><label class="atlas-v2-field" data-column-formula><span>Formato do resultado</span><select name="format"><option value="number" ${existing?.format === 'number' || !existing?.format ? 'selected' : ''}>Número</option><option value="percentage" ${existing?.format === 'percentage' ? 'selected' : ''}>Porcentagem</option><option value="currency" ${existing?.format === 'currency' ? 'selected' : ''}>Moeda</option></select></label><label class="atlas-v2-field" data-column-formula><span>Casas decimais</span><input name="decimals" type="number" min="0" max="6" value="${Number(existing?.decimals ?? 2)}"></label></form>`,
+      body: `<form id="atlas-v2-column-form" class="atlas-v2-form-grid"><input type="hidden" name="columnId" value="${attr(columnId)}"><label class="atlas-v2-field is-wide"><span>Nome</span><input name="name" maxlength="70" required autofocus value="${attr(existing?.name || '')}" placeholder="Ex.: Responsável"></label><label class="atlas-v2-field"><span>Tipo</span><select name="type">${Object.entries(COLUMN_TYPES).map(([key, value]) => `<option value="${key}" ${existing?.type === key ? 'selected' : ''}>${escapeHtml(value.label)}</option>`).join('')}</select></label><label class="atlas-v2-field"><span>Largura</span><input name="width" type="number" min="90" max="420" step="10" value="${Number(existing?.width || 160)}"></label><label class="atlas-v2-field is-wide" data-column-options><span>Opções separadas por vírgula</span><input name="options" value="${attr((existing?.options || []).map((entry) => typeof entry === 'string' ? entry : entry.label).join(', '))}" placeholder="Ex.: Pendente, Em andamento, Concluído"></label><label class="atlas-v2-field is-wide" data-column-formula><span>Fórmula</span><input name="formula" value="${attr(existing?.formula || '')}" placeholder="Ex.: SE({Total lançado}&gt;{Total projetado};{Total lançado}-{Total projetado};0)"><small>Utilize os nomes das colunas entre chaves. Disponíveis: ${escapeHtml(formulaHelp || 'crie primeiro uma coluna numérica')}. Também aceita <strong>SE(condição;então;senão)</strong> (comparadores &gt; &lt; &gt;= &lt;= = &lt;&gt;) e agregações sobre subitens: <strong>SOMA</strong>, <strong>MEDIA</strong>, <strong>MINIMO</strong>, <strong>MAXIMO</strong>, <strong>CONT</strong>.</small></label><label class="atlas-v2-field" data-column-formula><span>Formato do resultado</span><select name="format"><option value="number" ${existing?.format === 'number' || !existing?.format ? 'selected' : ''}>Número</option><option value="percentage" ${existing?.format === 'percentage' ? 'selected' : ''}>Porcentagem</option><option value="currency" ${existing?.format === 'currency' ? 'selected' : ''}>Moeda</option></select></label><label class="atlas-v2-field" data-column-formula><span>Casas decimais</span><input name="decimals" type="number" min="0" max="6" value="${Number(existing?.decimals ?? 2)}"></label></form>`,
       actions: `<button class="atlas-v2-button atlas-v2-button-quiet" type="button" data-action="close-overlay">Cancelar</button><button class="atlas-v2-button atlas-v2-button-primary" type="submit" form="atlas-v2-column-form">Salvar</button>`,
     });
     requestAnimationFrame(updateColumnEditorVisibility);
@@ -9311,6 +9571,19 @@ window.__ATLAS_VERSION__ = '2.3.2 OFICIAL';
       body: `<div class="atlas-v2-automation-intro"><i data-lucide="workflow"></i><div><strong>Regras sem código</strong><p>Os gatilhos são executados no Supabase, inclusive quando a alteração vier de outro usuário.</p></div></div><div class="atlas-v2-automation-list">${cards || '<div class="atlas-v2-empty-view"><div><i data-lucide="workflow"></i><strong>Nenhuma automação neste quadro</strong><span>Crie uma regra para mover, preencher ou avisar automaticamente.</span></div></div>'}</div>`,
       actions: `<button class="atlas-v2-button atlas-v2-button-quiet" type="button" data-action="automation-history"><i data-lucide="history"></i>Histórico</button><button class="atlas-v2-button atlas-v2-button-quiet" type="button" data-action="automation-templates"><i data-lucide="layout-template"></i>Modelos</button><button class="atlas-v2-button atlas-v2-button-primary" type="button" data-action="automation-new"><i data-lucide="plus"></i>Nova automação</button>`,
     });
+  }
+
+  // Redesenha a lista de Automações se (e somente se) ela estiver aberta na
+  // tela neste momento. Chamado quando uma automação muda em tempo real: o
+  // patch em memória sozinho nao adianta se a pessoa esta justamente olhando
+  // a lista - ela ficaria vendo um dado velho. Nao redesenha se houver um
+  // formulario de automacao aberto por cima: isso apagaria o que a pessoa
+  // esta preenchendo, exatamente o tipo de "jumpscare" corrigido na V2.3.2.
+  function refreshOpenAutomationsPanel() {
+    const root = document.getElementById('atlas-v2-overlay-root');
+    if (!root?.querySelector('.atlas-v2-automation-list')) return;
+    if (root.querySelector('#atlas-v2-automation-form')) return;
+    openAutomationsDrawer();
   }
 
   function automationEditorVisibility() {

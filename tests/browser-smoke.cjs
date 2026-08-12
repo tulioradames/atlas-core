@@ -69,7 +69,7 @@ try {
       page.on('pageerror', (error) => errors.push(`${viewport.name}: ${error.message}`));
       await page.goto(target, { waitUntil: 'load' });
       await page.waitForSelector('#atlas-v2-board-content');
-      await page.waitForFunction(() => window.__ATLAS_VERSION__ === '2.2.0 DESENVOLVIMENTO');
+      await page.waitForFunction(() => typeof window.__ATLAS_VERSION__ === 'string' && window.__ATLAS_VERSION__.length > 0);
       const cacheValidation = await page.evaluate(() => ({
         rejectsDemo: !window.__ATLAS_TEST__.isRemoteBootstrapSnapshot({
           schemaVersion: 2,
@@ -94,9 +94,32 @@ try {
         bodyText: document.body.innerText,
         width: document.documentElement.scrollWidth,
       }));
-      if (state.version !== '2.3.2 OFICIAL') throw new Error(`Versao incorreta em ${viewport.name}.`);
-      if (!state.bodyText.includes('V2.3.2 Oficial')) throw new Error(`Rodape ausente em ${viewport.name}.`);
+      if (state.version !== '2.3.3 OFICIAL') throw new Error(`Versao incorreta em ${viewport.name}.`);
+      if (!state.bodyText.includes('V2.3.3 Oficial')) throw new Error(`Rodape ausente em ${viewport.name}.`);
       if (state.width < viewport.width) throw new Error(`Layout invalido em ${viewport.name}.`);
+
+      // A tela inicial agora e o painel "Inicio" (dashboard), nao mais um
+      // quadro - e preciso expandir um modulo e abrir um quadro antes de
+      // interagir com controles especificos de quadro (selecao, colunas etc).
+      const openedInitialBoard = await page.evaluate(() => {
+        const moduleToggle = document.querySelector('.atlas-v2-module-row[data-action="toggle-module"]');
+        moduleToggle?.click();
+        return Boolean(moduleToggle);
+      });
+      if (!openedInitialBoard) throw new Error(`Nenhum modulo disponivel na navegacao em ${viewport.name}.`);
+      await page.waitForSelector('.atlas-v2-board-row[data-action="open-board"]');
+      const openedBoard = await page.evaluate(() => {
+        const boardButton = document.querySelector('.atlas-v2-board-row[data-action="open-board"]');
+        boardButton?.click();
+        return Boolean(boardButton);
+      });
+      if (!openedBoard) throw new Error(`Nenhum quadro disponivel para abrir em ${viewport.name}.`);
+      // No mobile o quadro abre em "Modo de campo" (cartoes), sem checkboxes
+      // de selecao - so a visao Tabela (desktop) tem select-item.
+      await page.waitForSelector(
+        viewport.name === 'desktop' ? '[data-action="select-item"]' : '.atlas-v2-field-card',
+      );
+
       if (viewport.name === 'desktop') {
         const selectableRows = await page.locator('[data-action="select-item"]').count();
         await page.locator('[data-action="select-all-items"]').click();
@@ -234,7 +257,7 @@ try {
       text: document.body.innerText,
       sections: document.querySelectorAll('section.section').length,
     }));
-    if (!manualState.title.includes('V2.3.2')) throw new Error('Título do manual desatualizado.');
+    if (!manualState.title.includes('V2.3.3')) throw new Error('Título do manual desatualizado.');
     if (!manualState.text.includes('Recursos da V2.1')) throw new Error('Novidades ausentes do manual.');
     if (manualState.sections < 10) throw new Error('Manual interativo incompleto.');
     await manual.screenshot({
@@ -243,7 +266,7 @@ try {
     });
     await manual.close();
     if (errors.length) throw new Error(errors.join('\n'));
-    console.log('Atlas V2.3.2: smoke visual aprovado.');
+    console.log('Atlas V2.3.3: smoke visual aprovado.');
   } finally {
     await browser.close();
   }

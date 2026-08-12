@@ -2,8 +2,8 @@
 window.ATNX_CONFIG = Object.freeze({
   APP_NAME: "Atlas",
   APP_TAGLINE: "Smart Field Management",
-  VERSION: "V2.3.1 Oficial",
-  V2_VERSION: "V2.3.1 Oficial",
+  VERSION: "V2.3.3 Oficial",
+  V2_VERSION: "V2.3.3 Oficial",
   CREATOR: "Túlio Radamés",
   SUPABASE_URL: "https://SEU-PROJETO.supabase.co",
   SUPABASE_KEY: "SUA_CHAVE_PUBLICAVEL",

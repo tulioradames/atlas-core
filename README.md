@@ -1,4 +1,4 @@
-# Atlas V2.3.2 Oficial
+# Atlas V2.3.3 Oficial
 
 ## Edição pública
 
