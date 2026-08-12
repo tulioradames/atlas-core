@@ -272,6 +272,7 @@ assert(
     'ATLAS_V2_3_0_ACESSO_POR_OBRA.sql',
     'ATLAS_V2_3_1_AUTOMACAO_DUPLICADA.sql',
     'ATLAS_V2_3_1_MOVE_GROUP_ORDEM.sql',
+    'ATLAS_V2_3_3_REALTIME_BROADCAST_PRIVADO.sql',
   ]),
   'A pasta supabase contem SQL antigo ou inesperado.'
 );
