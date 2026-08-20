@@ -1,14 +1,22 @@
 {
   "name": "atlas-core",
-  "version": "2.3.3",
+  "version": "2.4.0",
   "private": true,
-  "description": "Atlas V2.3.3 Oficial - fórmulas com SE/agregações, correção do carregamento de valores de subitens e do caminho leve de tempo real",
+  "description": "Atlas V2.4.0 Oficial - arquivos versionados, conversas, fluxos entre módulos e fórmulas de coluna",
   "scripts": {
     "check:js": "node --check js/v2.js",
     "test": "node tests/static-audit.cjs",
     "test:drive": "node tests/drive-connector-unit.cjs",
     "test:formula": "node tests/formula-engine-unit.cjs",
     "test:realtime": "node tests/realtime-flush-unit.cjs",
-    "test:browser": "node tests/browser-smoke.cjs"
-  }
+    "test:browser": "node tests/browser-smoke.cjs",
+    "test:versions": "node tests/attachment-versions-unit.cjs",
+    "test:chat": "node tests/chat-elemento-unit.cjs",
+    "test:drive-versoes": "node tests/drive-versao-automatica-unit.cjs",
+    "test:views": "node tests/board-views-unit.cjs",
+    "test:move": "node tests/cross-module-move-unit.cjs",
+    "test:audit-fixes": "node tests/audit-fixes-unit.cjs",
+    "test:review-fixes": "node tests/review-round2-unit.cjs"
+  },
+  "atlasVendorManifest": "assets/vendor/VENDOR_MANIFEST.json"
 }

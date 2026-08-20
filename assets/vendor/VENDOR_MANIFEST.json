@@ -1,0 +1,29 @@
+{
+  "generatedFor": "Atlas V2.4.0 Oficial",
+  "dependencies": [
+    {
+      "file": "lucide.min.js",
+      "package": "lucide",
+      "version": "0.468.0",
+      "license": "ISC",
+      "source": "https://www.npmjs.com/package/lucide",
+      "sha256": "3411692820cb8d47543f69496aa25fd603a358f4498046f41c508a5a3342210e"
+    },
+    {
+      "file": "supabase.min.js",
+      "package": "@supabase/supabase-js",
+      "version": "2.110.8",
+      "license": "MIT",
+      "source": "https://www.npmjs.com/package/@supabase/supabase-js",
+      "sha256": "555ef3dd00ec94b41bfbda2f4323dc84bbc0206ed0d0c500afade08c065c37f7"
+    },
+    {
+      "file": "xlsx.full.min.js",
+      "package": "xlsx",
+      "version": "0.20.3",
+      "license": "Apache-2.0",
+      "source": "https://cdn.sheetjs.com/xlsx-0.20.3/package/",
+      "sha256": "cc015130aa8521e7f088f88898eba949ccdcbfb38df0bd129b44b7273c3a6f41"
+    }
+  ]
+}

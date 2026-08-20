@@ -1,30 +1,40 @@
-ATLAS V2.1.0 OFICIAL
+ATLAS V2.2.0 DESENVOLVIMENTO - EDICAO EM MASSA E IMPORTACAO UNIVERSAL
 
-ATUALIZAR UMA V2.0.19 EXISTENTE
+ATUALIZAR UMA V2.1.0 EXISTENTE
 
-1. Faça backup da publicação e do banco.
-2. Execute supabase/ATLAS_V2_1_0_ATUALIZACAO.sql.
-3. Execute supabase/ATLAS_V2_1_0_VALIDAR.sql.
-4. Confirme a mensagem "Atlas V2.1.0 validado".
-5. Publique os arquivos deste pacote.
-6. Feche as abas antigas do Atlas.
-7. Abra novamente e pressione Ctrl + F5.
-8. Confirme no rodapé: V2.1.0 Oficial.
+1. Faça backup da publicação atual e do código do Apps Script.
+2. Publique os arquivos deste pacote.
+3. Em cada conta setorial, substitua todo o código pelo arquivo:
+   appscript/GoogleDriveUpload_AppsScript_V2_CONECTOR_SETOR.gs
+4. Recoloque no topo do conector os dados reais de Supabase e os IDs permitidos.
+5. Crie uma nova implantação do Web App.
+6. Atualize a URL /exec no Atlas se o Google gerar uma URL diferente.
+7. Em Administração > Sistema, teste e salve a conexão.
+8. Clique em Organizar arquivos existentes para migrar o acervo atual.
+9. Feche as abas antigas, abra o Atlas novamente e pressione Ctrl + F5.
+10. Confirme no rodapé: V2.2.0 Desenvolvimento.
+
+BANCO DE DADOS
+
+Execute uma vez:
+supabase/ATLAS_V2_2_0_APROVACAO_ADMIN.sql
+
+Esse ajuste remove a confirmacao por e-mail do fluxo do Atlas. Novos acessos
+continuam bloqueados ate um administrador clicar em Liberar.
 
 INSTALAÇÃO NOVA
 
-1. Execute somente supabase/ATLAS_V2_1_0_SCHEMA_COMPLETO.sql.
-2. Execute supabase/ATLAS_V2_1_0_VALIDAR.sql.
-3. Configure config/config.js com a URL e a chave publicável do Supabase.
-4. Publique os arquivos do site.
-
-GOOGLE DRIVE
-
-O conector V2.0.19 continua compatível. Não é necessário substituir ou implantar
-novamente o Apps Script somente para testar a V2.1.
+1. Execute supabase/ATLAS_V2_1_0_SCHEMA_COMPLETO.sql.
+2. Execute supabase/ATLAS_V2_2_0_APROVACAO_ADMIN.sql.
+3. Execute supabase/ATLAS_V2_1_0_VALIDAR.sql.
+4. Configure config/config.js com a URL e a chave publicável do Supabase.
+5. Configure o conector setorial descrito acima.
+6. Publique os arquivos do site.
 
 IMPORTANTE
 
 - Não execute o schema completo em uma base que já contém o Atlas.
 - Nunca coloque a chave service_role no site ou no Apps Script.
-- A V2.1.0 está identificada como versão Oficial.
+- Os arquivos são movidos, sem duplicação.
+- Pastas antigas que ficarem vazias são preservadas.
+- Esta é uma versão de desenvolvimento para validação antes do lançamento oficial.

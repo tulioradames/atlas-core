@@ -396,10 +396,19 @@ button {
 
 .atlas-v2-main {
   display: grid;
-  grid-template-rows: var(--v2-topbar-height) auto auto auto minmax(0, 1fr) 28px;
+  grid-template-rows: var(--v2-topbar-height) minmax(0, 1fr) 28px;
   min-width: 0;
   min-height: 0;
   background: var(--v2-bg);
+}
+
+.atlas-v2-workspace-viewport {
+  min-width: 0;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
 }
 
 .atlas-v2-topbar,
@@ -430,6 +439,10 @@ button {
 }
 
 .atlas-v2-mobile-field-action {
+  display: none;
+}
+
+.atlas-v2-mobile-board-actions {
   display: none;
 }
 
@@ -692,13 +705,40 @@ button {
   justify-content: space-between;
   gap: 12px;
   min-width: 0;
-  padding: 9px 22px;
+  min-height: 56px;
+  padding: 10px 28px;
   border-bottom: 1px solid var(--v2-line);
 }
 
 .atlas-v2-toolbar-main {
   overflow-x: auto;
   scrollbar-width: none;
+}
+
+.atlas-v2-toolbar-main,
+.atlas-v2-toolbar-secondary {
+  gap: 12px;
+}
+
+.atlas-v2-toolbar-secondary {
+  padding-left: 14px;
+  border-left: 1px solid var(--v2-line);
+}
+
+.atlas-v2-toolbar-icon-command,
+.atlas-v2-toolbar-secondary .atlas-v2-icon-button {
+  width: 32px;
+  height: 32px;
+  color: var(--v2-muted);
+  border-color: transparent;
+  background: transparent;
+}
+
+.atlas-v2-toolbar-icon-command:hover,
+.atlas-v2-toolbar-secondary .atlas-v2-icon-button:hover {
+  color: var(--v2-text);
+  border-color: var(--v2-line);
+  background: var(--v2-surface-alt);
 }
 
 .atlas-v2-toolbar-main::-webkit-scrollbar {
@@ -714,6 +754,7 @@ button {
 .atlas-v2-toolbar-divider {
   width: 1px;
   height: 24px;
+  margin: 0 2px;
   flex: none;
   background: var(--v2-line);
 }
@@ -780,17 +821,47 @@ button {
   color: var(--v2-atlas);
 }
 
+.atlas-v2-selection-preview {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  padding: 12px;
+  color: var(--v2-text);
+  border: 1px solid var(--v2-line);
+  background: var(--v2-surface-alt);
+}
+
+.atlas-v2-selection-preview > svg {
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+  color: var(--v2-atlas);
+}
+
+.atlas-v2-selection-preview > span {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.atlas-v2-selection-preview small {
+  overflow: hidden;
+  color: var(--v2-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .atlas-v2-board-scroll {
   min-width: 0;
   min-height: 0;
-  overflow: auto;
-  contain: paint;
-  overscroll-behavior: contain;
-  scrollbar-gutter: stable;
+  overflow: visible;
+  contain: none;
 }
 
 .atlas-v2-board-content {
-  min-width: 960px;
+  width: 100%;
+  min-width: 0;
   padding: 18px 22px 48px;
 }
 
@@ -989,7 +1060,32 @@ body.atlas-v2-board-loading .atlas-v2-board-content {
 .atlas-v2-table-wrap {
   width: 100%;
   overflow-x: auto;
+  overflow-y: visible;
   scrollbar-gutter: stable;
+}
+
+.atlas-v2-table-sticky-head {
+  position: sticky;
+  z-index: 14;
+  top: 0;
+  width: 100%;
+  overflow: hidden;
+  border-bottom: 1px solid color-mix(in srgb, var(--group-color) 42%, var(--v2-line));
+  background: var(--v2-surface-alt);
+  box-shadow: 0 7px 14px color-mix(in srgb, var(--v2-bg) 24%, transparent);
+  scrollbar-width: none;
+}
+
+.atlas-v2-table-sticky-head::-webkit-scrollbar {
+  display: none;
+}
+
+.atlas-v2-table-sticky-head .atlas-v2-table {
+  background: var(--v2-surface-alt);
+}
+
+.atlas-v2-table-sticky-head .atlas-v2-table th {
+  border-bottom: 0;
 }
 
 .atlas-v2-table {
@@ -1031,28 +1127,27 @@ body.atlas-v2-board-loading .atlas-v2-board-content {
 }
 
 .atlas-v2-table .atlas-v2-select-cell {
+  position: sticky;
+  left: 0;
+  z-index: 4;
   width: 40px;
+  min-width: 40px;
   padding: 0;
   text-align: center;
 }
 
 .atlas-v2-table .atlas-v2-item-cell {
   position: sticky;
-  left: 0;
-  z-index: 3;
-  width: 300px;
-  min-width: 300px;
-  box-shadow: 1px 0 0 var(--v2-line), 8px 0 16px rgba(15, 23, 42, 0.03);
+  left: 40px;
+  z-index: 4;
+  width: 500px;
+  min-width: 500px;
+  box-shadow: 1px 0 0 var(--v2-line), 10px 0 18px rgba(15, 23, 42, 0.08);
 }
 
+.atlas-v2-table th.atlas-v2-select-cell,
 .atlas-v2-table th.atlas-v2-item-cell {
-  z-index: 5;
-}
-
-.atlas-v2-table .atlas-v2-actions-cell {
-  width: 112px;
-  min-width: 112px;
-  text-align: center;
+  z-index: 6;
 }
 
 .atlas-v2-table .atlas-v2-end-spacer {
@@ -1108,6 +1203,11 @@ body.atlas-v2-board-loading .atlas-v2-board-content {
   align-items: center;
   gap: 6px;
   min-width: 0;
+}
+
+.atlas-v2-item-name-wrap > .atlas-v2-cell-input {
+  min-width: 90px;
+  flex: 1 1 150px;
 }
 
 .atlas-v2-item-name-wrap.is-subitem {
@@ -1340,13 +1440,30 @@ body.atlas-v2-board-loading .atlas-v2-board-content {
 .atlas-v2-row-actions {
   display: flex;
   justify-content: center;
-  gap: 3px;
+  gap: 2px;
+}
+
+.atlas-v2-row-actions-inline {
+  flex: none;
+  overflow: visible;
+}
+
+.atlas-v2-row-actions-inline button {
+  position: relative;
+  width: 22px;
+  height: 22px;
+  overflow: visible;
+}
+
+.atlas-v2-row-actions-inline i {
+  width: 13px;
+  height: 13px;
 }
 
 .atlas-v2-row-actions button {
   display: grid;
-  width: 28px;
-  height: 28px;
+  width: 25px;
+  height: 25px;
   padding: 0;
   place-items: center;
   color: var(--v2-muted);
@@ -1367,8 +1484,8 @@ body.atlas-v2-board-loading .atlas-v2-board-content {
 }
 
 .atlas-v2-row-actions i {
-  width: 15px;
-  height: 15px;
+  width: 14px;
+  height: 14px;
 }
 
 .atlas-v2-add-row {
@@ -4690,6 +4807,237 @@ body.atlas-v2-home-page .atlas-v2-selection-bar {
   }
 }
 
+/* V2.4 - superficies tematicas translúcidas e novidades compactas. */
+.atlas-v2-sidebar {
+  background-color: color-mix(in srgb, var(--v2-sidebar) 82%, transparent);
+  background-image:
+    linear-gradient(155deg, color-mix(in srgb, var(--v2-atlas) 22%, transparent), transparent 42%),
+    linear-gradient(180deg, color-mix(in srgb, var(--v2-sidebar-soft) 88%, transparent), color-mix(in srgb, var(--v2-sidebar) 72%, transparent));
+  border-right-color: color-mix(in srgb, var(--v2-atlas) 72%, transparent);
+  box-shadow: 8px 0 32px color-mix(in srgb, var(--v2-atlas) 18%, transparent);
+  -webkit-backdrop-filter: blur(18px) saturate(145%);
+  backdrop-filter: blur(18px) saturate(145%);
+}
+
+.atlas-v2-workspace-current,
+.atlas-v2-user-button,
+.atlas-v2-search-field input {
+  border-color: color-mix(in srgb, var(--v2-atlas) 24%, rgba(255, 255, 255, 0.1));
+  background-color: color-mix(in srgb, var(--v2-sidebar-soft) 72%, transparent);
+}
+
+.atlas-v2-image-overlay {
+  background-color: color-mix(in srgb, var(--v2-sidebar) 70%, transparent);
+  background-image:
+    radial-gradient(circle at 18% 22%, color-mix(in srgb, var(--v2-atlas) 18%, transparent), transparent 34%),
+    linear-gradient(135deg, color-mix(in srgb, var(--v2-sidebar-soft) 58%, transparent), color-mix(in srgb, var(--v2-sidebar) 74%, transparent));
+  -webkit-backdrop-filter: blur(14px) saturate(135%);
+  backdrop-filter: blur(14px) saturate(135%);
+}
+
+.atlas-v2-image-viewer,
+.atlas-v2-version-history {
+  background-color: color-mix(in srgb, var(--v2-sidebar) 84%, transparent);
+  background-image: linear-gradient(160deg, color-mix(in srgb, var(--v2-atlas) 12%, transparent), transparent 48%);
+  border-color: color-mix(in srgb, var(--v2-atlas) 66%, var(--v2-line));
+  box-shadow: 0 20px 56px rgba(0, 0, 0, 0.34), 0 0 34px color-mix(in srgb, var(--v2-atlas) 16%, transparent);
+  -webkit-backdrop-filter: blur(20px) saturate(145%);
+  backdrop-filter: blur(20px) saturate(145%);
+}
+
+/* O visualizador acompanha o tema: vidro claro no modo claro e a superficie
+   noturna somente quando o tema escuro estiver ativo. */
+:root:not([data-theme="dark"]) .atlas-v2-image-overlay {
+  background-color: color-mix(in srgb, var(--v2-bg) 72%, transparent);
+  background-image:
+    radial-gradient(circle at 18% 22%, color-mix(in srgb, var(--v2-atlas) 13%, transparent), transparent 36%),
+    linear-gradient(135deg, color-mix(in srgb, var(--v2-surface) 58%, transparent), color-mix(in srgb, var(--v2-bg) 76%, transparent));
+}
+
+:root:not([data-theme="dark"]) .atlas-v2-image-viewer,
+:root:not([data-theme="dark"]) .atlas-v2-version-history {
+  color: var(--v2-text);
+  border-color: color-mix(in srgb, var(--v2-atlas) 58%, var(--v2-line));
+  background-color: color-mix(in srgb, var(--v2-surface) 88%, transparent);
+  background-image: linear-gradient(160deg, color-mix(in srgb, var(--v2-atlas) 9%, transparent), transparent 50%);
+  box-shadow: 0 20px 54px rgba(12, 31, 42, 0.2), 0 0 30px color-mix(in srgb, var(--v2-atlas) 12%, transparent);
+}
+
+:root:not([data-theme="dark"]) .atlas-v2-image-viewer > header,
+:root:not([data-theme="dark"]) .atlas-v2-image-viewer > footer,
+:root:not([data-theme="dark"]) .atlas-v2-version-history > header {
+  color: var(--v2-text);
+  border-color: color-mix(in srgb, var(--v2-atlas) 24%, var(--v2-line));
+  background-color: color-mix(in srgb, var(--v2-surface-alt) 72%, transparent);
+}
+
+:root:not([data-theme="dark"]) .atlas-v2-image-viewer > header small,
+:root:not([data-theme="dark"]) .atlas-v2-image-viewer > footer > span,
+:root:not([data-theme="dark"]) .atlas-v2-version-history > header small,
+:root:not([data-theme="dark"]) .atlas-v2-version-open small,
+:root:not([data-theme="dark"]) .atlas-v2-version-open time,
+:root:not([data-theme="dark"]) .atlas-v2-version-origin {
+  color: var(--v2-muted);
+}
+
+:root:not([data-theme="dark"]) .atlas-v2-image-viewer > header > button,
+:root:not([data-theme="dark"]) .atlas-v2-image-stage > button,
+:root:not([data-theme="dark"]) .atlas-v2-viewer-tools > button,
+:root:not([data-theme="dark"]) .atlas-v2-version-actions .atlas-v2-icon-button {
+  color: var(--v2-text);
+  border-color: color-mix(in srgb, var(--v2-atlas) 28%, var(--v2-line));
+  background: color-mix(in srgb, var(--v2-surface) 82%, transparent);
+}
+
+:root:not([data-theme="dark"]) .atlas-v2-viewer-tools > .atlas-v2-viewer-zoom-value {
+  color: var(--v2-atlas);
+}
+
+:root:not([data-theme="dark"]) .atlas-v2-viewer-media {
+  border-color: color-mix(in srgb, var(--v2-atlas) 18%, var(--v2-line));
+  background: color-mix(in srgb, var(--v2-surface-alt) 66%, transparent);
+}
+
+:root:not([data-theme="dark"]) .atlas-v2-file-preview {
+  color: var(--v2-text);
+  border-color: color-mix(in srgb, var(--v2-atlas) 28%, var(--v2-line));
+}
+
+.atlas-v2-image-viewer > header,
+.atlas-v2-image-viewer > footer,
+.atlas-v2-version-history > header {
+  border-color: color-mix(in srgb, var(--v2-atlas) 24%, transparent);
+  background-color: color-mix(in srgb, var(--v2-sidebar-soft) 66%, transparent);
+}
+
+.atlas-v2-viewer-media {
+  border: 1px solid color-mix(in srgb, var(--v2-atlas) 16%, transparent);
+  background: color-mix(in srgb, var(--v2-sidebar) 72%, transparent);
+}
+
+.atlas-v2-version-card {
+  border-color: color-mix(in srgb, var(--v2-atlas) 30%, transparent);
+  background: color-mix(in srgb, var(--v2-atlas) 8%, transparent);
+}
+
+.atlas-v2-version-card.is-current {
+  border-color: var(--v2-atlas);
+  background: color-mix(in srgb, var(--v2-atlas) 18%, transparent);
+}
+
+.atlas-v2-home-changelog-list {
+  gap: 8px;
+  max-height: none;
+  overflow: visible;
+}
+
+.atlas-v2-update-topic {
+  overflow: hidden;
+  border: 1px solid var(--v2-line);
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--v2-surface-alt) 52%, transparent);
+}
+
+.atlas-v2-update-topic > summary {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr) auto 18px;
+  min-height: 54px;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 11px;
+  color: var(--v2-text);
+  cursor: pointer;
+  list-style: none;
+}
+
+.atlas-v2-update-topic > summary::-webkit-details-marker {
+  display: none;
+}
+
+.atlas-v2-update-topic > summary:hover {
+  background: color-mix(in srgb, var(--v2-atlas) 7%, transparent);
+}
+
+.atlas-v2-update-topic[open] > summary {
+  border-bottom: 1px solid color-mix(in srgb, var(--v2-atlas) 22%, var(--v2-line));
+  background: color-mix(in srgb, var(--v2-atlas) 9%, transparent);
+}
+
+.atlas-v2-update-topic-icon {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  color: var(--v2-atlas);
+  border: 1px solid color-mix(in srgb, var(--v2-atlas) 28%, transparent);
+  background: color-mix(in srgb, var(--v2-atlas) 9%, transparent);
+}
+
+.atlas-v2-update-topic-icon svg,
+.atlas-v2-update-topic-chevron {
+  width: 16px;
+  height: 16px;
+}
+
+.atlas-v2-update-topic-copy {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.atlas-v2-update-topic-copy strong {
+  font-size: 12px;
+}
+
+.atlas-v2-update-topic-copy small {
+  overflow: hidden;
+  color: var(--v2-muted);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.atlas-v2-update-topic-count {
+  display: grid;
+  min-width: 24px;
+  height: 22px;
+  place-items: center;
+  padding: 0 6px;
+  color: var(--v2-atlas);
+  border: 1px solid color-mix(in srgb, var(--v2-atlas) 26%, transparent);
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.atlas-v2-update-topic-chevron {
+  color: var(--v2-muted);
+  transition: transform 150ms ease;
+}
+
+.atlas-v2-update-topic[open] .atlas-v2-update-topic-chevron {
+  transform: rotate(180deg);
+}
+
+.atlas-v2-home-changelog-list .atlas-v2-update-topic ul {
+  padding: 12px 18px 14px 34px;
+  gap: 6px;
+}
+
+@media (max-width: 560px) {
+  .atlas-v2-update-topic > summary {
+    grid-template-columns: 32px minmax(0, 1fr) auto;
+  }
+
+  .atlas-v2-update-topic-chevron {
+    display: none;
+  }
+
+  .atlas-v2-update-topic-copy small {
+    white-space: normal;
+  }
+}
+
 @media (max-width: 560px) {
   .atlas-v2-operation-progress {
     right: 10px;
@@ -7811,4 +8159,440 @@ body.atlas-v2-right-dragging * {
   .atlas-v2-mobile-agenda-date {
     grid-column: 1 / -1;
   }
+}
+
+/* ---------------------------------------------------------------------------
+   V2.4 - Historico de versoes do anexo (painel lateral do visualizador).
+   So aparece em coluna marcada como "Controlar versoes"; nas demais o
+   visualizador continua com o layout de sempre.
+   --------------------------------------------------------------------------- */
+.atlas-v2-image-overlay:has(.atlas-v2-version-history) {
+  gap: 12px;
+}
+
+.atlas-v2-image-viewer.has-history {
+  width: min(860px, 100%);
+}
+
+.atlas-v2-version-history {
+  display: flex;
+  width: 268px;
+  max-height: min(820px, calc(100dvh - 48px));
+  flex-direction: column;
+  color: #effaff;
+  border: 1px solid color-mix(in srgb, var(--v2-atlas) 55%, #24333e);
+  background: #071016;
+  box-shadow: 0 0 42px rgba(0, 217, 255, 0.12);
+}
+
+.atlas-v2-version-history > header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 14px 16px;
+  border-bottom: 1px solid rgba(0, 217, 255, 0.18);
+  gap: 8px;
+}
+
+.atlas-v2-version-history > header strong {
+  font-size: 0.95rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.atlas-v2-version-history > header small {
+  color: rgba(224, 247, 255, 0.62);
+  font-size: 0.72rem;
+}
+
+.atlas-v2-version-list {
+  display: flex;
+  overflow-y: auto;
+  flex: 1;
+  flex-direction: column;
+  padding: 10px;
+  gap: 8px;
+}
+
+.atlas-v2-version-card {
+  display: flex;
+  align-items: center;
+  padding: 8px 10px;
+  border: 1px solid rgba(0, 217, 255, 0.22);
+  border-radius: 8px;
+  background: rgba(0, 217, 255, 0.05);
+  gap: 6px;
+}
+
+.atlas-v2-version-card.is-current {
+  border-color: var(--v2-atlas);
+  background: rgba(0, 217, 255, 0.14);
+}
+
+.atlas-v2-version-open {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+  gap: 2px;
+  text-align: left;
+}
+
+.atlas-v2-version-open strong {
+  font-size: 0.9rem;
+}
+
+.atlas-v2-version-open small,
+.atlas-v2-version-open time {
+  overflow: hidden;
+  color: rgba(224, 247, 255, 0.66);
+  font-size: 0.72rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.atlas-v2-version-actions {
+  display: flex;
+  flex-shrink: 0;
+  gap: 2px;
+}
+
+.atlas-v2-version-actions .atlas-v2-icon-button {
+  width: 28px;
+  height: 28px;
+  color: #effaff;
+}
+
+.atlas-v2-version-actions .atlas-v2-icon-button.is-danger:hover {
+  color: #ff8b9a;
+}
+
+.atlas-v2-version-add {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 10px;
+  cursor: pointer;
+  gap: 6px;
+}
+
+/* Numero da versao vigente na celula do quadro. */
+.atlas-v2-file-version {
+  padding: 0 5px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--v2-atlas) 24%, transparent);
+  color: var(--v2-atlas);
+  font-size: 0.68rem;
+  font-style: normal;
+  font-weight: 700;
+}
+
+@media (max-width: 900px) {
+  /* Sem espaco para duas colunas: o historico vira uma faixa abaixo do
+     visualizador, com altura propria e rolagem. */
+  .atlas-v2-image-overlay:has(.atlas-v2-version-history) {
+    overflow-y: auto;
+    flex-direction: column;
+    padding: 12px;
+  }
+
+  .atlas-v2-image-viewer.has-history {
+    width: 100%;
+    height: min(560px, 62dvh);
+  }
+
+  .atlas-v2-version-history {
+    width: 100%;
+    max-height: 38dvh;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   V2.4 - Conversa do elemento (chat com mencao).
+   --------------------------------------------------------------------------- */
+.atlas-v2-chat {
+  display: flex;
+  height: 100%;
+  min-height: 0;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.atlas-v2-chat-list {
+  display: flex;
+  overflow-y: auto;
+  min-height: 220px;
+  flex: 1;
+  flex-direction: column;
+  padding-right: 4px;
+  gap: 8px;
+}
+
+.atlas-v2-chat-message {
+  padding: 8px 10px;
+  border: 1px solid var(--v2-border);
+  border-radius: 10px;
+  background: var(--v2-surface);
+}
+
+.atlas-v2-chat-message.is-own {
+  border-color: color-mix(in srgb, var(--v2-atlas) 45%, var(--v2-border));
+  background: color-mix(in srgb, var(--v2-atlas) 8%, var(--v2-surface));
+}
+
+.atlas-v2-chat-message > header {
+  display: flex;
+  align-items: center;
+  margin-bottom: 4px;
+  gap: 8px;
+}
+
+.atlas-v2-chat-message > header strong { font-size: 0.85rem; }
+
+.atlas-v2-chat-message > header time {
+  flex: 1;
+  color: var(--v2-text-soft);
+  font-size: 0.72rem;
+}
+
+.atlas-v2-chat-message p {
+  margin: 0;
+  font-size: 0.88rem;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.atlas-v2-chat-message mark {
+  padding: 0 3px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--v2-atlas) 26%, transparent);
+  color: inherit;
+  font-weight: 600;
+}
+
+.atlas-v2-chat-files {
+  display: flex;
+  margin-top: 6px;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.atlas-v2-chat-file {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 8px;
+  border: 1px solid var(--v2-border);
+  border-radius: 999px;
+  background: var(--v2-surface-muted);
+  color: inherit;
+  cursor: pointer;
+  font-size: 0.76rem;
+  gap: 5px;
+}
+
+.atlas-v2-chat-file:hover { border-color: var(--v2-atlas); }
+
+.atlas-v2-chat-form {
+  display: flex;
+  flex-direction: column;
+  padding-top: 8px;
+  border-top: 1px solid var(--v2-border);
+  gap: 6px;
+}
+
+.atlas-v2-chat-form textarea {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--v2-border);
+  border-radius: 8px;
+  background: var(--v2-surface);
+  color: inherit;
+  font: inherit;
+  resize: vertical;
+}
+
+.atlas-v2-chat-suggestions {
+  display: grid;
+  overflow-y: auto;
+  max-height: 220px;
+  border: 1px solid var(--v2-border);
+  border-radius: 8px;
+  background: var(--v2-surface);
+  box-shadow: 0 10px 24px color-mix(in srgb, #000 18%, transparent);
+}
+
+.atlas-v2-chat-suggestions[hidden] { display: none; }
+
+.atlas-v2-chat-suggestions > button {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 0;
+  border-bottom: 1px solid var(--v2-border);
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+  gap: 9px;
+}
+
+.atlas-v2-chat-suggestions > button:last-child { border-bottom: 0; }
+.atlas-v2-chat-suggestions > button:hover { background: color-mix(in srgb, var(--v2-atlas) 10%, transparent); }
+.atlas-v2-chat-suggestions > button > span:last-child { display: grid; min-width: 0; }
+.atlas-v2-chat-suggestions strong,
+.atlas-v2-chat-suggestions small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.atlas-v2-chat-suggestions > p { margin: 0; padding: 10px; color: var(--v2-text-soft); font-size: 0.78rem; }
+
+.atlas-v2-chat-form-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.atlas-v2-chat-form-actions > span {
+  overflow: hidden;
+  flex: 1;
+  color: var(--v2-text-soft);
+  font-size: 0.75rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.atlas-v2-chat-form small,
+.atlas-v2-chat-readonly {
+  color: var(--v2-text-soft);
+  font-size: 0.75rem;
+}
+
+.atlas-v2-field-chat {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.atlas-v2-field-chat > b,
+.atlas-v2-kanban-meta .atlas-v2-icon-button > b {
+  min-width: 15px;
+  padding: 0 3px;
+  border-radius: 999px;
+  background: var(--v2-atlas);
+  color: #04121b;
+  font-size: 0.62rem;
+  line-height: 15px;
+}
+
+@media (max-width: 820px) {
+  .atlas-v2-chat-list { min-height: 180px; }
+  .atlas-v2-chat-form textarea { min-height: 84px; resize: none; }
+  .atlas-v2-chat-form-actions .atlas-v2-button { min-height: 44px; }
+  .atlas-v2-chat-suggestions { max-height: 180px; }
+}
+
+/* Contador de mensagens no icone da linha. */
+.atlas-v2-row-actions button > b {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  z-index: 2;
+  display: grid;
+  height: 15px;
+  place-items: center;
+  min-width: 15px;
+  padding: 0 3px;
+  border-radius: 999px;
+  background: var(--v2-atlas);
+  color: #04121b;
+  font-size: 0.62rem;
+  font-weight: 700;
+}
+
+/* ---------------------------------------------------------------------------
+   V2.4 - versao detectada no Drive (origem, selo de conferencia, atalhos).
+   --------------------------------------------------------------------------- */
+.atlas-v2-version-history > header { display: flex; align-items: center; gap: 8px; }
+.atlas-v2-version-history > header small { flex: 1; }
+
+.atlas-v2-version-edit {
+  display: flex;
+  align-items: center;
+  padding: 6px 8px;
+  border: 1px dashed var(--v2-border);
+  border-radius: 8px;
+  margin-bottom: 8px;
+  color: var(--v2-text-soft);
+  font-size: 0.78rem;
+  gap: 6px;
+  text-decoration: none;
+}
+
+.atlas-v2-version-edit:hover { border-color: var(--v2-atlas); color: inherit; }
+
+.atlas-v2-version-origin {
+  display: flex;
+  align-items: center;
+  color: var(--v2-text-soft);
+  font-size: 0.7rem;
+  font-style: normal;
+  gap: 4px;
+}
+
+.atlas-v2-version-origin svg { width: 12px; height: 12px; }
+
+.atlas-v2-version-flag {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 999px;
+  margin-top: 3px;
+  background: color-mix(in srgb, var(--v2-warning, #d9822b) 22%, transparent);
+  color: var(--v2-warning, #d9822b);
+  font-size: 0.65rem;
+  font-style: normal;
+  font-weight: 700;
+}
+
+.atlas-v2-version-card.is-unreviewed {
+  border-left: 3px solid var(--v2-warning, #d9822b);
+}
+
+/* Conteudo descartado pelo Google: o botao existe so para explicar por que nao
+   da para baixar - nunca deve parecer clicavel. */
+.atlas-v2-icon-button.is-muted {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* V2.4 - um unico fluxo vertical: titulo, abas e ferramentas sobem junto com
+   o quadro; no mobile evita uma segunda area de rolagem dentro da pagina. */
+@media (max-width: 820px) {
+  .atlas-v2-workspace-viewport {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+
+  .atlas-v2-mobile-board-actions {
+    display: inline-flex;
+    flex: none;
+  }
+
+  .atlas-v2-board-scroll {
+    overflow: visible !important;
+  }
+}
+
+/* Mantido no fim do arquivo para prevalecer sobre o layout legado do painel. */
+.atlas-v2-version-history {
+  background-color: color-mix(in srgb, var(--v2-sidebar) 84%, transparent);
+  background-image: linear-gradient(160deg, color-mix(in srgb, var(--v2-atlas) 12%, transparent), transparent 48%);
+  border-color: color-mix(in srgb, var(--v2-atlas) 66%, var(--v2-line));
+  box-shadow: 0 20px 56px rgba(0, 0, 0, 0.34), 0 0 34px color-mix(in srgb, var(--v2-atlas) 16%, transparent);
+  -webkit-backdrop-filter: blur(20px) saturate(145%);
+  backdrop-filter: blur(20px) saturate(145%);
 }

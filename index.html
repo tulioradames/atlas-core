@@ -10,11 +10,12 @@
   <meta name="description" content="Atlas — plataforma configurável de gestão operacional, campo e arquivos.">
   <meta name="author" content="Túlio Radamés">
   <meta name="application-name" content="Atlas">
+  <meta name="robots" content="noindex, nofollow, noarchive">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="assets/icons/favicon.ico">
   <!-- A querystring ?v= abaixo deve ser sempre igual a ATLAS_BUILD em js/v2.js.
        tests/static-audit.cjs falha se divergirem. -->
-  <link rel="stylesheet" href="css/v2.css?v=2.3.3">
+  <link rel="stylesheet" href="css/v2.css?v=2.4.0-official">
 </head>
 <body class="atlas-v2-auth-locked">
   <div class="atlas-v2-auth-root" id="atlas-v2-auth-root" aria-live="polite"></div>
@@ -85,6 +86,7 @@
         </div>
       </header>
 
+      <div class="atlas-v2-workspace-viewport" id="atlas-v2-workspace-viewport">
       <section class="atlas-v2-board-head">
         <div class="atlas-v2-board-title-row">
           <div class="atlas-v2-board-identity">
@@ -98,8 +100,8 @@
               <p id="atlas-v2-board-description"></p>
             </div>
           </div>
-          <div class="atlas-v2-board-actions">
-            <button class="atlas-v2-button atlas-v2-button-quiet" type="button" data-action="share-board"><i data-lucide="users"></i><span>Compartilhar</span></button>
+          <div class="atlas-v2-board-actions atlas-v2-mobile-board-actions">
+            <button class="atlas-v2-icon-button" type="button" data-action="share-board" title="Compartilhar quadro" aria-label="Compartilhar quadro"><i data-lucide="users"></i></button>
             <button class="atlas-v2-icon-button" type="button" data-action="board-settings" title="Configurar quadro" aria-label="Configurar quadro"><i data-lucide="settings-2"></i></button>
           </div>
         </div>
@@ -109,23 +111,24 @@
       <section class="atlas-v2-board-toolbar" aria-label="Ferramentas do quadro">
         <div class="atlas-v2-toolbar-main">
           <button class="atlas-v2-button atlas-v2-button-primary" type="button" data-action="add-item"><i data-lucide="plus"></i><span>Novo item</span></button>
-          <button class="atlas-v2-button atlas-v2-button-quiet atlas-v2-mobile-field-action" type="button" data-action="field-mode-toggle"><i data-lucide="smartphone"></i><span>Campo</span></button>
-          <button class="atlas-v2-button atlas-v2-button-quiet atlas-v2-mobile-field-action" type="button" data-action="import"><i data-lucide="file-up"></i><span>Importar</span></button>
-          <button class="atlas-v2-button atlas-v2-button-quiet" type="button" data-action="add-group"><i data-lucide="rows-3"></i><span>Novo grupo</span></button>
-          <button class="atlas-v2-button atlas-v2-button-quiet" type="button" data-action="add-column"><i data-lucide="columns-3"></i><span>Nova coluna</span></button>
+          <button class="atlas-v2-icon-button atlas-v2-toolbar-icon-command atlas-v2-mobile-field-action" type="button" data-action="field-mode-toggle" title="Modo de campo" aria-label="Ativar modo de campo"><i data-lucide="smartphone"></i></button>
+          <button class="atlas-v2-icon-button atlas-v2-toolbar-icon-command atlas-v2-mobile-field-action" type="button" data-action="import" title="Importar planilha" aria-label="Importar planilha"><i data-lucide="file-up"></i></button>
+          <button class="atlas-v2-icon-button atlas-v2-toolbar-icon-command" type="button" data-action="add-group" title="Novo grupo" aria-label="Criar novo grupo"><i data-lucide="rows-3"></i></button>
+          <button class="atlas-v2-icon-button atlas-v2-toolbar-icon-command" type="button" data-action="add-column" title="Nova coluna" aria-label="Criar nova coluna"><i data-lucide="columns-3"></i></button>
           <span class="atlas-v2-toolbar-divider"></span>
           <label class="atlas-v2-inline-search">
             <i data-lucide="search"></i>
             <input id="atlas-v2-board-search" type="search" placeholder="Filtrar itens" autocomplete="off">
           </label>
-          <button class="atlas-v2-button atlas-v2-button-quiet" type="button" data-action="filter" title="Filtrar registros" aria-label="Filtrar registros"><i data-lucide="list-filter"></i><span>Filtrar</span></button>
-          <button class="atlas-v2-button atlas-v2-button-quiet" type="button" data-action="sort" title="Ordenar registros" aria-label="Ordenar registros"><i data-lucide="arrow-up-down"></i><span>Ordenar</span></button>
+          <button class="atlas-v2-icon-button atlas-v2-toolbar-icon-command" type="button" data-action="filter" title="Filtrar registros" aria-label="Filtrar registros"><i data-lucide="list-filter"></i></button>
+          <button class="atlas-v2-icon-button atlas-v2-toolbar-icon-command" type="button" data-action="sort" title="Ordenar registros" aria-label="Ordenar registros"><i data-lucide="arrow-up-down"></i></button>
         </div>
         <div class="atlas-v2-toolbar-secondary">
+          <button class="atlas-v2-icon-button" type="button" data-action="share-board" title="Compartilhar quadro" aria-label="Compartilhar quadro"><i data-lucide="users"></i></button>
+          <button class="atlas-v2-icon-button" type="button" data-action="board-settings" title="Configurar quadro" aria-label="Configurar quadro"><i data-lucide="settings-2"></i></button>
+          <span class="atlas-v2-toolbar-divider"></span>
           <button class="atlas-v2-icon-button" type="button" data-action="select-all-items" title="Selecionar todos os elementos e subelementos" aria-label="Selecionar todos os elementos e subelementos"><i data-lucide="list-checks"></i></button>
           <button class="atlas-v2-icon-button" type="button" data-action="automations" title="Automações" aria-label="Automações"><i data-lucide="workflow"></i></button>
-          <button class="atlas-v2-icon-button" type="button" data-action="import" title="Importar planilha" aria-label="Importar planilha"><i data-lucide="file-up"></i></button>
-          <button class="atlas-v2-icon-button atlas-v2-field-mode-button" type="button" data-action="field-mode-toggle" title="Modo de campo" aria-label="Ativar modo de campo"><i data-lucide="smartphone"></i></button>
           <button class="atlas-v2-icon-button" type="button" data-action="fullscreen" title="Tela cheia" aria-label="Tela cheia"><i data-lucide="maximize-2"></i></button>
         </div>
       </section>
@@ -135,11 +138,12 @@
       <div class="atlas-v2-board-scroll" id="atlas-v2-board-scroll">
         <div class="atlas-v2-board-content" id="atlas-v2-board-content"></div>
       </div>
+      </div>
 
       <footer class="atlas-v2-footer">
         <span>Atlas · Smart Field Management · Criado por Túlio Radamés</span>
         <span id="atlas-v2-save-state"><i data-lucide="circle-check-big"></i>Alterações salvas</span>
-          <span id="atlas-v2-footer-version">V2.3.2 Oficial</span>
+          <span id="atlas-v2-footer-version">V2.4.0 Oficial</span>
       </footer>
     </main>
   </div>
@@ -152,9 +156,9 @@
   </div>
   <div class="atlas-v2-toast-region" id="atlas-v2-toast-region" aria-live="polite"></div>
 
-  <script src="config/config.js?v=2.3.3"></script>
+  <script src="config/config.js?v=2.4.0-official"></script>
   <script src="assets/vendor/supabase.min.js"></script>
   <script src="assets/vendor/lucide.min.js"></script>
-  <script src="js/v2.js?v=2.3.3"></script>
+  <script src="js/v2.js?v=2.4.0-official"></script>
 </body>
 </html>

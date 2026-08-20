@@ -1,5 +1,6 @@
 const fs = require('node:fs');
 const path = require('node:path');
+const crypto = require('node:crypto');
 
 const root = path.resolve(__dirname, '..');
 const read = (file) => fs.readFileSync(path.join(root, file), 'utf8');
@@ -9,6 +10,7 @@ const assert = (condition, message) => {
 
 const index = read('index.html');
 const app = read('js/v2.js');
+const css = read('css/v2.css');
 const config = read('config/config.js');
 const manifest = read('manifest.webmanifest');
 const connector = read('appscript/GoogleDriveUpload_AppsScript_V2_CONECTOR_SETOR.gs');
@@ -18,11 +20,27 @@ const migration = read('supabase/ATLAS_V2_1_0_ATUALIZACAO.sql');
 const completeSchema = read('supabase/ATLAS_V2_1_0_SCHEMA_COMPLETO.sql');
 const adminApproval = read('supabase/ATLAS_V2_2_0_APROVACAO_ADMIN.sql');
 const serviceWorker = read('service-worker.js');
+const securityHeaders = read('_headers');
+const workerSecurity = read('worker-security.js');
+const deployScript = read('deploy-cloudflare.ps1');
+const auditFixes = read('supabase/ATLAS_V2_4_0_AUDITORIA_CORRECOES.sql');
+const manual = read('manual.html');
 
-assert(app.includes("window.__ATLAS_VERSION__ = '2.3.3 OFICIAL'"), 'Versao interna divergente.');
-assert(config.includes('V2.3.3 Oficial'), 'Config sem a versao do pacote.');
+assert(app.includes("window.__ATLAS_VERSION__ = '2.4.0 OFICIAL'"), 'Versao interna divergente.');
+assert(config.includes('V2.4.0 Oficial'), 'Config sem a versao do pacote.');
 assert(index.includes('id="atlas-v2-footer-version"'), 'Rodape sem o elemento de versao (agora preenchido via JS a partir do config.js).');
-assert(manifest.includes('2.3.3'), 'Manifest sem a versao do pacote.');
+assert(index.includes('V2.4.0 Oficial</span>'), 'Rodape HTML ainda exibe uma versao antiga antes do JavaScript carregar.');
+assert(index.includes('name="robots" content="noindex, nofollow, noarchive"'), 'Ambiente de homologacao sem bloqueio de indexacao.');
+assert(manifest.includes('2.4.0'), 'Manifest sem a versao do pacote.');
+
+const configVersionMatch = config.match(/VERSION:\s*"([^"]+)"/);
+const changelogVersionMatch = app.match(/const CHANGELOG = \[\s*\{\s*version:\s*'([^']+)'/s);
+assert(configVersionMatch, 'Versao principal ausente em config/config.js.');
+assert(changelogVersionMatch, 'A versao atual nao foi registrada no changelog da tela de Inicio.');
+assert(
+  changelogVersionMatch[1] === configVersionMatch[1],
+  `Changelog desatualizado: esperado ${configVersionMatch[1]}, encontrado ${changelogVersionMatch[1]}.`,
+);
 
 // ---------------------------------------------------------------------------
 // Consistencia da versao dos arquivos web.
@@ -61,6 +79,19 @@ assert(
   serviceWorker.includes('`./js/v2.js?v=${ATLAS_BUILD}`'),
   'O pre-cache do Service Worker deve usar as mesmas URLs versionadas do index.html.',
 );
+assert(serviceWorker.includes("'./assets/icons/favicon.ico'") && serviceWorker.includes("'./assets/icons/icon-32.png'"), 'Icones estaveis ausentes do cache offline.');
+assert(serviceWorker.includes("new Response('Recurso indisponivel offline.'"), 'Cache offline ainda pode devolver uma resposta indefinida.');
+assert(securityHeaders.includes('Content-Security-Policy:') && securityHeaders.includes("frame-ancestors 'none'"), 'Cabecalhos de seguranca ausentes ou incompletos.');
+assert(deployScript.includes('main_module = $WorkerModuleName'), 'Deploy sem modulo de seguranca no Worker.');
+assert(deployScript.includes('run_worker_first = $true'), 'Worker nao intercepta todas as respostas de assets.');
+assert(workerSecurity.includes('await env.ASSETS.fetch(request)'), 'Modulo nao encaminha requisicoes aos assets publicados.');
+assert(workerSecurity.includes("headers.set('X-Robots-Tag', 'noindex, noarchive')"), 'Homologacao sem bloqueio HTTP de indexacao.');
+assert(workerSecurity.includes("headers.set('Cache-Control', 'no-cache, no-store, must-revalidate')"), 'Shell e service worker sem revalidacao forcada.');
+const manualScriptStart = manual.indexOf('<script>') + '<script>'.length;
+const manualScriptEnd = manual.indexOf('</script>', manualScriptStart);
+const manualScriptHash = `sha256-${crypto.createHash('sha256').update(manual.slice(manualScriptStart, manualScriptEnd)).digest('base64')}`;
+assert(manualScriptStart >= '<script>'.length && manualScriptEnd > manualScriptStart, 'Script do manual nao encontrado.');
+assert(workerSecurity.includes(`'${manualScriptHash}'`) && securityHeaders.includes(`'${manualScriptHash}'`), 'Hash CSP do manual esta desatualizado.');
 assert(
   !/\?v=/.test(manifest),
   'O manifest nao deve versionar icones: eles sao estaveis e a querystring so cria mais um ponto de divergencia.',
@@ -68,9 +99,38 @@ assert(
 assert(app.includes('folderPath: storageFolderPath'), 'Upload sem hierarquia explicita de pastas.');
 assert(app.includes("syncTrashEntriesWithDrive([trashEntry], 'delete')"), 'Exclusao estrutural sem sincronizacao com o Drive.');
 assert(app.includes("'admin-confirm-organize-storage': () => organizeStorageConnection"), 'Administracao sem migracao de arquivos existentes.');
-assert(connector.includes("const ATLAS_CONNECTOR_VERSION = '2.2.0-multi-ambiente'"), 'Conector do Drive desatualizado.');
+assert(connector.includes("const ATLAS_CONNECTOR_VERSION = '2.5.0-versoes-drive'"), 'Conector do Drive desatualizado.');
+
+// V2.4: acao nova no conector so vale se estiver DESPACHADA. O upload e o
+// fallback sem `if` no fim do doPost, entao uma acao listada na allowlist mas
+// nao despachada cai nele e morre com "Arquivo sem conteudo base64." - erro que
+// nao diz nada sobre o problema real. Este teste existe para essa armadilha.
+['driveprobe', 'drivepin', 'driverevision', 'driveupdate'].forEach((acao) => {
+  assert(connector.includes(`'${acao}'`), `Conector sem a acao ${acao}.`);
+  assert(
+    connector.includes(`if (action === '${acao}') return atlasDrive`),
+    `Acao ${acao} declarada mas nao despachada no doPost - cairia no upload.`,
+  );
+  assert(
+    new RegExp(`${acao}: 'upload'`).test(connector),
+    `Acao ${acao} sem permissao mapeada em actionPermissions.`,
+  );
+});
+// A revisao e o unico sinal confiavel de "o conteudo mudou": o campo `version`
+// do Drive sobe tambem quando o arquivo e so renomeado ou movido.
+assert(
+  connector.includes('function atlasFileSignature_') && connector.includes('meta.headRevisionId'),
+  'Conector deve identificar a mudanca pela revisao, nunca pelo campo version.',
+);
+assert(
+  app.includes('function connectorSupportsVersions'),
+  'Sem trava de versao do conector, setor ainda nao reimplantado erraria a cada abertura de quadro.',
+);
 assert(connector.includes("action === 'move'"), 'Conector sem organizacao de arquivos existentes.');
 assert(connector.includes("action === 'restore'"), 'Conector sem restauracao sincronizada.');
+assert(connector.includes("action === 'cleanup'"), 'Conector sem limpeza comprovada de upload orfao.');
+assert(connector.includes('atlasAuthorizedFileIds_'), 'Conector ainda altera arquivos sem validar cada ID contra o quadro.');
+assert(connector.includes('atlasEnforceRateLimit_'), 'Conector sem limite basico de requisicoes por sessao.');
 
 // Conector: o apelido da acao nao pode mais decidir a permissao exigida.
 // Antes "trash" (um delete de verdade) era autorizado como 'testconnection'.
@@ -78,10 +138,8 @@ assert(
   connector.includes("const canonicalActions = { trash: 'delete', undodelete: 'restore' }"),
   'Conector sem normalizacao dos apelidos de acao antes da autorizacao.',
 );
-assert(
-  /restore:\s*'delete'/.test(connector),
-  'Conector deve exigir permissao de delete para restaurar arquivos.',
-);
+assert(/delete:\s*'delete_secure'/.test(connector), 'Conector deve usar a acao segura para excluir arquivos.');
+assert(/restore:\s*'restore_secure'/.test(connector), 'Conector deve usar a acao segura para restaurar arquivos.');
 assert(
   /move:\s*'testconnection'/.test(connector),
   'Organizar arquivos existentes deve continuar restrito a administradores.',
@@ -198,6 +256,16 @@ assert(app.includes('captureItemHistory'), 'Historico restauravel ausente.');
 assert(app.includes('atlas_v2_process_scheduled_automations'), 'Agenda remota ausente.');
 assert(app.includes('field-mode-toggle'), 'Modo campo ausente.');
 assert(app.includes('viewer-zoom-in'), 'Controle de zoom de imagem ausente.');
+assert(app.includes('function groupChangelogNotes(notes)'), 'Agrupamento das novidades da tela inicial ausente.');
+assert(!app.includes('atlas-v2-actions-cell'), 'A coluna separada de Acoes ainda esta presente na tabela.');
+assert(app.includes('atlas-v2-row-actions atlas-v2-row-actions-inline'), 'Acoes compactas nao foram incorporadas ao Registro.');
+assert(css.includes('width: 500px;') && css.includes('.atlas-v2-row-actions-inline'), 'Registro ampliado ou acoes compactas sem estilo.');
+assert(app.includes('atlas-v2-update-topic'), 'Topicos expansivos de novidades ausentes.');
+assert(css.includes('superficies tematicas translúcidas'), 'Superficies translucidas do tema ausentes.');
+assert(/\.atlas-v2-sidebar\s*\{[\s\S]*?backdrop-filter:\s*blur\(18px\)/.test(css), 'Menu lateral sem translucidez tematica.');
+assert(/\.atlas-v2-image-viewer,[\s\S]*?\.atlas-v2-version-history[\s\S]*?backdrop-filter:\s*blur\(20px\)/.test(css), 'Visualizador de arquivos sem translucidez tematica.');
+assert(css.includes(':root:not([data-theme="dark"]) .atlas-v2-image-viewer'), 'Visualizador de arquivos sem acabamento específico para o modo claro.');
+assert(app.includes('Correção visual: no modo claro'), 'Correcao do visualizador claro ausente do changelog.');
 assert(app.includes('const visibleColumns = (boardEntry.columns || []).filter'), 'Mobile ainda limita as colunas exibidas.');
 assert(!app.includes("['status', 'select', 'person', 'date', 'image', 'file', 'location'].includes(entry.type)).slice(0, 6)"), 'Mobile ainda mostra somente seis campos prioritarios.');
 assert(app.includes('isRemoteBootstrapSnapshot'), 'Validacao do cache autenticado ausente.');
@@ -273,9 +341,22 @@ assert(
     'ATLAS_V2_3_1_AUTOMACAO_DUPLICADA.sql',
     'ATLAS_V2_3_1_MOVE_GROUP_ORDEM.sql',
     'ATLAS_V2_3_3_REALTIME_BROADCAST_PRIVADO.sql',
+    'ATLAS_V2_4_0_AUDITORIA_CORRECOES.sql',
+    'ATLAS_V2_4_0_AUDITORIA_VALIDAR.sql',
+    'ATLAS_V2_4_0_CHAT_ELEMENTO.sql',
+    'ATLAS_V2_4_0_CORRECOES_REVISAO_2.sql',
+    'ATLAS_V2_4_0_MOVIMENTACAO_ENTRE_MODULOS.sql',
+    'ATLAS_V2_4_0_VERSAO_AUTOMATICA_DRIVE.sql',
+    'ATLAS_V2_4_0_VERSOES_ANEXO.sql',
   ]),
   'A pasta supabase contem SQL antigo ou inesperado.'
 );
+
+assert(auditFixes.includes('atlas_v2_stage_trash_entries'), 'Lixeira em lote sem RPC atomica versionada.');
+assert(auditFixes.includes('atlas_v2_restore_deleted_change'), 'Recuperacao administrativa sem RPC versionada.');
+assert(auditFixes.includes('atlas_v2_filter_storage_files'), 'Autorizacao por arquivo do Drive ausente da migracao.');
+assert(auditFixes.includes('atlas_v2_item_values_automation_trigger'), 'Gatilho de automacao de valores continua fora do schema versionado.');
+assert(auditFixes.includes('atlas_v2_items_automation_trigger'), 'Gatilho de automacao de itens continua fora do schema versionado.');
 
 const localReferences = [...index.matchAll(/(?:src|href)=["']([^"'?#]+)(?:\?[^"']*)?["']/g)]
   .map((match) => match[1])
@@ -284,4 +365,4 @@ localReferences.forEach((entry) => {
   assert(fs.existsSync(path.join(root, entry)), `Referencia local ausente: ${entry}`);
 });
 
-console.log('Atlas V2.3.3: auditoria estatica aprovada.');
+console.log('Atlas V2.4.0: auditoria estatica aprovada.');

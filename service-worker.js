@@ -27,6 +27,9 @@ const ATLAS_STATIC = [
   './manifest.webmanifest',
   './assets/vendor/lucide.min.js',
   './assets/vendor/supabase.min.js',
+  './assets/brand/atnx-logo-horizontal.svg',
+  './assets/icons/favicon.ico',
+  './assets/icons/icon-32.png',
   './assets/icons/icon-192.png',
   './assets/icons/icon-512.png',
 ];
@@ -75,7 +78,11 @@ function cacheFirst(request) {
         if (response.ok) caches.open(ATLAS_CACHE).then((cache) => cache.put(request, response.clone()));
         return response;
       })
-      .catch(() => cached);
+      .catch(() => cached || new Response('Recurso indisponivel offline.', {
+        status: 504,
+        statusText: 'Offline',
+        headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+      }));
     return cached || update;
   });
 }
@@ -99,7 +106,7 @@ self.addEventListener('fetch', (event) => {
   if (url.origin !== self.location.origin) return;
 
   const isNavigation = request.mode === 'navigate';
-  const isStatic = /\.(?:css|js|png|ico|webmanifest)$/.test(url.pathname);
+  const isStatic = /\.(?:css|js|png|svg|ico|webmanifest)$/.test(url.pathname);
 
   if (isNavigation) {
     event.respondWith(
@@ -114,7 +121,11 @@ self.addEventListener('fetch', (event) => {
           }
           return response;
         })
-        .catch(() => caches.match('./index.html')),
+        .catch(() => caches.match('./index.html').then((cached) => cached || new Response('Atlas indisponivel offline.', {
+          status: 503,
+          statusText: 'Offline',
+          headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+        }))),
     );
     return;
   }

@@ -3,7 +3,8 @@
 // nao reimplementa a logica aqui, entao um bug introduzido no arquivo real
 // aparece aqui tambem. Cobre: aritmetica pura (regressao), SE(condicao;
 // entao;senao) com aninhamento e combinacao com aritmetica/agregacao, e as
-// agregacoes SOMA/MEDIA/MINIMO/MAXIMO/CONT sobre subitens.
+// agregacoes SOMA/MEDIA/MINIMO/MAXIMO/CONT sobre subitens e as equivalentes
+// *_COLUNA sobre todos os elementos principais ativos do quadro.
 const fs = require('node:fs');
 const path = require('node:path');
 
@@ -25,8 +26,8 @@ const assert = (condition, message) => {
   if (!condition) throw new Error(message);
 };
 
-function board(columns) {
-  return { columns };
+function board(columns, items = []) {
+  return { columns, groups: [{ id: 'g1', items }] };
 }
 function col(id, name, type, formula) {
   return { id, name, type, formula };
@@ -105,6 +106,52 @@ function calc(boardEntry, columnEntry, itemEntry) {
   assert(calc(b, b.columns[1], item) === '26', 'SE combinado com SOMA na condicao e no ramo falhou.');
 }
 
+// 6b. Agregacoes sobre a coluna inteira do quadro. Subitens e elementos
+// arquivados nao entram; celulas vazias sao ignoradas e zero continua valido.
+{
+  const columns = [
+    col('c1', 'Valor', 'number'),
+    col('c2', 'Cidade', 'text'),
+    col('c3', 'Soma geral', 'formula', 'SOMA_COLUNA({Valor})'),
+    col('c4', 'Media geral', 'formula', 'MEDIA_COLUNA({Valor})'),
+    col('c5', 'Minimo geral', 'formula', 'MINIMO_COLUNA({Valor})'),
+    col('c6', 'Maximo geral', 'formula', 'MAXIMO_COLUNA({Valor})'),
+    col('c7', 'Cidades preenchidas', 'formula', 'CONT_COLUNA({Cidade})'),
+  ];
+  const items = [
+    { values: { c1: 10, c2: 'Campina Grande' }, subitems: [{ values: { c1: 999 } }] },
+    { values: { c1: '20,5', c2: 'Joao Pessoa' }, subitems: [] },
+    { values: { c1: 0, c2: '' }, subitems: [] },
+    { values: { c1: '', c2: 'Sem valor numerico' }, subitems: [] },
+    { values: { c1: 500, c2: 'Arquivada' }, archived: true, subitems: [] },
+  ];
+  const b = board(columns, items);
+  assert(calc(b, columns[2], items[0]) === '30,5', 'SOMA_COLUNA deveria somar somente os elementos ativos.');
+  assert(calc(b, columns[3], items[0]) === '10,17', 'MEDIA_COLUNA deveria ignorar vazio e incluir zero.');
+  assert(calc(b, columns[4], items[0]) === '0', 'MINIMO_COLUNA deveria incluir zero digitado.');
+  assert(calc(b, columns[5], items[0]) === '20,5', 'MAXIMO_COLUNA incluiu subitem ou item arquivado.');
+  assert(calc(b, columns[6], items[0]) === '3', 'CONT_COLUNA deveria contar celulas de texto preenchidas.');
+}
+
+// 6c. A coluna agregada pode ser outra formula e pode participar de SE e de
+// aritmetica, sem salvar resultados calculados em item.values.
+{
+  const columns = [
+    col('c1', 'Quantidade', 'number'),
+    col('c2', 'Preco', 'number'),
+    col('c3', 'Subtotal', 'formula', '{Quantidade}*{Preco}'),
+    col('c4', 'Total do quadro', 'formula', 'SOMA_COLUNA({Subtotal})'),
+    col('c5', 'Meta', 'formula', 'SE(SOMA_COLUNA({Subtotal})>=50;SOMA_COLUNA({Subtotal})+10;0)'),
+  ];
+  const items = [
+    { values: { c1: 2, c2: 10 }, subitems: [] },
+    { values: { c1: 3, c2: 10 }, subitems: [] },
+  ];
+  const b = board(columns, items);
+  assert(calc(b, columns[3], items[0]) === '50', 'SOMA_COLUNA sobre uma coluna-formula falhou.');
+  assert(calc(b, columns[4], items[1]) === '60', 'SE com SOMA_COLUNA repetida falhou.');
+}
+
 // 7. Formula com sintaxe invalida continua caindo em "Fórmula inválida"
 // (regressao) - inclui uma tentativa de injecao via SE malformado, que deve
 // falhar no whitelist aritmetico final, nunca chegando a executar codigo
@@ -117,4 +164,58 @@ function calc(boardEntry, columnEntry, itemEntry) {
   assert(calc(bInject, bInject.columns[0], { values: {}, subitems: [] }) === 'Fórmula inválida', 'Tentativa de injecao nao foi rejeitada como formula invalida.');
 }
 
-console.log('Atlas: motor de formulas (SE, agregacoes, regressao aritmetica) aprovado.');
+// 8. BUG-01 (QA 17/08/2026): duas referencias IRMAS a mesma coluna-formula.
+// O `visited` que barra referencia circular nao era liberado ao sair do escopo,
+// entao a SEGUNDA referencia caia no `visited.has` e virava 0 - numero errado na
+// tela, sem aviso. Os tres casos abaixo devolviam, respectivamente, 20, 0 e 21.
+{
+  // 8a. Soma da mesma coluna-formula duas vezes.
+  const b = board([
+    col('c1', 'Quantidade', 'number'),
+    col('c2', 'Total', 'formula', '{Quantidade} * 2'),
+    col('c3', 'Dobro do total', 'formula', '{Total} + {Total}'),
+  ]);
+  const item = { values: { c1: 10 }, subitems: [] };
+  assert(calc(b, b.columns[1], item) === '20', 'Total simples regrediu.');
+  assert(calc(b, b.columns[2], item) === '40', 'Duas referencias irmas a mesma coluna-formula nao somaram (BUG-01).');
+
+  // 8b. SE que le a mesma coluna-formula na condicao E no ramo. Este e
+  // exatamente o formato sugerido no placeholder do campo Formula da interface.
+  const bSe = board([
+    col('c1', 'Quantidade', 'number'),
+    col('c2', 'Total', 'formula', '{Quantidade} * 2'),
+    col('c3', 'Total se maior', 'formula', 'SE({Total}>1;{Total};0)'),
+  ]);
+  assert(calc(bSe, bSe.columns[2], { values: { c1: 10 }, subitems: [] }) === '20',
+    'SE lendo a mesma coluna-formula na condicao e no ramo devolveu 0 (BUG-01).');
+  assert(calc(bSe, bSe.columns[2], { values: { c1: 0 }, subitems: [] }) === '0',
+    'SE lendo a mesma coluna-formula deveria cair no ramo falso.');
+
+  // 8c. Dependencia em diamante: dois ramos irmaos que compartilham a MESMA
+  // coluna-formula na base. G=10, D=20, E=11 -> F=31.
+  const bDiamante = board([
+    col('c1', 'Q', 'number'),
+    col('c2', 'G', 'formula', '{Q} * 10'),
+    col('c3', 'D', 'formula', '{G} * 2'),
+    col('c4', 'E', 'formula', '{G} + 1'),
+    col('c5', 'F', 'formula', '{D} + {E}'),
+  ]);
+  assert(calc(bDiamante, bDiamante.columns[4], { values: { c1: 1 }, subitems: [] }) === '31',
+    'Dependencia em diamante zerou o segundo ramo (BUG-01).');
+}
+
+// 9. A protecao contra referencia CIRCULAR nao pode ter sido perdida com o
+// backtracking do item 8: A depende de B que depende de A tem de terminar, sem
+// estouro de pilha e sem laco infinito. A coluna continua marcada durante a sua
+// propria subarvore, entao o ciclo e cortado - a referencia de volta resolve
+// como 0 e o calculo termina.
+{
+  const b = board([
+    col('c1', 'A', 'formula', '{B} + 1'),
+    col('c2', 'B', 'formula', '{A} + 1'),
+  ]);
+  const resultado = calc(b, b.columns[0], { values: {}, subitems: [] });
+  assert(resultado === '2', `Ciclo A<->B deveria ser cortado e resolver como 2, veio "${resultado}".`);
+}
+
+console.log('Atlas: motor de formulas (linha, subitens, coluna inteira e regressao aritmetica) aprovado.');
