@@ -15,7 +15,7 @@ window.__ATLAS_VERSION__ = '2.4.0 OFICIAL';
   // pre-cache. tests/static-audit.cjs falha se index.html e ATLAS_BUILD
   // divergirem, que era a causa dos casos de "publiquei mas continua igual".
   // ---------------------------------------------------------------------------
-  const ATLAS_BUILD = '2.4.0-official';
+  const ATLAS_BUILD = '2.4.0-official-thumb-preview';
   window.__ATLAS_BUILD__ = ATLAS_BUILD;
 
   // Changelog exibido na tela de Inicio. Toda alteracao funcional ou correcao
@@ -26,6 +26,7 @@ window.__ATLAS_VERSION__ = '2.4.0 OFICIAL';
       version: 'V2.4.0 Oficial',
       date: '2026-08-20',
       notes: [
+        'Prévia privada de imagens: fotos do Drive passam a abrir dentro do Atlas sem depender de cookies do Google no navegador; a leitura continua restrita às pessoas com acesso ao quadro.',
         'Campos de arquivo podem controlar versões: ao editar a coluna, marque "Controlar versões" e cada envio novo passa a virar V1, V2, V3 em vez de outro anexo solto.',
         'O visualizador ganhou um painel de Histórico, com as versões do documento, download de qualquer uma delas e o botão "Adicionar versão".',
         'Cada versão aceita um rótulo livre (ex.: "revisão do cliente"), e a célula do quadro passa a mostrar a versão vigente.',
@@ -201,7 +202,19 @@ window.__ATLAS_VERSION__ = '2.4.0 OFICIAL';
   const SAVED_SEARCHES_KEY = 'atlas-v2-saved-searches';
   const BOOTSTRAP_CACHE_DB = 'atlas-v2-bootstrap-cache';
   const BOOTSTRAP_CACHE_STORE = 'snapshots';
-  const BOOTSTRAP_CACHE_VERSION = 1;
+  // v2 acrescentou o store de previas de imagem. Mesmo banco, outro store: a
+  // previa segura passa pelo Apps Script e tem cota, entao perder o cache a cada
+  // recarregamento (o Map em memoria fazia isso) queimava a cota de novo.
+  const IMAGE_PREVIEW_STORE = 'imagePreviews';
+  const BOOTSTRAP_CACHE_VERSION = 2;
+  // Teto do store: uma previa e a imagem INTEIRA em base64 (o conector nao
+  // redimensiona), entao sem poda o IndexedDB cresce sem limite.
+  const IMAGE_PREVIEW_CACHE_MAX = 300;
+  // O conector limita 'preview' a 20 chamadas por janela
+  // (atlasEnforceRateLimit_). Concorrencia baixa e recuo longo evitam gastar a
+  // cota inteira num quadro cheio de fotos e deixar o resto sem miniatura.
+  const IMAGE_PREVIEW_CONCURRENCY = 2;
+  const IMAGE_PREVIEW_COOLDOWN_MS = 90_000;
   const LOCAL_BACKUP_VERSION = 2;
   const LOCAL_BACKUP_MAX_CHARS = 3_200_000;
 
@@ -384,10 +397,15 @@ window.__ATLAS_VERSION__ = '2.4.0 OFICIAL';
     drag: null,
     horizontalDrag: null,
     suppressContextMenuUntil: 0,
-    resizeTimer: null,
-    imageViewer: null,
-    imageViewerGesture: null,
-    fieldMode: localStorage.getItem(FIELD_MODE_KEY) === null
+      resizeTimer: null,
+      imageViewer: null,
+      imageViewerGesture: null,
+      secureImagePreviews: new Map(),
+    // Fila da previa segura de imagem (ver enqueueSecureImagePreview).
+    imagePreviewQueue: [],
+    imagePreviewActive: 0,
+    imagePreviewBlockedUntil: 0,
+      fieldMode: localStorage.getItem(FIELD_MODE_KEY) === null
       ? window.innerWidth <= 820
       : localStorage.getItem(FIELD_MODE_KEY) === '1',
     calendarCursor: new Map(),
@@ -588,6 +606,10 @@ window.__ATLAS_VERSION__ = '2.4.0 OFICIAL';
         const database = request.result;
         if (!database.objectStoreNames.contains(BOOTSTRAP_CACHE_STORE)) {
           database.createObjectStore(BOOTSTRAP_CACHE_STORE, { keyPath: 'userId' });
+        }
+        if (!database.objectStoreNames.contains(IMAGE_PREVIEW_STORE)) {
+          const store = database.createObjectStore(IMAGE_PREVIEW_STORE, { keyPath: 'key' });
+          store.createIndex('savedAt', 'savedAt');
         }
       };
       request.onsuccess = () => resolve(request.result);
@@ -6824,6 +6846,70 @@ window.__ATLAS_VERSION__ = '2.4.0 OFICIAL';
     return null;
   }
 
+  // Avaliador aritmetico pequeno e deterministico. Formula antes usava
+  // Function(), que o CSP correto do Atlas bloqueia no navegador. Alem de
+  // recuperar os calculos, este parser aceita somente numeros, operadores e
+  // parenteses - sem executar codigo vindo de uma coluna.
+  function evaluateFormulaArithmetic(expression) {
+    const compact = String(expression || '').replace(/\s+/g, '');
+    if (!compact || !/^[\d+\-*/().%]+$/.test(compact)) return undefined;
+
+    const tokens = compact.match(/\d+(?:\.\d+)?|[()+\-*/%]/g);
+    if (!tokens || tokens.join('') !== compact) return undefined;
+
+    const INVALID = Symbol('formula-invalida');
+    let cursor = 0;
+    const peek = () => tokens[cursor];
+    const take = () => tokens[cursor++];
+
+    const parseFactor = () => {
+      const token = peek();
+      if (token === '+' || token === '-') {
+        take();
+        const value = parseFactor();
+        if (value === INVALID) return INVALID;
+        return token === '-' ? -value : value;
+      }
+      if (token === '(') {
+        take();
+        const value = parseExpression();
+        if (value === INVALID || take() !== ')') return INVALID;
+        return value;
+      }
+      if (!/^\d/.test(token || '')) return INVALID;
+      take();
+      const value = Number(token);
+      return Number.isFinite(value) ? value : INVALID;
+    };
+
+    const parseTerm = () => {
+      let value = parseFactor();
+      while (value !== INVALID && ['*', '/', '%'].includes(peek())) {
+        const operator = take();
+        const right = parseFactor();
+        if (right === INVALID) return INVALID;
+        if (operator === '*') value *= right;
+        if (operator === '/') value /= right;
+        if (operator === '%') value %= right;
+      }
+      return value;
+    };
+
+    const parseExpression = () => {
+      let value = parseTerm();
+      while (value !== INVALID && ['+', '-'].includes(peek())) {
+        const operator = take();
+        const right = parseTerm();
+        if (right === INVALID) return INVALID;
+        value = operator === '+' ? value + right : value - right;
+      }
+      return value;
+    };
+
+    const result = parseExpression();
+    return result === INVALID || cursor !== tokens.length ? undefined : result;
+  }
+
   function evaluateFormulaNumeric(boardEntry, columnEntry, itemEntry, resolveValue, visited) {
     let expression = String(columnEntry.formula || '').trim();
     if (!expression) return null;
@@ -6869,12 +6955,7 @@ window.__ATLAS_VERSION__ = '2.4.0 OFICIAL';
         const numeric = typeof value === 'boolean' ? (value ? 1 : 0) : Number(String(value ?? '').replace(',', '.'));
         return Number.isFinite(numeric) ? String(numeric) : '0';
       });
-      if (!/^[\d+\-*/().%\s]+$/.test(replaced)) return undefined;
-      try {
-        return Number(Function(`"use strict"; return (${replaced});`)());
-      } catch (_) {
-        return undefined;
-      }
+      return evaluateFormulaArithmetic(replaced);
     } finally {
       visited.delete(columnEntry.id);
     }
@@ -7038,7 +7119,11 @@ window.__ATLAS_VERSION__ = '2.4.0 OFICIAL';
       const images = normalizeImageEntries(value);
       const previews = images.slice(0, 3).map((entry, index) => {
         const source = imageElementAttributes(entry, 480);
-        return `<button type="button" data-action="open-attachment-viewer" data-item-id="${attr(itemEntry.id)}" data-column-id="${attr(columnEntry.id)}" data-image-index="${index}" title="Abrir ${attr(entry.name || `imagem ${index + 1}`)}"><img src="${attr(source.src)}" data-image-fallbacks="${attr(source.fallbacks)}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer"></button>`;
+        // data-preview-* alimenta a previa autenticada quando as URLs publicas
+        // do Google falharem (arquivo privado do setor). O loading="lazy" ja faz
+        // a preguica por viewport: imagem fora da tela nem tenta carregar, entao
+        // nao entra na fila e nao gasta cota do conector.
+        return `<button type="button" data-action="open-attachment-viewer" data-item-id="${attr(itemEntry.id)}" data-column-id="${attr(columnEntry.id)}" data-image-index="${index}" title="Abrir ${attr(entry.name || `imagem ${index + 1}`)}"><img src="${attr(source.src)}" data-image-fallbacks="${attr(source.fallbacks)}" data-preview-file-id="${attr(entry.fileId || '')}" data-preview-connection-id="${attr(entry.storageConnectionId || '')}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer"></button>`;
       }).join('');
       const remaining = images.length > 3 ? `<button class="atlas-v2-image-more" type="button" data-action="open-attachment-viewer" data-item-id="${attr(itemEntry.id)}" data-column-id="${attr(columnEntry.id)}" data-image-index="3" title="Ver todas">+${images.length - 3}</button>` : '';
       return `<div class="atlas-v2-image-cell">${previews}${remaining}${runtime.fieldMode && window.innerWidth <= 820 ? `<label title="Fotografar agora"><i data-lucide="camera"></i><input type="file" accept="image/*" capture="environment" ${common} hidden></label>` : ''}<label title="Adicionar imagens da galeria"><i data-lucide="plus"></i><input type="file" accept="image/*" multiple ${common} hidden></label>${images.length ? `<span>${images.length}</span>` : '<small>Imagens</small>'}</div>`;
@@ -7101,6 +7186,157 @@ window.__ATLAS_VERSION__ = '2.4.0 OFICIAL';
     };
   }
 
+  // ---------------------------------------------------------------------------
+  // Previa segura de imagem
+  //
+  // As URLs publicas do Google (drive.google.com/thumbnail, lh3.googleusercontent,
+  // uc?export=view) NAO servem arquivo privado: respondem HTTP 200 com a pagina
+  // HTML de login. O navegador tenta decodificar HTML como imagem, falha, e a
+  // miniatura fica quebrada. E o conector nunca compartilha arquivo publicamente,
+  // de proposito - entao para arquivo de setor essas URLs nunca vao funcionar.
+  //
+  // O caminho que funciona e a acao 'preview' do conector, que devolve os bytes
+  // em base64 autenticando pelo Apps Script. Isto aqui e a fila que alimenta
+  // TANTO a miniatura do quadro quanto o visualizador.
+  //
+  // Custa caro (imagem inteira em base64, cota de 20 por janela no conector),
+  // por isso: so dispara depois que as URLs publicas falharam, cache em memoria
+  // e em IndexedDB, concorrencia 2, e recuo longo quando a cota estoura.
+  // ---------------------------------------------------------------------------
+
+  async function readImagePreviewCache(key) {
+    const database = await openBootstrapCache();
+    if (!database || !database.objectStoreNames.contains(IMAGE_PREVIEW_STORE)) { database?.close(); return null; }
+    return new Promise((resolve) => {
+      const transaction = database.transaction(IMAGE_PREVIEW_STORE, 'readonly');
+      const request = transaction.objectStore(IMAGE_PREVIEW_STORE).get(key);
+      request.onsuccess = () => resolve(request.result?.dataUrl || null);
+      request.onerror = () => resolve(null);
+      transaction.oncomplete = () => database.close();
+      transaction.onerror = () => database.close();
+    });
+  }
+
+  async function writeImagePreviewCache(key, dataUrl) {
+    if (!key || !dataUrl) return;
+    const database = await openBootstrapCache();
+    if (!database || !database.objectStoreNames.contains(IMAGE_PREVIEW_STORE)) { database?.close(); return; }
+    await new Promise((resolve) => {
+      const transaction = database.transaction(IMAGE_PREVIEW_STORE, 'readwrite');
+      const store = transaction.objectStore(IMAGE_PREVIEW_STORE);
+      store.put({ key, dataUrl, savedAt: new Date().toISOString() });
+      // Poda as mais antigas assim que passar do teto - o store guarda imagem
+      // inteira, entao deixar crescer estoura a cota de disco do navegador.
+      const counter = store.count();
+      counter.onsuccess = () => {
+        const excedente = Number(counter.result || 0) - IMAGE_PREVIEW_CACHE_MAX;
+        if (excedente <= 0) return;
+        let apagadas = 0;
+        store.index('savedAt').openCursor().onsuccess = (event) => {
+          const cursor = event.target.result;
+          if (!cursor || apagadas >= excedente) return;
+          cursor.delete();
+          apagadas += 1;
+          cursor.continue();
+        };
+      };
+      transaction.oncomplete = resolve;
+      transaction.onerror = resolve;
+      transaction.onabort = resolve;
+    });
+    database.close();
+  }
+
+  // Resolve a conexao de um anexo. Anexo antigo pode ter storage_connection_id
+  // nulo (em producao a maioria esta assim), e nesse caso o unico palpite
+  // possivel e a conexao do contexto do quadro.
+  function connectionForAttachmentPreview(connectionId) {
+    return storageConnection(connectionId) || storageForContext(findBoard());
+  }
+
+  function securePreviewCacheKey(connection, fileId) {
+    return `${connection?.id || 'sem-conexao'}:${fileId}`;
+  }
+
+  // Busca (ou reaproveita) a previa de um arquivo. Uma promessa por chave, para
+  // duas celulas do mesmo arquivo nao gerarem duas chamadas ao conector.
+  function securePreviewDataUrl(connection, boardId, fileId) {
+    const cacheKey = securePreviewCacheKey(connection, fileId);
+    const cached = runtime.secureImagePreviews.get(cacheKey);
+    if (cached) return cached;
+    const pending = (async () => {
+      const doDisco = await readImagePreviewCache(cacheKey);
+      if (doDisco) return doDisco;
+      const authToken = await currentAuthAccessToken();
+      const result = await postJsonWithUploadProgress(connection.appScriptUrl, {
+        action: 'preview',
+        rootFolderId: connection.folderId,
+        connectionId: connection.id,
+        boardId: boardId || null,
+        authToken,
+        fileId,
+      });
+      if (!result?.success) throw new Error(result?.error || 'A prévia privada não foi disponibilizada.');
+      const dataUrl = secureImagePreviewDataUrl(result);
+      if (!dataUrl) throw new Error('O conector não retornou uma imagem válida para prévia.');
+      void writeImagePreviewCache(cacheKey, dataUrl);
+      return dataUrl;
+    })();
+    runtime.secureImagePreviews.set(cacheKey, pending);
+    pending.catch(() => runtime.secureImagePreviews.delete(cacheKey));
+    return pending;
+  }
+
+  // A mensagem de cota do conector vem como texto; sem esta deteccao a fila
+  // continuaria batendo no limite e nenhuma miniatura apareceria.
+  function ehErroDeCota(error) {
+    return /limite|limit|cota|quota|muitas|too many|rate/i.test(String(error?.message || error || ''));
+  }
+
+  function pumpImagePreviewQueue() {
+    const fila = runtime.imagePreviewQueue;
+    while (fila.length && runtime.imagePreviewActive < IMAGE_PREVIEW_CONCURRENCY) {
+      if (Date.now() < runtime.imagePreviewBlockedUntil) return;
+      const job = fila.shift();
+      if (!job?.image?.isConnected) continue;
+      runtime.imagePreviewActive += 1;
+      securePreviewDataUrl(job.connection, job.boardId, job.fileId)
+        .then((dataUrl) => {
+          if (!job.image.isConnected) return;
+          job.image.src = dataUrl;
+          job.image.dataset.imageFallbacks = '[]';
+          job.image.classList.remove('is-broken');
+          job.image.closest('.atlas-v2-image-stage, .atlas-v2-image-cell')?.classList.remove('has-broken-image');
+        })
+        .catch((error) => {
+          if (ehErroDeCota(error)) {
+            // Cota estourada: parar de pedir por um tempo e descartar a fila.
+            // Insistir so gastaria a janela seguinte tambem.
+            runtime.imagePreviewBlockedUntil = Date.now() + IMAGE_PREVIEW_COOLDOWN_MS;
+            runtime.imagePreviewQueue.length = 0;
+          }
+          console.warn('Atlas V2: prévia privada indisponível.', error);
+        })
+        .finally(() => {
+          runtime.imagePreviewActive -= 1;
+          pumpImagePreviewQueue();
+        });
+    }
+  }
+
+  // Enfileira a previa de uma imagem que ja falhou em todas as URLs publicas.
+  function enqueueSecureImagePreview(image) {
+    const fileId = String(image?.dataset?.previewFileId || '').trim();
+    if (!fileId || image.dataset.previewRequested === '1') return false;
+    if (!runtime.authClient || !runtime.remoteMode) return false;
+    const connection = connectionForAttachmentPreview(image.dataset.previewConnectionId);
+    if (!connection?.appScriptUrl || !connection.folderId || connection.status === 'disabled') return false;
+    image.dataset.previewRequested = '1';
+    runtime.imagePreviewQueue.push({ image, fileId, connection, boardId: findBoard()?.board?.id || null });
+    pumpImagePreviewQueue();
+    return true;
+  }
+
   function handleImageLoadError(event) {
     const image = event.target;
     if (!(image instanceof HTMLImageElement) || !image.hasAttribute('data-image-fallbacks')) return;
@@ -7112,8 +7348,42 @@ window.__ATLAS_VERSION__ = '2.4.0 OFICIAL';
       image.src = next;
       return;
     }
+    // Esgotou o publico. Antes de desistir, tenta a previa autenticada pelo
+    // conector - e o unico caminho que funciona para arquivo privado do setor.
+    if (enqueueSecureImagePreview(image)) return;
     image.classList.add('is-broken');
     image.closest('.atlas-v2-image-stage, .atlas-v2-image-cell')?.classList.add('has-broken-image');
+  }
+
+  function secureImagePreviewDataUrl(result) {
+    const base64 = String(result?.base64 || '').trim();
+    const mimeType = String(result?.mimeType || 'image/jpeg').toLowerCase();
+    if (!base64 || !/^image\/[a-z0-9.+-]+$/i.test(mimeType)) return '';
+    return `data:${mimeType};base64,${base64}`;
+  }
+
+  async function hydrateSecureViewerImage(data) {
+    const entry = data?.entry;
+    const fileId = String(entry?.fileId || '').trim();
+    const connection = storageConnection(entry?.storageConnectionId) || storageForContext(data?.context);
+    if (!fileId || entry?.dataUrl || !connection?.appScriptUrl || !connection?.folderId) return;
+
+    try {
+      // Mesma fonte usada pela miniatura do quadro: uma promessa por arquivo,
+      // cache em memoria e em IndexedDB. Abrir o visualizador depois de ver a
+      // miniatura nao gera uma segunda chamada ao conector.
+      const dataUrl = await securePreviewDataUrl(connection, data.context?.board?.id, fileId);
+      const current = viewerAttachment();
+      if (String(current?.entry?.fileId || '') !== fileId) return;
+      const image = document.querySelector('.atlas-v2-viewer-image[data-viewer-file-id]');
+      if (!image) return;
+      image.src = dataUrl;
+      image.dataset.imageFallbacks = '[]';
+      image.classList.remove('is-broken');
+      image.closest('.atlas-v2-image-stage')?.classList.remove('has-broken-image');
+    } catch (error) {
+      console.warn('Atlas V2: prévia privada indisponível.', error);
+    }
   }
 
   function parseImageValue(value) {
@@ -7910,7 +8180,7 @@ window.__ATLAS_VERSION__ = '2.4.0 OFICIAL';
     const imageLike = column?.type === 'image' || mimeType.startsWith('image/') || /\.(png|jpe?g|webp|gif|bmp)$/i.test(entry?.name || '');
     if (imageLike) {
       const source = imageElementAttributes(entry, 2200);
-      return `<img class="atlas-v2-viewer-image" src="${attr(source.src)}" data-image-fallbacks="${attr(source.fallbacks)}" alt="${attr(entry.name || 'Imagem anexada')}" decoding="async" referrerpolicy="no-referrer">`;
+      return `<img class="atlas-v2-viewer-image" src="${attr(source.src)}" data-viewer-file-id="${attr(entry.fileId || '')}" data-image-fallbacks="${attr(source.fallbacks)}" alt="${attr(entry.name || 'Imagem anexada')}" decoding="async" referrerpolicy="no-referrer">`;
     }
     const previewUrl = entry?.dataUrl
       || (entry?.fileId ? `https://drive.google.com/file/d/${encodeURIComponent(entry.fileId)}/preview` : entry?.viewUrl || entry?.url || '');
@@ -7955,6 +8225,7 @@ window.__ATLAS_VERSION__ = '2.4.0 OFICIAL';
     root.innerHTML = `<div class="atlas-v2-overlay atlas-v2-image-overlay" data-action="overlay-backdrop"><section class="atlas-v2-image-viewer ${historyPanel ? 'has-history' : ''}" role="dialog" aria-modal="true" aria-label="Visualizador de anexos"><header><span><strong>${escapeHtml(entry.name || 'Arquivo')}</strong><small>${runtime.imageViewer.index + 1} de ${attachments.length}</small></span>${imageControls}<button type="button" data-action="close-overlay" title="Fechar"><i data-lucide="x"></i></button></header><div class="atlas-v2-image-stage atlas-v2-attachment-stage ${imageLike ? 'is-image' : ''}"><button type="button" data-action="viewer-previous" title="Arquivo anterior" ${attachments.length < 2 ? 'disabled' : ''}><i data-lucide="chevron-left"></i></button><div class="atlas-v2-viewer-media">${attachmentPreviewMarkup(entry, column)}</div><button type="button" data-action="viewer-next" title="Próximo arquivo" ${attachments.length < 2 ? 'disabled' : ''}><i data-lucide="chevron-right"></i></button></div><footer><span>${entry.localOnly ? 'Prévia local · será enviada quando houver um Drive validado' : 'Armazenado no Google Drive do setor'}</span>${entry.viewUrl ? `<a class="atlas-v2-button atlas-v2-button-quiet" href="${attr(entry.viewUrl)}" target="_blank" rel="noopener noreferrer"><i data-lucide="external-link"></i>Abrir original</a>` : ''}${hasPermission('edit', data.context) ? '<button class="atlas-v2-button atlas-v2-button-danger" type="button" data-action="viewer-remove"><i data-lucide="trash-2"></i>Remover</button>' : ''}</footer></section>${historyPanel}</div>`;
     applyImageViewerTransform();
     refreshIcons(root);
+    if (imageLike) void hydrateSecureViewerImage(data);
   }
 
   // Link de download direto do Drive. O viewUrl abre a pagina de preview do
