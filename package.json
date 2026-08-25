@@ -1,8 +1,8 @@
 {
   "name": "atlas-core",
-  "version": "2.4.0",
+  "version": "2.4.1",
   "private": true,
-  "description": "Atlas V2.4.0 Oficial - arquivos versionados, conversas, fluxos entre módulos e fórmulas de coluna",
+  "description": "Atlas V2.4.1 Oficial - arquivos versionados, conversas, fluxos entre módulos e fórmulas de coluna",
   "scripts": {
     "check:js": "node --check js/v2.js",
     "test": "node tests/static-audit.cjs",
@@ -14,9 +14,16 @@
     "test:chat": "node tests/chat-elemento-unit.cjs",
     "test:drive-versoes": "node tests/drive-versao-automatica-unit.cjs",
     "test:views": "node tests/board-views-unit.cjs",
+    "test:storage-types": "node tests/storage-types-unit.cjs",
+    "test:image-preview": "node tests/image-preview-fallback-unit.cjs",
     "test:move": "node tests/cross-module-move-unit.cjs",
+    "test:medium-low": "node tests/medium-low-audit-unit.cjs",
+    "test:delete-confirmation": "node tests/delete-confirmation-unit.cjs",
+    "test:storage-race": "node tests/storage-connection-race-repro.cjs",
+    "test:hardening-batch": "node tests/hardening-batch-2026-08-24-unit.cjs",
     "test:audit-fixes": "node tests/audit-fixes-unit.cjs",
-    "test:review-fixes": "node tests/review-round2-unit.cjs"
+    "test:review-fixes": "node tests/review-round2-unit.cjs",
+    "test:all": "node tests/static-audit.cjs && node tests/drive-connector-unit.cjs && node tests/formula-engine-unit.cjs && node tests/realtime-flush-unit.cjs && node tests/attachment-versions-unit.cjs && node tests/chat-elemento-unit.cjs && node tests/drive-versao-automatica-unit.cjs && node tests/board-views-unit.cjs && node tests/storage-types-unit.cjs && node tests/image-preview-fallback-unit.cjs && node tests/cross-module-move-unit.cjs && node tests/medium-low-audit-unit.cjs && node tests/delete-confirmation-unit.cjs && node tests/storage-connection-race-repro.cjs && node tests/hardening-batch-2026-08-24-unit.cjs && node tests/audit-fixes-unit.cjs && node tests/review-round2-unit.cjs"
   },
   "atlasVendorManifest": "assets/vendor/VENDOR_MANIFEST.json"
 }

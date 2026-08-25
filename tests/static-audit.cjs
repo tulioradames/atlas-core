@@ -26,12 +26,12 @@ const deployScript = read('deploy-cloudflare.ps1');
 const auditFixes = read('supabase/ATLAS_V2_4_0_AUDITORIA_CORRECOES.sql');
 const manual = read('manual.html');
 
-assert(app.includes("window.__ATLAS_VERSION__ = '2.4.0 OFICIAL'"), 'Versao interna divergente.');
-assert(config.includes('V2.4.0 Oficial'), 'Config sem a versao do pacote.');
+assert(app.includes("window.__ATLAS_VERSION__ = '2.4.1 OFICIAL'"), 'Versao interna divergente.');
+assert(config.includes('V2.4.1 Oficial'), 'Config sem a versao do pacote.');
 assert(index.includes('id="atlas-v2-footer-version"'), 'Rodape sem o elemento de versao (agora preenchido via JS a partir do config.js).');
-assert(index.includes('V2.4.0 Oficial</span>'), 'Rodape HTML ainda exibe uma versao antiga antes do JavaScript carregar.');
+assert(index.includes('V2.4.1 Oficial</span>'), 'Rodape HTML ainda exibe uma versao antiga antes do JavaScript carregar.');
 assert(index.includes('name="robots" content="noindex, nofollow, noarchive"'), 'Ambiente de homologacao sem bloqueio de indexacao.');
-assert(manifest.includes('2.4.0'), 'Manifest sem a versao do pacote.');
+assert(manifest.includes('2.4.1'), 'Manifest sem a versao do pacote.');
 
 const configVersionMatch = config.match(/VERSION:\s*"([^"]+)"/);
 const changelogVersionMatch = app.match(/const CHANGELOG = \[\s*\{\s*version:\s*'([^']+)'/s);
@@ -341,6 +341,7 @@ assert(
     'ATLAS_V2_3_1_AUTOMACAO_DUPLICADA.sql',
     'ATLAS_V2_3_1_MOVE_GROUP_ORDEM.sql',
     'ATLAS_V2_3_3_REALTIME_BROADCAST_PRIVADO.sql',
+    'ATLAS_V2_4_0_ARMAZENAMENTO_TIPO.sql',
     'ATLAS_V2_4_0_AUDITORIA_CORRECOES.sql',
     'ATLAS_V2_4_0_AUDITORIA_VALIDAR.sql',
     'ATLAS_V2_4_0_CHAT_ELEMENTO.sql',
@@ -348,6 +349,9 @@ assert(
     'ATLAS_V2_4_0_MOVIMENTACAO_ENTRE_MODULOS.sql',
     'ATLAS_V2_4_0_VERSAO_AUTOMATICA_DRIVE.sql',
     'ATLAS_V2_4_0_VERSOES_ANEXO.sql',
+    'ATLAS_V2_4_1_CHAT_ATTACHMENT_ALLOWLIST.sql',
+    'ATLAS_V2_4_1_MIGRATION_TRACKING.sql',
+    'ATLAS_V2_4_1_SECURE_DRIVE_PREVIEW.sql',
   ]),
   'A pasta supabase contem SQL antigo ou inesperado.'
 );
@@ -365,4 +369,44 @@ localReferences.forEach((entry) => {
   assert(fs.existsSync(path.join(root, entry)), `Referencia local ausente: ${entry}`);
 });
 
-console.log('Atlas V2.4.0: auditoria estatica aprovada.');
+// ---------------------------------------------------------------------------
+// V2.4.1 - conexoes de armazenamento com tipo (drive/local), previa segura de
+// imagens, allowlist de anexos de chat no proprio storage e rastreio de
+// migrations.
+// ---------------------------------------------------------------------------
+const storageTipo = read('supabase/ATLAS_V2_4_0_ARMAZENAMENTO_TIPO.sql');
+assert(storageTipo.includes("add column if not exists tipo text not null default 'drive'"), 'Coluna de tipo de armazenamento ausente da migracao.');
+assert(storageTipo.includes('atlas_v2_storage_connections_tipo_check'), 'Restricao de valores do tipo de armazenamento ausente.');
+assert(app.includes('const STORAGE_TYPES') && app.includes("local: {"), 'Tipo de armazenamento "servidor local" ausente do frontend.');
+assert(app.includes('function normalizeLocalConnectorUrl') && app.includes('169.254') && app.includes('fe80:'), 'Bloqueio de endereco link-local ausente do conector local.');
+
+const correcoesRevisao2 = read('supabase/ATLAS_V2_4_0_CORRECOES_REVISAO_2.sql');
+assert(
+  /insert into public\.atlas_v2_storage_connections\([^)]*,tipo\)/.test(correcoesRevisao2) || correcoesRevisao2.includes('tipo=coalesce(excluded.tipo'),
+  'A RPC atomica de sincronizacao ainda nao preserva o tipo de armazenamento.',
+);
+
+const securePreview = read('supabase/ATLAS_V2_4_1_SECURE_DRIVE_PREVIEW.sql');
+assert(securePreview.includes('atlas_v2_can_storage_action'), 'Permissao de previa segura de imagem ausente do SQL.');
+assert(connector.includes("preview: 'preview'") && connector.includes("if (action === 'preview') return atlasPreview_"), 'Conector sem a acao de previa despachada.');
+assert(connector.includes('function atlasPreview_'), 'Conector sem a rotina de previa segura de imagem.');
+
+const chatAllowlist = read('supabase/ATLAS_V2_4_1_CHAT_ATTACHMENT_ALLOWLIST.sql');
+assert(chatAllowlist.includes('atlas_v2_chat_attachment_guard'), 'Allowlist de anexos do chat ausente do SQL publicado.');
+assert(app.includes('chatAttachmentTypeAllowed'), 'Validacao de formato de anexo do chat ausente do frontend.');
+
+const migrationTracking = read('supabase/ATLAS_V2_4_1_MIGRATION_TRACKING.sql');
+assert(migrationTracking.includes('atlas_v2_schema_migrations'), 'Tabela de rastreio de migrations ausente do SQL publicado.');
+
+assert(app.includes('clearLocalUserData'), 'Limpeza do backup local no logout ausente.');
+assert(app.includes('openDeleteGroupModal'), 'Confirmacao de exclusao de grupo ausente.');
+assert(css.includes('.atlas-v2-empty-view > div > button.atlas-v2-button'), 'Botao de criar grupo na tela vazia sem estilo.');
+assert(manifest.includes('V2.4.1 Oficial'), 'Manifest sem o nome de versao publico.');
+
+const v2Redirect = read('v2.html');
+assert(v2Redirect.includes('assets/redirect-v2.js'), 'Redirecionamento de v2.html ainda usa script inline bloqueavel por CSP.');
+assert(fs.existsSync(path.join(root, 'assets/redirect-v2.js')), 'Script externo de redirecionamento ausente.');
+
+assert(manual.includes('15 MB') && !manual.includes('8 MB'), 'Manual desatualizado sobre o limite de importacao de planilha.');
+
+console.log('Atlas V2.4.1: auditoria estatica aprovada.');

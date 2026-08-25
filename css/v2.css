@@ -1934,6 +1934,11 @@ body.atlas-v2-board-loading .atlas-v2-board-content {
   margin: 0 auto 12px;
 }
 
+.atlas-v2-empty-view > div > button.atlas-v2-button {
+  display: flex;
+  margin: 14px auto 0;
+}
+
 .atlas-v2-footer {
   position: relative;
   z-index: 10;

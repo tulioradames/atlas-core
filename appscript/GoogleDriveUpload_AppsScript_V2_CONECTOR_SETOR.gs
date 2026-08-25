@@ -1,5 +1,5 @@
 /**
- * Atlas V2.4.0 - Conector seguro de Google Drive por setor.
+ * Atlas V2.4.1 - Conector seguro de Google Drive por setor.
  *
  * Instale uma copia na conta Google de cada setor. O token de sessao recebido
  * do Atlas e validado no Supabase antes de testar, enviar, organizar, restaurar
@@ -86,7 +86,7 @@ function doPost(e) {
     const requestedAction = String(body.action || 'upload').toLowerCase();
     const canonicalActions = { trash: 'delete', undodelete: 'restore' };
     const action = canonicalActions[requestedAction] || requestedAction;
-    if (['testconnection', 'upload', 'cleanup', 'delete', 'restore', 'move',
+    if (['testconnection', 'preview', 'upload', 'cleanup', 'delete', 'restore', 'move',
          'driveprobe', 'drivepin', 'driverevision', 'driveupdate'].indexOf(action) < 0) throw new Error('Acao nao suportada pelo conector.');
 
     // Permissao derivada da acao canonica. A RPC atlas_v2_can_storage_action
@@ -107,6 +107,7 @@ function doPost(e) {
     //     baixando a versao vigente pelo link direto do Drive.
     const actionPermissions = {
       testconnection: 'testconnection',
+      preview: 'preview',
       upload: 'upload',
       cleanup: 'upload',
       delete: 'delete_secure',
@@ -126,6 +127,7 @@ function doPost(e) {
     if (action === 'restore') return atlasRestore_(body, rootFolder);
     if (action === 'move') return atlasMoveFiles_(body, rootFolder);
     if (action === 'cleanup') return atlasCleanupUpload_(body, rootFolder);
+    if (action === 'preview') return atlasPreview_(body, rootFolder);
     // ATENCAO: o upload e o fallback SEM `if` la embaixo. Toda acao nova tem de
     // ser despachada ANTES desta linha - senao ela cai no upload e morre com
     // "Arquivo sem conteudo base64.", que nao diz nada sobre o problema real.
@@ -141,6 +143,35 @@ function doPost(e) {
       connectorVersion: ATLAS_CONNECTOR_VERSION
     });
   }
+}
+
+// Retorna a imagem em base64 somente para a sessao autenticada que ja possui
+// acesso ao arquivo no Atlas. Evita depender de cookies de terceiros do
+// Google Drive dentro do visualizador do Atlas.
+function atlasPreview_(body, rootFolder) {
+  const fileId = String(body.fileId || '').trim();
+  if (!fileId) throw new Error('Arquivo de imagem nao informado.');
+  atlasEnforceRateLimit_(body, 'preview', 20);
+  atlasRequireAuthorizedFile_(body, fileId, 'view');
+
+  let file;
+  try { file = DriveApp.getFileById(fileId); } catch (_) { file = null; }
+  if (!file || !atlasFileBelongsToRoot_(file, rootFolder.getId())) {
+    throw new Error('Arquivo nao encontrado na pasta autorizada deste setor.');
+  }
+  const mimeType = String(file.getMimeType() || '').toLowerCase();
+  if (mimeType.indexOf('image/') !== 0) throw new Error('Este arquivo nao e uma imagem.');
+  const bytes = file.getBlob().getBytes();
+  if (bytes.length > 8 * 1024 * 1024) {
+    throw new Error('A imagem e grande demais para a previa segura. Use Abrir original.');
+  }
+  return atlasJson_({
+    success: true,
+    fileId: fileId,
+    mimeType: mimeType,
+    base64: Utilities.base64Encode(bytes),
+    connectorVersion: ATLAS_CONNECTOR_VERSION
+  });
 }
 
 function atlasResolveEnvironment_(token) {

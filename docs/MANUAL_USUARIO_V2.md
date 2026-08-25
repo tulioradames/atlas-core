@@ -1,7 +1,7 @@
-# Manual de uso - Atlas V2.1.1
+# Manual de uso - Atlas V2.1.0
 
 **Criador:** Túlio Radamés
-**Aplicação:** Atlas V2.1.1 Desenvolvimento
+**Aplicação:** Atlas V2.1.0 Oficial
 
 A versão navegável deste manual está em [`manual.html`](../manual.html).
 
@@ -163,26 +163,6 @@ Em **Administração > Sistema**, execute o diagnóstico para conferir:
 - conexão e latência dos Drives setoriais.
 
 Cada setor pode usar uma conta Google e pasta raiz diferentes.
-
-### Organização dos arquivos
-
-Nos quadros com visualização **Obras**, novos anexos seguem:
-
-`Cidade > Setor (POP/CEO/CTO) > Registro > Campo`
-
-Para reorganizar anexos antigos:
-
-1. Acesse **Administração > Sistema**.
-2. Localize a conexão do Drive.
-3. Clique no ícone **Organizar arquivos existentes**.
-4. Confira a quantidade localizada e confirme.
-
-O Atlas move os arquivos sem reenviá-los ou duplicá-los. Pastas antigas que
-ficarem vazias são preservadas para não apagar pastas criadas manualmente.
-
-Quando um item, obra, grupo ou coluna vai para a lixeira do Atlas, seus anexos
-também vão para a lixeira do Drive. Restaurar pelo Atlas restaura os arquivos no
-Drive.
 
 ## 15. Offline e instalação
 

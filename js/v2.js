@@ -1,7 +1,7 @@
 (function atlasV2Official() {
   'use strict';
 
-window.__ATLAS_VERSION__ = '2.4.0 OFICIAL';
+window.__ATLAS_VERSION__ = '2.4.1 OFICIAL';
 
   // ---------------------------------------------------------------------------
   // VERSAO DOS ARQUIVOS WEB - fonte unica.
@@ -15,7 +15,7 @@ window.__ATLAS_VERSION__ = '2.4.0 OFICIAL';
   // pre-cache. tests/static-audit.cjs falha se index.html e ATLAS_BUILD
   // divergirem, que era a causa dos casos de "publiquei mas continua igual".
   // ---------------------------------------------------------------------------
-  const ATLAS_BUILD = '2.4.0-official-thumb-preview';
+  const ATLAS_BUILD = '2.4.1-secure-preview-official';
   window.__ATLAS_BUILD__ = ATLAS_BUILD;
 
   // Changelog exibido na tela de Inicio. Toda alteracao funcional ou correcao
@@ -23,9 +23,23 @@ window.__ATLAS_VERSION__ = '2.4.0 OFICIAL';
   // Ordem: mais recente primeiro.
   const CHANGELOG = [
     {
-      version: 'V2.4.0 Oficial',
-      date: '2026-08-20',
+      version: 'V2.4.1 Oficial',
+      date: '2026-08-24',
       notes: [
+        'Pipeline: nova tabela interna de rastreio de migrations (registra, por ambiente, quais dos arquivos supabase/*.sql já foram aplicados e com qual hash) - facilita conferir se homologação e produção estão com o mesmo schema aplicado.',
+        'Segurança: conexão de armazenamento do tipo "servidor local" não aceita mais apontar para o endereço link-local (169.254.0.0/16 e fe80::/10) usado pelos serviços de metadados de nuvem (AWS/GCP/Azure); IPs privados de rede interna (10.x, 172.16-31.x, 192.168.x) e localhost continuam permitidos normalmente.',
+        'Segurança: anexos de conversa (chat) agora seguem a mesma allowlist de formato dos anexos do elemento (documentos, planilhas, imagens, PDF, compactados) - antes só existia validação no aplicativo, agora também é aplicada diretamente no armazenamento, então nem uma chamada direta à API consegue subir HTML, SVG ou script disfarçado de anexo.',
+        'Segurança: sair da conta (logout) agora limpa o backup local salvo no navegador (localStorage e cache offline), evitando que dados do usuário anterior fiquem visíveis para a próxima pessoa que logar no mesmo computador.',
+        'Excluir um grupo agora pede confirmação antes de mover para a lixeira - mesma proteção que já existia para obra e itens/subitens.',
+        'Quadro sem nenhum grupo ganhou um botão "Criar grupo" na própria tela vazia, em vez de só uma mensagem informativa.',
+        'Correção: ao testar uma conexão de armazenamento duas vezes seguidas (ex.: corrigir a URL e testar de novo antes da primeira resposta chegar), uma resposta antiga e atrasada podia sobrescrever o resultado do teste mais recente e marcar a conexão como validada mesmo depois de um teste mais novo ter falhado.',
+        'Correção: excluir uma obra ou itens/subitens, quando o Supabase não confirmava os dados mais recentes antes de mandar para a lixeira, continuava a exclusão silenciosamente (só um aviso no console); agora aborta e avisa a pessoa, sem risco de perder dado da lixeira.',
+        'Correção: a prévia privada de imagens (introduzida nesta versão) tinha a permissão liberada no banco, mas o conector do Google Drive não implementava a ação que ela chama - a funcionalidade não funcionava. Os 3 conectores setoriais agora implementam a prévia, restrita a quem pode ver o quadro dono do arquivo.',
+        'Correção: uma conexão de armazenamento do tipo "servidor local" (Fase 0.1 de self-hosting) sincronizada pelo lote normal de sincronização perdia esse tipo silenciosamente e voltava a ser tratada como Google Drive; a sincronização agora preserva o tipo da conexão.',
+        'Correção: a Agenda em modo mobile exibia texto corrompido no cabeçalho (mês anterior, mês atual e próximo mês).',
+        'Correção: excluir um item, ou vários itens selecionados de uma vez, agora pede confirmação antes de mover para a lixeira - mesma proteção que já existia para excluir uma Obra.',
+        'Correção: o redirecionamento de v2.html (URL antiga do Atlas) deixou de ser bloqueado silenciosamente pela política de segurança do navegador.',
+        'Manual: limite de importação corrigido para refletir o valor real (15 MB) e rótulo de versão do manual alinhado ao rodapé do aplicativo.',
         'Prévia privada de imagens: fotos do Drive passam a abrir dentro do Atlas sem depender de cookies do Google no navegador; a leitura continua restrita às pessoas com acesso ao quadro.',
         'Campos de arquivo podem controlar versões: ao editar a coluna, marque "Controlar versões" e cada envio novo passa a virar V1, V2, V3 em vez de outro anexo solto.',
         'O visualizador ganhou um painel de Histórico, com as versões do documento, download de qualquer uma delas e o botão "Adicionar versão".',
@@ -270,6 +284,40 @@ window.__ATLAS_VERSION__ = '2.4.0 OFICIAL';
   // quando nao existe linha correspondente em atlas_v2_views (ver BUG-03).
   const DEFAULT_BOARD_VIEWS = ['table', 'kanban', 'gantt'];
 
+  // Tipos de armazenamento de uma conexao de setor.
+  //   drive -> Google Drive via Web App do Apps Script (o unico que existia)
+  //   local -> servidor proprio que implementa o MESMO contrato de 9 acoes
+  //            (testconnection, upload, delete, restore, move, driveprobe,
+  //            drivepin, driverevision, driveupdate)
+  // Conexao legada, sem tipo gravado, conta como 'drive'. E esse padrao que
+  // garante que nada muda de comportamento para as conexoes que ja existem.
+  const STORAGE_TYPES = {
+    drive: {
+      label: 'Google Drive (Apps Script)',
+      rootLabel: 'Link da pasta raiz',
+      rootPlaceholder: 'https://drive.google.com/drive/folders/...',
+      urlLabel: 'Web App do Apps Script',
+      urlPlaceholder: 'https://script.google.com/macros/s/.../exec',
+    },
+    local: {
+      label: 'Servidor local',
+      rootLabel: 'Pasta raiz do setor no servidor',
+      rootPlaceholder: 'documentacao/rede-geral',
+      urlLabel: 'Endpoint do conector local',
+      urlPlaceholder: 'https://atlas.suaempresa.com.br/conector',
+    },
+  };
+  const DEFAULT_STORAGE_TYPE = 'drive';
+
+  function storageType(connection) {
+    const tipo = String(connection?.type || '').trim().toLowerCase();
+    return STORAGE_TYPES[tipo] ? tipo : DEFAULT_STORAGE_TYPE;
+  }
+
+  function storageIsDrive(connection) {
+    return storageType(connection) === 'drive';
+  }
+
   const COLUMN_TYPES = {
     text: { label: 'Texto', icon: 'type', width: 190 },
     number: { label: 'Número', icon: 'hash', width: 130 },
@@ -397,15 +445,15 @@ window.__ATLAS_VERSION__ = '2.4.0 OFICIAL';
     drag: null,
     horizontalDrag: null,
     suppressContextMenuUntil: 0,
-      resizeTimer: null,
-      imageViewer: null,
-      imageViewerGesture: null,
-      secureImagePreviews: new Map(),
+    resizeTimer: null,
+    imageViewer: null,
+    imageViewerGesture: null,
+    secureImagePreviews: new Map(),
     // Fila da previa segura de imagem (ver enqueueSecureImagePreview).
     imagePreviewQueue: [],
     imagePreviewActive: 0,
     imagePreviewBlockedUntil: 0,
-      fieldMode: localStorage.getItem(FIELD_MODE_KEY) === null
+    fieldMode: localStorage.getItem(FIELD_MODE_KEY) === null
       ? window.innerWidth <= 820
       : localStorage.getItem(FIELD_MODE_KEY) === '1',
     calendarCursor: new Map(),
@@ -584,6 +632,29 @@ window.__ATLAS_VERSION__ = '2.4.0 OFICIAL';
         return false;
       }
     }
+  }
+
+  // Logout nunca limpava isto: o backup local (dados completos dos quadros)
+  // e o cache de previa de imagem no IndexedDB continuavam no dispositivo
+  // mesmo depois de sair explicitamente - problema real em computador
+  // compartilhado, onde o proximo usuario a fazer login veria por um
+  // instante (ou em modo offline) os dados do usuario anterior. Preferencias
+  // de interface (tema, sidebar, zoom do Gantt) NAO sao limpas aqui de
+  // proposito: nao sao dado de negocio e resetar isso a cada logout seria
+  // uma regressao de UX sem ganho de privacidade real.
+  async function clearLocalUserData() {
+    try { localStorage.removeItem(STORAGE_KEY); } catch (_) {}
+    try { localStorage.removeItem(`${STORAGE_KEY}-recuperacao`); } catch (_) {}
+    try {
+      if (window.indexedDB?.deleteDatabase) {
+        await new Promise((resolve) => {
+          const request = window.indexedDB.deleteDatabase(BOOTSTRAP_CACHE_DB);
+          request.onsuccess = () => resolve();
+          request.onerror = () => resolve();
+          request.onblocked = () => resolve();
+        });
+      }
+    } catch (_) {}
   }
 
   function scheduleLocalBackupCompaction(delay = 220) {
@@ -1310,6 +1381,9 @@ window.__ATLAS_VERSION__ = '2.4.0 OFICIAL';
       folderId: entry.folder_id,
       folderUrl: entry.folder_url,
       appScriptUrl: entry.app_script_url,
+      // Coluna `tipo` chegou na Fase 0.1 do self-hosting. Linha antiga (ou banco
+      // ainda sem a coluna) volta undefined e storageType() resolve como 'drive'.
+      type: storageType({ type: entry.tipo }),
       status: compatibleLegacy && entry.status === 'inherited' ? 'connected' : entry.status,
       connectorVersion,
       verifiedAt: entry.verificado_em || null,
@@ -2694,6 +2768,7 @@ window.__ATLAS_VERSION__ = '2.4.0 OFICIAL';
       id: entry.id, nome: entry.name || 'Drive do setor', setor: entry.sector || 'Geral', account_email: entry.accountEmail || '',
       folder_id: entry.folderId || '', folder_url: entry.folderUrl || '', app_script_url: entry.appScriptUrl || '',
       status: entry.status || 'pending', connector_version: entry.connectorVersion || '', verificado_em: entry.verifiedAt || null,
+      tipo: storageType(entry),
     }));
     (data.workspaces || []).forEach((workspace, workspaceOrder) => {
       rows.atlas_v2_workspaces.push({ id: workspace.id, nome: workspace.name, descricao: workspace.description || '', cor: workspace.color || '#0f6cbd', tipo_acesso: workspace.access || 'main', ativo: workspace.active !== false, ordem: workspace.order ?? workspaceOrder, storage_connection_id: workspace.storageConnectionId || null });
@@ -3612,6 +3687,26 @@ window.__ATLAS_VERSION__ = '2.4.0 OFICIAL';
     return encontrados;
   }
 
+  // Mesma allowlist do conector do Drive (atlasValidateFile_ em
+  // GoogleDriveUpload_AppsScript_V2_CONECTOR_*.gs), reaplicada aqui porque o
+  // bucket do chat (atlas-chat) e um caminho de upload separado que nunca
+  // teve essa checagem: sem ela, dava para anexar .html/.svg na conversa e
+  // abrir em outra aba a partir do link assinado do proprio Supabase.
+  const CHAT_ATTACHMENT_ALLOWED_EXTENSIONS = [
+    'pdf', 'doc', 'docx', 'xls', 'xlsx', 'csv', 'txt', 'odt', 'ods', 'ppt', 'pptx',
+    'jpg', 'jpeg', 'png', 'gif', 'webp', 'heic', 'heif', 'bmp', 'tif', 'tiff',
+    'mp4', 'mov', 'zip', 'rar', '7z', 'kmz', 'kml', 'dwg', 'dxf',
+  ];
+  const CHAT_ATTACHMENT_FORBIDDEN_MIME_TYPES = ['text/html', 'application/javascript', 'text/javascript', 'image/svg+xml'];
+
+  function chatAttachmentTypeAllowed(arquivo) {
+    const nome = String(arquivo?.name || '');
+    const extensao = nome.includes('.') ? nome.split('.').pop().toLowerCase() : '';
+    if (!CHAT_ATTACHMENT_ALLOWED_EXTENSIONS.includes(extensao)) return false;
+    if (CHAT_ATTACHMENT_FORBIDDEN_MIME_TYPES.includes(String(arquivo?.type || '').toLowerCase())) return false;
+    return true;
+  }
+
   async function submitItemChat(form) {
     const itemId = runtime.chatItemId;
     if (!itemId) return;
@@ -3623,6 +3718,8 @@ window.__ATLAS_VERSION__ = '2.4.0 OFICIAL';
     if (arquivos.length > 5) return toast('Envie no máximo 5 arquivos por mensagem.', true);
     if (arquivos.some((arquivo) => arquivo.size > 10 * 1024 * 1024)) return toast('Cada anexo pode ter no máximo 10 MB.', true);
     if (arquivos.reduce((total, arquivo) => total + arquivo.size, 0) > 25 * 1024 * 1024) return toast('Os anexos da mensagem podem somar no máximo 25 MB.', true);
+    const arquivoNaoPermitido = arquivos.find((arquivo) => !chatAttachmentTypeAllowed(arquivo));
+    if (arquivoNaoPermitido) return toast(`Formato não permitido: ${arquivoNaoPermitido.name}. O bucket do chat aceita os mesmos formatos dos anexos do elemento (documentos, planilhas, imagens, PDF, compactados) - nunca HTML, SVG ou script.`, true);
     const botao = form.querySelector('button[type="submit"]');
     if (botao) botao.disabled = true;
     const uploadedChatPaths = [];
@@ -3890,7 +3987,7 @@ window.__ATLAS_VERSION__ = '2.4.0 OFICIAL';
   }
 
   function authVersion() {
-    return window.ATNX_CONFIG?.V2_VERSION || 'V2.4.0 Oficial';
+    return window.ATNX_CONFIG?.V2_VERSION || 'V2.4.1 Oficial';
   }
 
   function authFeatureList() {
@@ -4440,6 +4537,7 @@ window.__ATLAS_VERSION__ = '2.4.0 OFICIAL';
       try { await runtime.authClient?.auth?.signOut(); } catch (_) {}
       runtime.authSession = null;
       runtime.authProfile = null;
+      await clearLocalUserData();
       closeOverlay();
       renderAuth('login');
     }
@@ -4622,31 +4720,85 @@ window.__ATLAS_VERSION__ = '2.4.0 OFICIAL';
     return match?.[1] || '';
   }
 
+  // Raiz do setor num conector local: identificador livre, mas confinado. Recusa
+  // '..', segmento vazio e caractere fora da lista branca, para o Atlas nao
+  // conseguir nem PEDIR um caminho fora da pasta do setor. A defesa real fica no
+  // servidor (equivalente ao atlasFileBelongsToRoot_ do Apps Script) - isto aqui
+  // so evita gravar uma raiz invalida.
+  function normalizeLocalStorageRoot(value) {
+    const input = String(value || '').trim().replace(/^\/+|\/+$/g, '');
+    if (!input || input.length > 200) return '';
+    if (input.split('/').some((part) => !part || part === '.' || part === '..')) return '';
+    return /^[A-Za-z0-9._\-/]+$/.test(input) ? input : '';
+  }
+
+  function normalizeStorageRoot(value, type) {
+    return storageType({ type }) === 'local' ? normalizeLocalStorageRoot(value) : extractDriveFolderId(value);
+  }
+
   function normalizeAppsScriptUrl(value) {
     const input = String(value || '').trim();
     if (!/^https:\/\/script\.google\.com\/macros\/s\/[a-zA-Z0-9_-]+\/exec(?:\?.*)?$/i.test(input)) return '';
     return input.split('?')[0];
   }
 
+  // Endpoint de um conector local. Exige HTTPS porque o Atlas e servido por HTTPS
+  // e o navegador BLOQUEIA requisicao para http:// por mixed content - a unica
+  // excecao e localhost/127.0.0.1, que o navegador trata como origem confiavel
+  // (serve para desenvolver antes de existir certificado). Credencial embutida na
+  // URL e recusada: ela iria no corpo de toda requisicao e vazaria no banco.
+  function normalizeLocalConnectorUrl(value) {
+    const input = String(value || '').trim();
+    if (!input) return '';
+    let url;
+    try { url = new URL(input); } catch (_) { return ''; }
+    const ehLocalhost = ['localhost', '127.0.0.1', '[::1]', '::1'].includes(url.hostname);
+    if (url.protocol !== 'https:' && !(url.protocol === 'http:' && ehLocalhost)) return '';
+    if (url.username || url.password) return '';
+    // Bloqueia o endereco link-local (169.254.0.0/16 e fe80::/10): e a faixa
+    // usada pelos servicos de metadados de nuvem (ex.: 169.254.169.254 na
+    // AWS/GCP/Azure). Nenhum conector de armazenamento legitimo precisa
+    // apontar para ai - permitir isso deixaria uma porta aberta para SSRF se
+    // um admin for enganado a colar essa URL num "servidor local".
+    if (/^169\.254\.\d{1,3}\.\d{1,3}$/.test(url.hostname) || /^\[?fe80:/i.test(url.hostname)) return '';
+    return `${url.origin}${url.pathname.replace(/\/+$/, '')}`;
+  }
+
+  function normalizeConnectorUrl(value, type) {
+    return storageType({ type }) === 'local' ? normalizeLocalConnectorUrl(value) : normalizeAppsScriptUrl(value);
+  }
+
   function storageDraftFromForm(form) {
     const data = new FormData(form);
+    const type = storageType({ type: data.get('driveType') });
     return {
+      type,
       name: String(data.get('driveName') || '').trim(),
       sector: String(data.get('driveSector') || data.get('name') || '').trim(),
       accountEmail: String(data.get('driveEmail') || '').trim(),
       folderUrl: String(data.get('driveFolderUrl') || '').trim(),
-      folderId: extractDriveFolderId(data.get('driveFolderUrl')),
-      appScriptUrl: normalizeAppsScriptUrl(data.get('driveAppScriptUrl')),
+      folderId: normalizeStorageRoot(data.get('driveFolderUrl'), type),
+      appScriptUrl: normalizeConnectorUrl(data.get('driveAppScriptUrl'), type),
       connectorVersion: String(data.get('connectorVersion') || '').trim(),
     };
   }
 
   function validateStorageDraft(draft, ignoreId = '') {
+    const ehLocal = storageType(draft) === 'local';
     if (!draft.name) return 'Informe um nome para a conexão.';
     if (!draft.sector) return 'Informe o setor responsável.';
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(draft.accountEmail)) return 'Informe o e-mail da conta Google do setor.';
-    if (!draft.folderId) return 'Informe um link válido de pasta do Google Drive.';
-    if (!draft.appScriptUrl) return 'Informe a URL /exec válida do Apps Script implantado nessa conta.';
+    // Conta Google só existe no Drive; conector local não tem conta associada.
+    if (!ehLocal && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(draft.accountEmail)) return 'Informe o e-mail da conta Google do setor.';
+    if (!draft.folderId) {
+      return ehLocal
+        ? 'Informe a pasta raiz do setor no servidor (ex.: documentacao/rede-geral). Sem "..", sem caminho absoluto.'
+        : 'Informe um link válido de pasta do Google Drive.';
+    }
+    if (!draft.appScriptUrl) {
+      return ehLocal
+        ? 'Informe a URL HTTPS do conector no servidor local. http:// só é aceito em localhost, e a URL não pode conter usuário ou senha.'
+        : 'Informe a URL /exec válida do Apps Script implantado nessa conta.';
+    }
     const duplicate = (runtime.data.storageConnections || []).find((entry) => entry.id !== ignoreId && entry.folderId && entry.folderId === draft.folderId);
     if (duplicate) return `Esta pasta já pertence à conexão ${duplicate.name}.`;
     return '';
@@ -5118,22 +5270,56 @@ window.__ATLAS_VERSION__ = '2.4.0 OFICIAL';
   function openStorageConnectionModal(connectionId = '') {
     if (!requirePermission('admin', null, 'configurar o Google Drive')) return;
     const connection = storageConnection(connectionId);
+    const tipo = storageType(connection);
+    const preset = STORAGE_TYPES[tipo];
+    // A raiz do Drive e um LINK; a do servidor local e um caminho relativo. Por
+    // isso o campo nao pode ser type="url" fixo, senao o navegador recusa
+    // "documentacao/rede-geral" antes do nosso proprio validador rodar.
+    const rootValue = connection?.folderUrl
+      || (connection?.folderId ? (tipo === 'local' ? connection.folderId : `https://drive.google.com/drive/folders/${connection.folderId}`) : '');
     openModal({
-      title: connection ? 'Configurar Drive setorial' : 'Nova conexão de Drive',
-      subtitle: 'Use uma implantação do conector universal na conta Google responsável pelo setor.',
+      title: connection ? 'Configurar armazenamento do setor' : 'Nova conexão de armazenamento',
+      subtitle: 'Google Drive via Apps Script, ou um servidor próprio que implemente o mesmo contrato do conector.',
       body: `<form id="atlas-v2-storage-form" class="atlas-v2-form-grid">
         <input type="hidden" name="connectionId" value="${attr(connection?.id || '')}">
         <input type="hidden" name="driveVerified" value="${connection?.status === 'connected' ? '1' : '0'}">
         <input type="hidden" name="connectorVersion" value="${attr(connection?.connectorVersion || '')}">
+        <label class="atlas-v2-field is-wide"><span>Tipo de armazenamento</span><select name="driveType">${Object.entries(STORAGE_TYPES).map(([key, value]) => `<option value="${key}" ${key === tipo ? 'selected' : ''}>${escapeHtml(value.label)}</option>`).join('')}</select></label>
         <label class="atlas-v2-field"><span>Nome da conexão</span><input name="driveName" required maxlength="70" value="${attr(connection?.name || '')}" placeholder="Ex.: Drive do PMO"></label>
         <label class="atlas-v2-field"><span>Setor responsável</span><input name="driveSector" required maxlength="70" value="${attr(connection?.sector || '')}" placeholder="Ex.: PMO"></label>
-        <label class="atlas-v2-field is-wide"><span>Conta Google do setor</span><input name="driveEmail" type="email" required value="${attr(connection?.accountEmail || '')}" placeholder="setor@empresa.com"></label>
-        <label class="atlas-v2-field is-wide"><span>Link da pasta raiz</span><input name="driveFolderUrl" type="url" required value="${attr(connection?.folderUrl || (connection?.folderId ? `https://drive.google.com/drive/folders/${connection.folderId}` : ''))}" placeholder="https://drive.google.com/drive/folders/..."></label>
-        <label class="atlas-v2-field is-wide"><span>Web App do Apps Script</span><input name="driveAppScriptUrl" type="url" required value="${attr(connection?.appScriptUrl || '')}" placeholder="https://script.google.com/macros/s/.../exec"></label>
+        <label class="atlas-v2-field is-wide" data-storage-field="email" ${tipo === 'local' ? 'hidden' : ''}><span>Conta Google do setor</span><input name="driveEmail" type="email" ${tipo === 'local' ? '' : 'required'} value="${attr(connection?.accountEmail || '')}" placeholder="setor@empresa.com"></label>
+        <label class="atlas-v2-field is-wide"><span data-storage-label="root">${escapeHtml(preset.rootLabel)}</span><input name="driveFolderUrl" required value="${attr(rootValue)}" placeholder="${attr(preset.rootPlaceholder)}"></label>
+        <label class="atlas-v2-field is-wide"><span data-storage-label="url">${escapeHtml(preset.urlLabel)}</span><input name="driveAppScriptUrl" type="url" required value="${attr(connection?.appScriptUrl || '')}" placeholder="${attr(preset.urlPlaceholder)}"></label>
         <div class="atlas-v2-storage-test is-wide"><button class="atlas-v2-button atlas-v2-button-quiet" type="button" data-action="test-admin-storage"><i data-lucide="plug-zap"></i>Testar conexão</button><span id="atlas-v2-admin-storage-status">${connection?.status === 'connected' ? 'Conexão validada. Teste novamente se alterar algum dado.' : 'O teste confirma a conta, o conector e a permissão de escrita.'}</span></div>
       </form>`,
       actions: '<button class="atlas-v2-button atlas-v2-button-quiet" type="button" data-action="close-overlay">Cancelar</button><button class="atlas-v2-button atlas-v2-button-primary" type="submit" form="atlas-v2-storage-form"><i data-lucide="save"></i>Salvar conexão</button>',
     });
+  }
+
+  // Reaplica rotulo, dica e obrigatoriedade dos campos do formulario de conexao
+  // conforme o tipo escolhido. Serve para os dois formularios que existem (o do
+  // Admin e o do assistente de criacao), por isso trabalha sobre o form recebido
+  // e nao sobre ids fixos.
+  function applyStorageTypeToForm(form) {
+    if (!form) return;
+    const tipo = storageType({ type: form.elements?.driveType?.value });
+    const preset = STORAGE_TYPES[tipo];
+    const rootLabel = form.querySelector('[data-storage-label="root"]');
+    const urlLabel = form.querySelector('[data-storage-label="url"]');
+    const rootInput = form.elements?.driveFolderUrl;
+    const urlInput = form.elements?.driveAppScriptUrl;
+    const emailField = form.querySelector('[data-storage-field="email"]');
+    if (rootLabel) rootLabel.textContent = preset.rootLabel;
+    if (urlLabel) urlLabel.textContent = preset.urlLabel;
+    if (rootInput) rootInput.placeholder = preset.rootPlaceholder;
+    if (urlInput) urlInput.placeholder = preset.urlPlaceholder;
+    if (emailField) {
+      // Conta Google nao se aplica ao conector local. Esconder sem tirar o
+      // `required` deixaria o formulario impossivel de enviar, sem dizer por que.
+      emailField.hidden = tipo === 'local';
+      const emailInput = form.elements?.driveEmail;
+      if (emailInput) emailInput.required = tipo !== 'local';
+    }
   }
 
   function setAdminStorageStatus(message, state = '') {
@@ -5161,6 +5347,12 @@ window.__ATLAS_VERSION__ = '2.4.0 OFICIAL';
   async function testAdminStorageConnection() {
     const form = document.getElementById('atlas-v2-storage-form');
     if (!form) return;
+    // Cada chamada tem sua propria "vez" (requestToken). Se o usuario clicar
+    // em testar de novo antes desta terminar, a resposta desta chamada -
+    // mesmo que chegue depois - e descartada: sem isso, um teste antigo e
+    // lento podia sobrescrever driveVerified de volta para "1" depois que um
+    // teste mais recente ja tinha marcado a conexao como invalida.
+    const requestToken = (form._atlasStorageTestToken = (form._atlasStorageTestToken || 0) + 1);
     const connectionId = String(form.elements.connectionId.value || '');
     const draft = storageDraftFromForm(form);
     const error = validateStorageDraft(draft, connectionId);
@@ -5170,6 +5362,7 @@ window.__ATLAS_VERSION__ = '2.4.0 OFICIAL';
     const started = performance.now();
     try {
       const result = await testStorageEndpoint(draft.appScriptUrl, draft.folderId, storageModule(draft));
+      if (form._atlasStorageTestToken !== requestToken) return;
       form.elements.driveVerified.value = '1';
       form.elements.connectorVersion.value = String(result.connectorVersion || result.version || '').trim();
       const connection = storageConnection(connectionId);
@@ -5180,6 +5373,7 @@ window.__ATLAS_VERSION__ = '2.4.0 OFICIAL';
       recordStorageTest(connectionId, draft.name, 'success', Math.round(performance.now() - started), result.folderName || 'Pasta validada para gravação.');
       setAdminStorageStatus(result.legacy ? 'Conector V1.4 compatível validado para este setor.' : `Conexão validada${result.folderName ? `: ${result.folderName}` : ''}.`, 'success');
     } catch (error) {
+      if (form._atlasStorageTestToken !== requestToken) return;
       recordStorageTest(connectionId, draft.name, 'error', Math.round(performance.now() - started), error.message || 'Falha ao validar a conexão.');
       setAdminStorageStatus(error.message || 'Falha ao validar a conexão.', 'error');
     }
@@ -6555,7 +6749,11 @@ window.__ATLAS_VERSION__ = '2.4.0 OFICIAL';
   }
 
   function renderEmptyBoard() {
-    return `<div class="atlas-v2-empty-view"><div><i data-lucide="table-properties"></i><strong>O quadro ainda não possui grupos</strong></div></div>`;
+    // Antes era so icone + frase - as demais telas vazias do app
+    // (Automacoes, Notificacoes) ja orientam o proximo passo com texto e
+    // botao; o quadro vazio, que e a tela que mais gente ve logo apos criar
+    // um quadro novo, ficava para tras nesse padrao.
+    return `<div class="atlas-v2-empty-view"><div><i data-lucide="table-properties"></i><strong>O quadro ainda não possui grupos</strong><span>Crie o primeiro grupo para começar a adicionar itens.</span><button class="atlas-v2-button atlas-v2-button-primary" type="button" data-action="add-group"><i data-lucide="plus"></i>Criar grupo</button></div></div>`;
   }
 
   function renderGroupTable(boardEntry, groupEntry, groupIndex = 0) {
@@ -9177,14 +9375,14 @@ window.__ATLAS_VERSION__ = '2.4.0 OFICIAL';
       .sort((a, b) => a.range.start - b.range.start || a.item.name.localeCompare(b.item.name, 'pt-BR'));
     return `<section class="atlas-v2-mobile-agenda">
       <header class="atlas-v2-mobile-view-head">
-        <div><small>AGENDA DO QUADRO</small><strong>${escapeHtml(month.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' }))}</strong><span>${rows.length} registro(s) neste mÃªs</span></div>
-        <div class="atlas-v2-calendar-controls"><button type="button" data-action="calendar-prev" title="MÃªs anterior"><i data-lucide="chevron-left"></i></button><button type="button" data-action="calendar-today">Hoje</button><button type="button" data-action="calendar-next" title="PrÃ³ximo mÃªs"><i data-lucide="chevron-right"></i></button></div>
+        <div><small>AGENDA DO QUADRO</small><strong>${escapeHtml(month.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' }))}</strong><span>${rows.length} registro(s) neste mês</span></div>
+        <div class="atlas-v2-calendar-controls"><button type="button" data-action="calendar-prev" title="Mês anterior"><i data-lucide="chevron-left"></i></button><button type="button" data-action="calendar-today">Hoje</button><button type="button" data-action="calendar-next" title="Próximo mês"><i data-lucide="chevron-right"></i></button></div>
       </header>
       <div class="atlas-v2-mobile-agenda-list">${rows.map((entry) => `<button type="button" data-action="calendar-open-item" data-item-id="${attr(entry.item.id)}" style="--event-color:${attr(entry.group.color || '#20d6f2')}">
         <span class="atlas-v2-mobile-agenda-date">${escapeHtml(formatTimelineCompact(entry.range))}</span>
         <span><strong>${escapeHtml(entry.item.name)}</strong><small>${escapeHtml(entry.parent?.name || entry.group.name)}</small></span>
         <i data-lucide="chevron-right"></i>
-      </button>`).join('') || '<div class="atlas-v2-empty-view"><div><i data-lucide="calendar-x"></i><strong>Nenhum registro neste mÃªs</strong></div></div>'}</div>
+      </button>`).join('') || '<div class="atlas-v2-empty-view"><div><i data-lucide="calendar-x"></i><strong>Nenhum registro neste mês</strong></div></div>'}</div>
     </section>`;
   }
 
@@ -9836,7 +10034,7 @@ window.__ATLAS_VERSION__ = '2.4.0 OFICIAL';
     // com os valores carregados antes de fotografar o item para a lixeira.
     if (runtime.remoteMode && runtime.authClient) {
       try { await hydrateBoardRemoteData(context.board.id, { itemIds: itemTreeIds(found.item, []) }); }
-      catch (error) { console.warn('Atlas V2: nao foi possivel confirmar os valores antes de excluir.', error); }
+      catch (error) { toast(`Não foi possível confirmar todos os dados antes de excluir: ${error.message || error}`, true); return; }
     }
     const workName = found.item.name;
     const index = found.collection.indexOf(found.item);
@@ -9919,6 +10117,24 @@ window.__ATLAS_VERSION__ = '2.4.0 OFICIAL';
     }
   }
 
+  function openDeleteItemsModal(itemIds = []) {
+    const context = findBoard();
+    if (!context || !itemIds.length) return;
+    const found = itemIds.map((itemId) => findItem(context.board, itemId)).filter(Boolean);
+    if (!found.length) return;
+    const subitemTotal = found.reduce((total, entry) => total + (entry.item.subitems?.length || 0), 0);
+    const single = found.length === 1;
+    const singleName = single ? found[0].item.name : '';
+    const parts = [];
+    if (subitemTotal) parts.push(`${subitemTotal} ${subitemTotal === 1 ? 'subitem acompanhará' : 'subitens acompanharão'} a exclusão`);
+    openModal({
+      title: single ? 'Excluir item' : `Excluir ${found.length} itens`,
+      subtitle: single ? singleName : `${found.length} itens selecionados`,
+      body: `<div class="atlas-v2-confirm-card"><i data-lucide="triangle-alert"></i><div><strong>${single ? 'O item será movido' : 'Os itens serão movidos'} para a lixeira.</strong><p>${parts.length ? escapeHtml(parts.join('; ')) + '.' : (single ? 'Este item ainda não possui subitens.' : 'Nenhum dos itens possui subitens.')}</p></div></div>`,
+      actions: `<button class="atlas-v2-button atlas-v2-button-quiet" type="button" data-action="close-overlay">Cancelar</button><button class="atlas-v2-button atlas-v2-button-danger" type="button" data-action="confirm-delete-items" data-item-ids="${attr(JSON.stringify(found.map((entry) => entry.item.id)))}"><i data-lucide="trash-2"></i>Mover para lixeira</button>`,
+    });
+  }
+
   async function deleteItems(itemIds) {
     const context = findBoard();
     if (!context) return;
@@ -9947,7 +10163,7 @@ window.__ATLAS_VERSION__ = '2.4.0 OFICIAL';
       });
       if (idsToHydrate.length) {
         try { await hydrateBoardRemoteData(context.board.id, { itemIds: idsToHydrate }); }
-        catch (error) { console.warn('Atlas V2: nao foi possivel confirmar os valores antes de excluir.', error); }
+        catch (error) { toast(`Não foi possível confirmar todos os dados antes de excluir: ${error.message || error}`, true); return; }
       }
     }
     const remoteDeleteIds = [];
@@ -10303,11 +10519,12 @@ window.__ATLAS_VERSION__ = '2.4.0 OFICIAL';
           </div>
           <label class="atlas-v2-field" data-storage-mode="existing"><span>Conexão disponível</span><select name="driveExistingId"><option value="">Selecione um Drive</option>${storageOptions}</select></label>
           <div class="atlas-v2-storage-new-fields" data-storage-mode="new">
+            <label class="atlas-v2-field is-wide"><span>Tipo de armazenamento</span><select name="driveType">${Object.entries(STORAGE_TYPES).map(([key, value]) => `<option value="${key}">${escapeHtml(value.label)}</option>`).join('')}</select></label>
             <label class="atlas-v2-field"><span>Nome da conexão</span><input name="driveName" maxlength="70" placeholder="Ex.: Drive do PMO"></label>
             <label class="atlas-v2-field"><span>Setor responsável</span><input name="driveSector" maxlength="70" placeholder="Ex.: PMO"></label>
-            <label class="atlas-v2-field"><span>Conta Google do setor</span><input name="driveEmail" type="email" placeholder="setor@empresa.com"></label>
-            <label class="atlas-v2-field is-wide"><span>Link da pasta raiz</span><input name="driveFolderUrl" type="url" placeholder="https://drive.google.com/drive/folders/..."></label>
-            <label class="atlas-v2-field is-wide"><span>Web App do Apps Script</span><input name="driveAppScriptUrl" type="url" placeholder="https://script.google.com/macros/s/.../exec"></label>
+            <label class="atlas-v2-field" data-storage-field="email"><span>Conta Google do setor</span><input name="driveEmail" type="email" placeholder="setor@empresa.com"></label>
+            <label class="atlas-v2-field is-wide"><span data-storage-label="root">${escapeHtml(STORAGE_TYPES[DEFAULT_STORAGE_TYPE].rootLabel)}</span><input name="driveFolderUrl" placeholder="${attr(STORAGE_TYPES[DEFAULT_STORAGE_TYPE].rootPlaceholder)}"></label>
+            <label class="atlas-v2-field is-wide"><span data-storage-label="url">${escapeHtml(STORAGE_TYPES[DEFAULT_STORAGE_TYPE].urlLabel)}</span><input name="driveAppScriptUrl" type="url" placeholder="${attr(STORAGE_TYPES[DEFAULT_STORAGE_TYPE].urlPlaceholder)}"></label>
             <input name="driveVerified" type="hidden" value="0">
             <input name="connectorVersion" type="hidden" value="">
             <div class="atlas-v2-storage-test is-wide"><button class="atlas-v2-button atlas-v2-button-quiet" type="button" data-action="test-create-storage"><i data-lucide="plug-zap"></i>Testar conexão</button><span id="atlas-v2-create-storage-status">O teste confirma o Apps Script e o acesso à pasta.</span></div>
@@ -10389,6 +10606,11 @@ window.__ATLAS_VERSION__ = '2.4.0 OFICIAL';
   async function testCreateStorageConnection() {
     const form = document.getElementById('atlas-v2-create-form');
     if (!form) return;
+    // Mesmo token de requisicao usado em testAdminStorageConnection: descarta
+    // a resposta desta chamada se um clique mais recente ja tiver comecado
+    // outro teste, evitando que um teste antigo e lento reative
+    // driveVerified depois que um teste mais novo ja tinha falhado.
+    const requestToken = (form._atlasStorageTestToken = (form._atlasStorageTestToken || 0) + 1);
     const draft = storageDraftFromForm(form);
     const error = validateStorageDraft(draft);
     form.elements.driveVerified.value = '0';
@@ -10399,10 +10621,12 @@ window.__ATLAS_VERSION__ = '2.4.0 OFICIAL';
     setStorageTestStatus('Testando acesso de escrita na pasta...', 'testing');
     try {
       const result = await testStorageEndpoint(draft.appScriptUrl, draft.folderId, storageModule(draft));
+      if (form._atlasStorageTestToken !== requestToken) return;
       form.elements.driveVerified.value = '1';
       form.elements.connectorVersion.value = String(result.connectorVersion || result.version || '').trim();
       setStorageTestStatus(result.legacy ? 'Conector V1.4 compatível validado para este setor.' : `Conexão validada${result.folderName ? `: ${result.folderName}` : ''}.`, 'success');
     } catch (error) {
+      if (form._atlasStorageTestToken !== requestToken) return;
       setStorageTestStatus(error.message || 'Falha ao validar a conexão.', 'error');
     }
   }
@@ -10818,6 +11042,27 @@ window.__ATLAS_VERSION__ = '2.4.0 OFICIAL';
       subtitle: 'Gerencie a estrutura deste grupo.',
       body: `<div class="atlas-v2-settings-list"><button class="atlas-v2-button atlas-v2-button-quiet" type="button" data-action="edit-group" data-group-id="${attr(groupId)}"><i data-lucide="pencil"></i>Editar nome e cor</button><button class="atlas-v2-button atlas-v2-button-quiet" type="button" data-action="duplicate-group" data-group-id="${attr(groupId)}"><i data-lucide="copy"></i>Duplicar grupo</button><button class="atlas-v2-button atlas-v2-button-danger" type="button" data-action="delete-group" data-group-id="${attr(groupId)}"><i data-lucide="trash-2"></i>Excluir grupo</button></div>`,
       actions: `<button class="atlas-v2-button atlas-v2-button-quiet" type="button" data-action="close-overlay">Fechar</button>`,
+    });
+  }
+
+  function openDeleteGroupModal(groupId) {
+    const context = findBoard();
+    const target = context?.board.groups.find((entry) => entry.id === groupId);
+    if (!context || !target) return;
+    if (context.board.groups.length <= 1) { toast('O último grupo do quadro não pode ser excluído', true); return; }
+    const itemCount = (target.items || []).length;
+    const subitemTotal = (target.items || []).reduce((total, entry) => total + (entry.subitems?.length || 0), 0);
+    const parts = [];
+    if (itemCount) parts.push(`${itemCount} ${itemCount === 1 ? 'item' : 'itens'} acompanhará${itemCount === 1 ? '' : 'ão'} o grupo`);
+    if (subitemTotal) parts.push(`${subitemTotal} ${subitemTotal === 1 ? 'subitem' : 'subitens'}`);
+    openModal({
+      title: 'Excluir grupo',
+      subtitle: target.name,
+      // Um grupo pode carregar muito mais dado do que uma obra sozinha - a
+      // confirmacao aqui precisa ser pelo menos tao clara quanto a de obra
+      // (openDeleteWorkModal), nunca mais fraca, dado o raio de impacto maior.
+      body: `<div class="atlas-v2-confirm-card"><i data-lucide="triangle-alert"></i><div><strong>O grupo inteiro será movido para a lixeira.</strong><p>${parts.length ? escapeHtml(parts.join(', ')) + '.' : 'Este grupo ainda não possui itens.'}</p></div></div>`,
+      actions: `<button class="atlas-v2-button atlas-v2-button-quiet" type="button" data-action="close-overlay">Cancelar</button><button class="atlas-v2-button atlas-v2-button-danger" type="button" data-action="confirm-delete-group" data-group-id="${attr(target.id)}"><i data-lucide="trash-2"></i>Mover para lixeira</button>`,
     });
   }
 
@@ -12221,7 +12466,7 @@ window.__ATLAS_VERSION__ = '2.4.0 OFICIAL';
     const protectedActions = {
       'add-item': 'create', 'add-item-to-group': 'create', 'add-subitem': 'create', 'add-work-element': 'create', 'duplicate-item': 'create', import: 'create',
       'bulk-move': 'edit', 'bulk-move-board': 'edit', 'item-move-board': 'edit', 'bulk-edit': 'edit', sort: 'edit', 'rename-work': 'edit',
-      'delete-item': 'delete', 'bulk-delete': 'delete', 'delete-work': 'delete', 'confirm-delete-work': 'delete',
+      'delete-item': 'delete', 'bulk-delete': 'delete', 'delete-work': 'delete', 'confirm-delete-work': 'delete', 'confirm-delete-items': 'delete', 'confirm-delete-group': 'delete',
       'add-group': 'configure', 'add-column': 'configure', 'group-menu': 'configure', 'edit-group': 'configure', 'duplicate-group': 'configure', 'delete-group': 'configure',
       'board-settings': 'configure', 'edit-column': 'configure', 'edit-status-colors': 'configure', 'move-column': 'configure', 'delete-column': 'configure', 'edit-workspace': 'configure', automations: 'configure', 'automation-new': 'configure', 'automation-edit': 'configure', 'automation-toggle': 'configure', 'automation-delete': 'configure', 'automation-confirm-delete': 'configure', 'automation-templates': 'configure', 'automation-use-template': 'configure', 'automation-run': 'configure', 'automation-history': 'configure',
     };
@@ -12355,10 +12600,12 @@ window.__ATLAS_VERSION__ = '2.4.0 OFICIAL';
       'group-menu': () => openGroupMenu(target.dataset.groupId),
       'edit-group': () => { const groupId = target.dataset.groupId; closeOverlay(); openGroupModal(false, groupId); },
       'duplicate-group': () => duplicateGroup(target.dataset.groupId),
-      'delete-group': () => deleteGroup(target.dataset.groupId),
+      'delete-group': () => openDeleteGroupModal(target.dataset.groupId),
+      'confirm-delete-group': () => { const groupId = target.dataset.groupId; closeOverlay(); void deleteGroup(groupId); },
       'duplicate-item': () => duplicateItem(target.dataset.itemId),
       'item-move-board': () => openCrossBoardMoveModal([target.dataset.itemId]),
-      'delete-item': () => deleteItems([target.dataset.itemId]),
+      'delete-item': () => openDeleteItemsModal([target.dataset.itemId]),
+      'confirm-delete-items': () => { const ids = JSON.parse(target.dataset.itemIds || '[]'); closeOverlay(); void deleteItems(ids); },
       'select-all-items': () => {
         const allIds = flatBoardItems(context.board).map((entry) => entry.item.id);
         const everySelected = allIds.length > 0 && allIds.every((itemId) => runtime.selectedItems.has(itemId));
@@ -12373,7 +12620,7 @@ window.__ATLAS_VERSION__ = '2.4.0 OFICIAL';
         if (destination) moveItems([...runtime.selectedItems], destination);
       },
       'bulk-move-board': () => openCrossBoardMoveModal([...runtime.selectedItems]),
-      'bulk-delete': () => deleteItems([...runtime.selectedItems]),
+      'bulk-delete': () => openDeleteItemsModal([...runtime.selectedItems]),
       'board-settings': openBoardSettings,
       'edit-column': () => { const columnId = target.dataset.columnId; closeOverlay(); openColumnModal(columnId); },
       'edit-status-colors': () => { const columnId = target.dataset.columnId; closeOverlay(); openStatusColorsModal(columnId); },
@@ -12482,8 +12729,11 @@ window.__ATLAS_VERSION__ = '2.4.0 OFICIAL';
       updateBulkEditorValue();
       return;
     }
-    if (target.matches('[name="driveName"], [name="driveSector"], [name="driveEmail"], [name="driveFolderUrl"], [name="driveAppScriptUrl"]')) {
+    if (target.matches('[name="driveType"], [name="driveName"], [name="driveSector"], [name="driveEmail"], [name="driveFolderUrl"], [name="driveAppScriptUrl"]')) {
       const form = target.closest('form');
+      // Trocar o tipo muda o significado dos dois campos seguintes (link do Drive
+      // vs caminho no servidor), entao rotulo, dica e obrigatoriedade acompanham.
+      if (target.name === 'driveType') applyStorageTypeToForm(form);
       if (form?.elements?.driveVerified) form.elements.driveVerified.value = '0';
       if (form?.id === 'atlas-v2-storage-form') setAdminStorageStatus('Dados alterados. Teste novamente a conexão.');
       else setStorageTestStatus('Dados alterados. Teste novamente a conexão.');

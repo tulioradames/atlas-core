@@ -217,10 +217,16 @@ begin
     raise exception 'O lote deve conter entre 1 e 25000 alteracoes.' using errcode='22023';
   end if;
 
-  insert into public.atlas_v2_storage_connections(id,nome,setor,account_email,folder_id,folder_url,app_script_url,status,connector_version,verificado_em)
+  -- "tipo" (drive/local, ATLAS_V2_4_0_ARMAZENAMENTO_TIPO.sql) precisa constar
+  -- aqui: sem ela, uma conexao do tipo 'local' sincronizada por este lote
+  -- perdia o tipo silenciosamente e voltava a ser tratada como 'drive' na
+  -- proxima leitura, mesmo com a coluna existindo na tabela. coalesce no
+  -- update evita apagar um tipo ja gravado quando o lote nao informa a coluna
+  -- (ex.: cliente antigo que ainda nao conhece o campo).
+  insert into public.atlas_v2_storage_connections(id,nome,setor,account_email,folder_id,folder_url,app_script_url,status,connector_version,verificado_em,tipo)
   select * from jsonb_to_recordset(coalesce(p_changes->'atlas_v2_storage_connections','[]'::jsonb))
-    as x(id uuid,nome text,setor text,account_email text,folder_id text,folder_url text,app_script_url text,status text,connector_version text,verificado_em timestamptz)
-  on conflict(id) do update set nome=excluded.nome,setor=excluded.setor,account_email=excluded.account_email,folder_id=excluded.folder_id,folder_url=excluded.folder_url,app_script_url=excluded.app_script_url,status=excluded.status,connector_version=excluded.connector_version,verificado_em=excluded.verificado_em,updated_at=now();
+    as x(id uuid,nome text,setor text,account_email text,folder_id text,folder_url text,app_script_url text,status text,connector_version text,verificado_em timestamptz,tipo text)
+  on conflict(id) do update set nome=excluded.nome,setor=excluded.setor,account_email=excluded.account_email,folder_id=excluded.folder_id,folder_url=excluded.folder_url,app_script_url=excluded.app_script_url,status=excluded.status,connector_version=excluded.connector_version,verificado_em=excluded.verificado_em,tipo=coalesce(excluded.tipo,public.atlas_v2_storage_connections.tipo),updated_at=now();
 
   insert into public.atlas_v2_workspaces(id,nome,descricao,cor,tipo_acesso,ativo,ordem,storage_connection_id)
   select * from jsonb_to_recordset(coalesce(p_changes->'atlas_v2_workspaces','[]'::jsonb))

@@ -81,9 +81,9 @@ try {
           authText: document.querySelector('#atlas-v2-auth-root')?.innerText || '',
           footerText: document.querySelector('#atlas-v2-footer-version')?.textContent || '',
         }));
-        if (publishedState.version !== '2.4.0 OFICIAL'
+        if (publishedState.version !== '2.4.1 OFICIAL'
           || publishedState.testApiExposed
-          || !publishedState.footerText.includes('V2.4.0 Oficial')
+          || !publishedState.footerText.includes('V2.4.1 Oficial')
           || !publishedState.authText.trim()) {
           throw new Error(`Publicacao remota inconsistente em ${viewport.name}: ${JSON.stringify(publishedState)}`);
         }
@@ -123,8 +123,8 @@ try {
         bodyText: document.body.innerText,
         width: document.documentElement.scrollWidth,
       }));
-      if (state.version !== '2.4.0 OFICIAL') throw new Error(`Versao incorreta em ${viewport.name}.`);
-      if (!state.bodyText.includes('V2.4.0 Oficial')) throw new Error(`Rodape ausente em ${viewport.name}.`);
+      if (state.version !== '2.4.1 OFICIAL') throw new Error(`Versao incorreta em ${viewport.name}.`);
+      if (!state.bodyText.includes('V2.4.1 Oficial')) throw new Error(`Rodape ausente em ${viewport.name}.`);
       if (state.width < viewport.width) throw new Error(`Layout invalido em ${viewport.name}.`);
 
       if (viewport.name === 'desktop') {
@@ -506,7 +506,7 @@ try {
       text: document.body.innerText,
       sections: document.querySelectorAll('section.section').length,
     }));
-    if (!manualState.title.includes('V2.4.0')) throw new Error('Título do manual desatualizado.');
+    if (!manualState.title.includes('V2.4.1')) throw new Error('Título do manual desatualizado.');
     if (!manualState.text.includes('Recursos da V2.1')) throw new Error('Novidades ausentes do manual.');
     if (manualState.sections < 10) throw new Error('Manual interativo incompleto.');
     await manual.screenshot({
@@ -515,7 +515,7 @@ try {
     });
     await manual.close();
     if (errors.length) throw new Error(errors.join('\n'));
-    console.log('Atlas V2.4.0: smoke visual aprovado.');
+    console.log('Atlas V2.4.1: smoke visual aprovado.');
   } finally {
     await browser.close();
   }

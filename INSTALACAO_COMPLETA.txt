@@ -1,40 +1,82 @@
-ATLAS V2.2.0 DESENVOLVIMENTO - EDICAO EM MASSA E IMPORTACAO UNIVERSAL
+ATLAS V2.4.1 OFICIAL - INSTALACAO E ATUALIZACAO
+
+ATUALIZAR UMA V2.4.0 EXISTENTE
+
+1. Faca backup da publicacao atual e do banco.
+2. Execute, nesta ordem, os arquivos SQL abaixo que ainda nao tiverem sido
+   aplicados na sua base:
+   supabase/ATLAS_V2_4_0_ARMAZENAMENTO_TIPO.sql
+   supabase/ATLAS_V2_4_0_CORRECOES_REVISAO_2.sql  (reaplique mesmo se ja
+     executada antes - esta versao reconhece o tipo de conexao de
+     armazenamento adicionado no passo anterior)
+   supabase/ATLAS_V2_4_1_MIGRATION_TRACKING.sql
+   supabase/ATLAS_V2_4_1_SECURE_DRIVE_PREVIEW.sql
+   supabase/ATLAS_V2_4_1_CHAT_ATTACHMENT_ALLOWLIST.sql
+3. Publique os arquivos deste pacote.
+4. Reimplante o conector (appscript/GoogleDriveUpload_AppsScript_V2_CONECTOR_SETOR.gs,
+   versao 2.5.0-versoes-drive) em cada conta setorial para habilitar a previa
+   privada de imagens.
+5. Feche as abas antigas, abra o Atlas novamente e pressione Ctrl + F5.
+6. Confirme no rodape: V2.4.1 Oficial.
 
 ATUALIZAR UMA V2.1.0 EXISTENTE
 
-1. Faça backup da publicação atual e do código do Apps Script.
+1. Faca backup da publicacao atual e do codigo do Apps Script.
 2. Publique os arquivos deste pacote.
-3. Em cada conta setorial, substitua todo o código pelo arquivo:
+3. Em cada conta setorial, substitua todo o codigo pelo arquivo:
    appscript/GoogleDriveUpload_AppsScript_V2_CONECTOR_SETOR.gs
 4. Recoloque no topo do conector os dados reais de Supabase e os IDs permitidos.
-5. Crie uma nova implantação do Web App.
+5. Crie uma nova implantacao do Web App.
 6. Atualize a URL /exec no Atlas se o Google gerar uma URL diferente.
-7. Em Administração > Sistema, teste e salve a conexão.
+7. Em Administracao > Sistema, teste e salve a conexao.
 8. Clique em Organizar arquivos existentes para migrar o acervo atual.
 9. Feche as abas antigas, abra o Atlas novamente e pressione Ctrl + F5.
-10. Confirme no rodapé: V2.2.0 Desenvolvimento.
+10. Confirme no rodape: V2.4.1 Oficial.
 
-BANCO DE DADOS
+BANCO DE DADOS - ORDEM COMPLETA (de uma V2.1.0 ate a V2.4.1)
 
-Execute uma vez:
-supabase/ATLAS_V2_2_0_APROVACAO_ADMIN.sql
+Execute, na ordem abaixo, todos os arquivos que ainda nao tiverem sido
+aplicados na sua base (os arquivos ja executados podem ser pulados, exceto
+onde indicado "reaplicar"):
 
-Esse ajuste remove a confirmacao por e-mail do fluxo do Atlas. Novos acessos
-continuam bloqueados ate um administrador clicar em Liberar.
+01. supabase/ATLAS_V2_2_0_APROVACAO_ADMIN.sql
+02. supabase/ATLAS_V2_2_0_CORRECOES_CRITICAS.sql
+03. supabase/ATLAS_V2_3_0_ACESSO_POR_OBRA.sql
+04. supabase/ATLAS_V2_3_1_AUTOMACAO_DUPLICADA.sql
+05. supabase/ATLAS_V2_3_1_MOVE_GROUP_ORDEM.sql
+06. supabase/ATLAS_V2_3_3_REALTIME_BROADCAST_PRIVADO.sql
+07. supabase/ATLAS_V2_4_0_VERSOES_ANEXO.sql
+08. supabase/ATLAS_V2_4_0_CHAT_ELEMENTO.sql
+09. supabase/ATLAS_V2_4_0_VERSAO_AUTOMATICA_DRIVE.sql
+10. supabase/ATLAS_V2_4_0_MOVIMENTACAO_ENTRE_MODULOS.sql
+11. supabase/ATLAS_V2_4_0_AUDITORIA_CORRECOES.sql
+12. supabase/ATLAS_V2_4_0_ARMAZENAMENTO_TIPO.sql
+13. supabase/ATLAS_V2_4_0_CORRECOES_REVISAO_2.sql  (reaplicar se ja executada
+    antes do passo 12 - a versao atual do arquivo depende da coluna criada
+    ali)
+14. supabase/ATLAS_V2_4_1_MIGRATION_TRACKING.sql
+15. supabase/ATLAS_V2_4_1_SECURE_DRIVE_PREVIEW.sql
+16. supabase/ATLAS_V2_4_1_CHAT_ATTACHMENT_ALLOWLIST.sql
 
-INSTALAÇÃO NOVA
+Os arquivos *_VALIDAR.sql e *_AUDITORIA_VALIDAR.sql sao somente consulta
+(nao alteram o schema); rode-os depois para conferir o resultado, se quiser.
+
+INSTALACAO NOVA
 
 1. Execute supabase/ATLAS_V2_1_0_SCHEMA_COMPLETO.sql.
-2. Execute supabase/ATLAS_V2_2_0_APROVACAO_ADMIN.sql.
+2. Execute, na ordem, todos os arquivos listados em "BANCO DE DADOS - ORDEM
+   COMPLETA" acima (01 a 16).
 3. Execute supabase/ATLAS_V2_1_0_VALIDAR.sql.
-4. Configure config/config.js com a URL e a chave publicável do Supabase.
+4. Configure config/config.js com a URL e a chave publicavel do Supabase.
 5. Configure o conector setorial descrito acima.
 6. Publique os arquivos do site.
 
 IMPORTANTE
 
-- Não execute o schema completo em uma base que já contém o Atlas.
+- Nao execute o schema completo (ATLAS_V2_1_0_SCHEMA_COMPLETO.sql) em uma
+  base que ja contem o Atlas.
 - Nunca coloque a chave service_role no site ou no Apps Script.
-- Os arquivos são movidos, sem duplicação.
-- Pastas antigas que ficarem vazias são preservadas.
-- Esta é uma versão de desenvolvimento para validação antes do lançamento oficial.
+- Os arquivos do Drive sao movidos, sem duplicacao.
+- Pastas antigas que ficarem vazias sao preservadas.
+- Detalhes completos da V2.4.0 e da V2.4.1 em docs/V2_4_0_DESENVOLVIMENTO.md
+  e docs/RELEASE_V2_4_1_OFICIAL.md.
