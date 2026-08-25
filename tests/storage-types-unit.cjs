@@ -86,8 +86,8 @@ const assert = (condition, message) => {
 
 // 4. Raiz do setor: link do Drive de um lado, caminho confinado do outro.
 {
-  assert(normalizeStorageRoot('https://drive.google.com/drive/folders/1aPZG3yTDLit3a5qdTa74kZ0kWVzR38CX', 'drive')
-    === '1aPZG3yTDLit3a5qdTa74kZ0kWVzR38CX', 'Id da pasta do Drive nao foi extraido.');
+  assert(normalizeStorageRoot('https://drive.google.com/drive/folders/1EXEMPLO_ID_DE_PASTA_DO_DRIVE_XYZ', 'drive')
+    === '1EXEMPLO_ID_DE_PASTA_DO_DRIVE_XYZ', 'Id da pasta do Drive nao foi extraido.');
   assert(normalizeStorageRoot('documentacao/rede-geral', 'drive') === '', 'Caminho nao deveria valer como pasta do Drive.');
 
   assert(normalizeStorageRoot('documentacao/rede-geral', 'local') === 'documentacao/rede-geral', 'Raiz local valida foi recusada.');
@@ -105,7 +105,7 @@ const assert = (condition, message) => {
 {
   const draftDrive = {
     type: 'drive', name: 'Drive do PMO', sector: 'PMO', accountEmail: 'pmo@empresa.com',
-    folderId: '1aPZG3yTDLit3a5qdTa74kZ0kWVzR38CX', appScriptUrl: 'https://script.google.com/macros/s/x/exec',
+    folderId: '1EXEMPLO_ID_DE_PASTA_DO_DRIVE_XYZ', appScriptUrl: 'https://script.google.com/macros/s/x/exec',
   };
   runtime.data.storageConnections = [];
   assert(validateStorageDraft(draftDrive) === '', `Draft valido de Drive foi recusado: ${validateStorageDraft(draftDrive)}`);
