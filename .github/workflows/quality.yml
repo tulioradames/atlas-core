@@ -1,4 +1,10 @@
-name: Atlas quality
+﻿name: Atlas quality
+
+# Ate a V2.4.1 este workflow rodava so "npm test", que e apenas
+# tests/static-audit.cjs - nenhuma das outras suites era executada aqui.
+# Uma regressao no motor de formulas, no tempo real, na conversa do elemento
+# ou nas confirmacoes de exclusao podia ser publicada com o check verde.
+# O smoke visual roda em job separado porque depende de navegador real.
 
 on:
   push:
@@ -15,5 +21,19 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - run: npm test
+      - run: npm run test:all
       - run: npm run check:js
+
+  browser-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Instalar Playwright + Chromium
+        run: |
+          npm install --no-save playwright
+          npx playwright install --with-deps chromium
+      - name: Smoke visual (arquivo local, sem ambiente publicado)
+        run: node tests/browser-smoke.cjs
