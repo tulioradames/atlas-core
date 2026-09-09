@@ -5,3 +5,15 @@ playwright-report/
 test-results/
 *.log
 config/config.local.js
+
+# ---------------------------------------------------------------------------
+# Documentos internos: nunca podem ir para o repositorio publico.
+# Motivo: o plano comercial da empresa ficou solto em docs/ dentro desta mesma
+# pasta de publicacao. Um "git add -A" distraido publicaria o arquivo no
+# GitHub aberto. Estas regras sao a segunda camada de protecao - a primeira e
+# nao guardar documento interno dentro da arvore do repositorio.
+# ---------------------------------------------------------------------------
+docs/PLANO_COMERCIALIZACAO_ATLAS.md
+docs/*COMERCIALIZACAO*
+docs/*_INTERNO*
+docs/*_CONFIDENCIAL*
