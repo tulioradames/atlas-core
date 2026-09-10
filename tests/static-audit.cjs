@@ -26,12 +26,12 @@ const deployScript = read('deploy-cloudflare.ps1');
 const auditFixes = read('supabase/ATLAS_V2_4_0_AUDITORIA_CORRECOES.sql');
 const manual = read('manual.html');
 
-assert(app.includes("window.__ATLAS_VERSION__ = '2.4.1 OFICIAL'"), 'Versao interna divergente.');
-assert(config.includes('V2.4.1 Oficial'), 'Config sem a versao do pacote.');
+assert(app.includes("window.__ATLAS_VERSION__ = '2.4.2 OFICIAL'"), 'Versao interna divergente.');
+assert(config.includes('V2.4.2 Oficial'), 'Config sem a versao do pacote.');
 assert(index.includes('id="atlas-v2-footer-version"'), 'Rodape sem o elemento de versao (agora preenchido via JS a partir do config.js).');
-assert(index.includes('V2.4.1 Oficial</span>'), 'Rodape HTML ainda exibe uma versao antiga antes do JavaScript carregar.');
+assert(index.includes('V2.4.2 Oficial</span>'), 'Rodape HTML ainda exibe uma versao antiga antes do JavaScript carregar.');
 assert(index.includes('name="robots" content="noindex, nofollow, noarchive"'), 'Ambiente de homologacao sem bloqueio de indexacao.');
-assert(manifest.includes('2.4.1'), 'Manifest sem a versao do pacote.');
+assert(manifest.includes('2.4.2'), 'Manifest sem a versao do pacote.');
 
 const configVersionMatch = config.match(/VERSION:\s*"([^"]+)"/);
 const changelogVersionMatch = app.match(/const CHANGELOG = \[\s*\{\s*version:\s*'([^']+)'/s);
@@ -401,7 +401,7 @@ assert(migrationTracking.includes('atlas_v2_schema_migrations'), 'Tabela de rast
 assert(app.includes('clearLocalUserData'), 'Limpeza do backup local no logout ausente.');
 assert(app.includes('openDeleteGroupModal'), 'Confirmacao de exclusao de grupo ausente.');
 assert(css.includes('.atlas-v2-empty-view > div > button.atlas-v2-button'), 'Botao de criar grupo na tela vazia sem estilo.');
-assert(manifest.includes('V2.4.1 Oficial'), 'Manifest sem o nome de versao publico.');
+assert(manifest.includes('V2.4.2 Oficial'), 'Manifest sem o nome de versao publico.');
 
 const v2Redirect = read('v2.html');
 assert(v2Redirect.includes('assets/redirect-v2.js'), 'Redirecionamento de v2.html ainda usa script inline bloqueavel por CSP.');

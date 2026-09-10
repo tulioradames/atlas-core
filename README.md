@@ -1,4 +1,4 @@
-# Atlas V2.4.1 Oficial
+# Atlas V2.4.2 Oficial
 
 ## Edição pública
 
@@ -35,6 +35,30 @@ Atlas, Supabase e Google Drive. A base funcional permanece sendo a V2.1.0.
   inteira (soma, média, mínimo, máximo, contagem).
 
 Detalhes em `docs/V2_4_0_DESENVOLVIMENTO.md`.
+
+## Novidades da V2.4.2
+
+Pacote focado em não perder trabalho de quem usa, mais a rede de proteção que
+faltava no processo de publicação:
+
+- excluir definitivamente um registro da lixeira agora pede confirmação — era
+  a única exclusão do Atlas que acontecia no primeiro clique, sem volta;
+- o navegador avisa ao fechar a aba com alteração ainda não sincronizada ou
+  com uma importação em revisão;
+- fechar a revisão da importação por engano não descarta mais o mapeamento
+  das colunas: o Atlas pergunta antes, e "Continuar revisando" devolve os
+  ajustes já feitos;
+- apagar mensagem da conversa pede confirmação na própria linha, sem fechar a
+  conversa nem perder o rascunho digitado;
+- a verificação automática deste repositório voltou a rodar a suíte inteira
+  mais o smoke visual em navegador real (antes rodava só um arquivo de teste);
+- `deploy-cloudflare.ps1` executa toda a bateria de testes antes de publicar e
+  aborta se algo reprovar.
+
+Não há migration nesta versão: o banco não muda. Basta publicar os arquivos e
+recarregar com `Ctrl + F5`.
+
+Detalhes em [`docs/RELEASE_V2_4_2.md`](docs/RELEASE_V2_4_2.md).
 
 ## Novidades da V2.4.1
 
@@ -93,6 +117,14 @@ Detalhes completos em
 - novos cadastros dependem somente da liberacao do Admin, sem confirmacao por e-mail;
 - leitor de Excel carregado somente ao iniciar uma importacao.
 
+## Atualizar uma V2.4.1 existente
+
+1. Publique os arquivos deste pacote.
+2. Pressione `Ctrl + F5` e confirme `V2.4.2 Oficial` no rodapé.
+
+Nenhum SQL a executar e nenhuma reimplantação de conector: a V2.4.2 só altera
+o aplicativo.
+
 ## Atualizar uma V2.4.0 existente
 
 1. Faça backup da publicação e do banco.
@@ -115,7 +147,7 @@ Detalhes completos em
    versão `2.5.0-versoes-drive`) em cada conta setorial para habilitar a
    prévia privada de imagens; quem não usar esse recurso pode manter
    temporariamente o conector anterior.
-5. Pressione `Ctrl + F5` e confirme `V2.4.1 Oficial` no rodapé.
+5. Pressione `Ctrl + F5` e confirme `V2.4.2 Oficial` no rodapé.
 
 O SQL de atualização preserva os dados existentes.
 
@@ -129,7 +161,7 @@ O SQL de atualização preserva os dados existentes.
 4. Crie uma nova implantação e atualize a URL `/exec`, se ela mudar.
 5. Teste a conexão em **Administração > Sistema**.
 6. Use **Organizar arquivos existentes**.
-7. Pressione `Ctrl + F5` e confirme `V2.4.1 Oficial` no rodapé.
+7. Pressione `Ctrl + F5` e confirme `V2.4.2 Oficial` no rodapé.
 
 Aplique também, nesta ordem, todos os arquivos `supabase/ATLAS_V2_3_1_*`,
 `supabase/ATLAS_V2_3_3_*` e `supabase/ATLAS_V2_4_*` que ainda não tiverem sido

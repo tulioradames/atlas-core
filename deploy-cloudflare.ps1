@@ -26,6 +26,12 @@
 .PARAMETER ScriptName
   Sobrescreve o nome do Worker (normalmente nao precisa - use -Target).
 
+.PARAMETER SkipTests
+  Pula a bateria de testes automaticos que roda ANTES de publicar (V2.4.2).
+  Existe so para emergencia (ex.: hotfix com o VS Code indisponivel na
+  maquina). O uso fica registrado em destaque na saida do deploy - se voce
+  esta usando isso numa publicacao normal, o problema e outro.
+
 .PARAMETER Confirm
   Obrigatorio quando -Target producao: precisa ser exatamente a frase
   'publicar em producao'. Nao usa Read-Host de proposito - prompts
@@ -47,7 +53,8 @@ param(
   [string]$Target = "homolog",
   [string]$SourceDir,
   [string]$ScriptName,
-  [string]$Confirm = ""
+  [string]$Confirm = "",
+  [switch]$SkipTests
 )
 
 $ErrorActionPreference = "Stop"
@@ -101,6 +108,82 @@ $appSource = [System.IO.File]::ReadAllText($appPath)
 $buildMatch = [regex]::Match($appSource, "const ATLAS_BUILD = '([^']+)'", 'IgnoreCase')
 if (-not $buildMatch.Success) { throw "ATLAS_BUILD nao encontrado em js\v2.js." }
 $ExpectedBuild = $buildMatch.Groups[1].Value
+
+# ---------------------------------------------------------------------------
+# V2.4.2 - Bateria de testes ANTES de publicar.
+#
+# Ate a V2.4.1 este script conferia o ambiente, o projeto Supabase e a saude
+# do site depois de publicar - mas nunca rodava um teste sequer. Dava para
+# publicar em producao um pacote que falharia na auditoria estatica, desde que
+# a versao e o ambiente estivessem certos. "Rodar os testes" era um passo
+# escrito no AGENTS.md, dependente de alguem lembrar.
+#
+# Esta maquina nao tem Node instalado: o Electron embutido no VS Code roda
+# como Node quando recebe ELECTRON_RUN_AS_NODE=1. A funcao abaixo tenta o node
+# do PATH primeiro e cai para o VS Code em seguida.
+# ---------------------------------------------------------------------------
+function Resolve-AtlasNode {
+  $node = Get-Command node -ErrorAction SilentlyContinue
+  if ($node) { return [pscustomobject]@{ Exe = $node.Source; Electron = $false; Label = "node do PATH" } }
+  $candidates = @(
+    (Join-Path $env:LOCALAPPDATA "Programs\Microsoft VS Code\Code.exe"),
+    (Join-Path ${env:ProgramFiles} "Microsoft VS Code\Code.exe")
+  )
+  foreach ($candidate in $candidates) {
+    if ($candidate -and (Test-Path -LiteralPath $candidate -PathType Leaf)) {
+      return [pscustomobject]@{ Exe = $candidate; Electron = $true; Label = "Electron do VS Code" }
+    }
+  }
+  return $null
+}
+
+function Invoke-AtlasTests {
+  param([string]$PackageDir)
+
+  $testsDir = Join-Path $PackageDir "tests"
+  if (-not (Test-Path -LiteralPath $testsDir -PathType Container)) {
+    throw "Pasta de testes ausente em $PackageDir - publicacao abortada."
+  }
+
+  $runner = Resolve-AtlasNode
+  if (-not $runner) {
+    throw "Nenhum interpretador Node encontrado (nem 'node' no PATH, nem o VS Code). Instale o Node ou use -SkipTests por sua conta e risco."
+  }
+
+  # browser-smoke fica de fora: precisa de um Chrome/Edge real e de um
+  # servidor local, o que nao faz parte de uma publicacao.
+  $suites = Get-ChildItem -LiteralPath $testsDir -Filter "*.cjs" -File |
+    Where-Object { $_.Name -ne "browser-smoke.cjs" } |
+    Sort-Object Name
+
+  if (-not $suites) { throw "Nenhuma suite de teste encontrada em $testsDir - publicacao abortada." }
+
+  Write-Output "Rodando verificacao antes de publicar ($($runner.Label)): $($suites.Count) suite(s) + checagem de sintaxe."
+
+  $previousElectron = $env:ELECTRON_RUN_AS_NODE
+  if ($runner.Electron) { $env:ELECTRON_RUN_AS_NODE = "1" }
+  try {
+    & $runner.Exe "--check" (Join-Path $PackageDir "js\v2.js")
+    if ($LASTEXITCODE -ne 0) { throw "Checagem de sintaxe de js/v2.js falhou - publicacao abortada." }
+
+    foreach ($suite in $suites) {
+      & $runner.Exe $suite.FullName
+      if ($LASTEXITCODE -ne 0) {
+        throw "Teste reprovado: tests/$($suite.Name) - publicacao abortada."
+      }
+    }
+  } finally {
+    if ($runner.Electron) { $env:ELECTRON_RUN_AS_NODE = $previousElectron }
+  }
+
+  Write-Output "Verificacao aprovada: $($suites.Count) suite(s) sem falha."
+}
+
+if ($SkipTests) {
+  Write-Warning "ATENCAO: publicando SEM rodar os testes (-SkipTests). Isso deveria ser excecao de emergencia, nunca rotina."
+} else {
+  Invoke-AtlasTests -PackageDir $SourceDir
+}
 
 $token = [System.IO.File]::ReadAllText($CloudflareTokenPath).Trim()
 $base = "https://api.cloudflare.com/client/v4/accounts/$AccountId"

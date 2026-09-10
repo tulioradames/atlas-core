@@ -1,7 +1,7 @@
 (function atlasV2Official() {
   'use strict';
 
-window.__ATLAS_VERSION__ = '2.4.1 OFICIAL';
+window.__ATLAS_VERSION__ = '2.4.2 OFICIAL';
 
   // ---------------------------------------------------------------------------
   // VERSAO DOS ARQUIVOS WEB - fonte unica.
@@ -15,7 +15,7 @@ window.__ATLAS_VERSION__ = '2.4.1 OFICIAL';
   // pre-cache. tests/static-audit.cjs falha se index.html e ATLAS_BUILD
   // divergirem, que era a causa dos casos de "publiquei mas continua igual".
   // ---------------------------------------------------------------------------
-  const ATLAS_BUILD = '2.4.1-secure-preview-official';
+  const ATLAS_BUILD = '2.4.2-perda-de-trabalho-r2-official';
   window.__ATLAS_BUILD__ = ATLAS_BUILD;
 
   // Changelog exibido na tela de Inicio. Toda alteracao funcional ou correcao
@@ -23,7 +23,19 @@ window.__ATLAS_VERSION__ = '2.4.1 OFICIAL';
   // Ordem: mais recente primeiro.
   const CHANGELOG = [
     {
-      version: 'V2.4.1 Oficial',
+      version: 'V2.4.2 Oficial',
+      date: '2026-09-09',
+      notes: [
+        'Exclusões confirmadas: excluir definitivamente um registro da lixeira agora pede confirmação. Era a única exclusão do Atlas que acontecia no primeiro clique, num botão pequeno colado no de restaurar - e não tinha volta.',
+        'Sincronização robusta: o navegador agora avisa se você fechar a aba (ou recarregar) com alteração ainda não sincronizada, ou com uma importação em revisão. Antes, a única proteção era a frase "confira o rodapé antes de fechar" no manual.',
+        'Uploads protegidos: fechar a revisão da importação por engano (Esc, clique fora ou X) não joga mais fora o mapeamento das colunas - o Atlas pergunta antes, e "Continuar revisando" devolve tudo como estava, inclusive os ajustes já feitos coluna a coluna.',
+        'Conversas: apagar uma mensagem passa a pedir confirmação na própria linha. Antes sumia no primeiro clique, sem lixeira e sem volta; a confirmação fica inline de propósito, para não fechar a conversa nem apagar o rascunho já digitado.',
+        'Publicação segura: a verificação automática do GitHub voltou a rodar a suíte inteira mais o smoke visual em navegador real. Desde a V2.0.19 ela executava só um arquivo de teste, então uma regressão podia ser publicada com o check verde.',
+        'Publicação segura: o script de publicação passa a rodar toda a bateria de testes antes de subir qualquer coisa e aborta se algo reprovar. Antes ele validava ambiente e versão, mas nunca executava um teste sequer.',
+      ],
+    },
+    {
+      version: 'V2.4.1 Homologação',
       date: '2026-08-24',
       notes: [
         'Pipeline: nova tabela interna de rastreio de migrations (registra, por ambiente, quais dos arquivos supabase/*.sql já foram aplicados e com qual hash) - facilita conferir se homologação e produção estão com o mesmo schema aplicado.',
@@ -458,6 +470,15 @@ window.__ATLAS_VERSION__ = '2.4.1 OFICIAL';
       : localStorage.getItem(FIELD_MODE_KEY) === '1',
     calendarCursor: new Map(),
     importPreview: null,
+    // V2.4.2: a revisao da importacao (mapeamento de ate 100 colunas) e trabalho
+    // manual demorado que ficava so no DOM - fechar o modal por engano jogava
+    // tudo fora sem aviso. Esta marca liga a protecao de fechamento acidental.
+    importReviewOpen: false,
+    importDiscardOpen: false,
+    // V2.4.2: id da mensagem de conversa aguardando confirmacao de exclusao.
+    // A confirmacao e inline (dentro da propria lista) de proposito: um modal
+    // substituiria a gaveta da conversa e apagaria o rascunho ja digitado.
+    chatPendingDelete: null,
     operationProgress: null,
     operationProgressTimer: null,
     assetLoads: new Map(),
@@ -3545,9 +3566,19 @@ window.__ATLAS_VERSION__ = '2.4.1 OFICIAL';
     const podeApagar = proprio || runtime.authProfile?.role === 'admin';
     const texto = chatTextMarkup(entry);
     const anexos = (entry.anexos || []).map((anexo) => `<button class="atlas-v2-chat-file" type="button" data-action="chat-open-file" data-path="${attr(anexo.path)}" title="Abrir ${attr(anexo.nome)}"><i data-lucide="paperclip"></i>${escapeHtml(anexo.nome || 'arquivo')}</button>`).join('');
-    return `<article class="atlas-v2-chat-message ${proprio ? 'is-own' : ''}">
+    // V2.4.2: apagar mensagem era imediato e definitivo (nao vai para a lixeira,
+    // como um item vai). A confirmacao e inline, dentro da propria linha: um
+    // modal usaria o mesmo overlay da gaveta da conversa e apagaria o rascunho
+    // que a pessoa ja tivesse digitado no campo de mensagem.
+    const aguardando = podeApagar && String(runtime.chatPendingDelete || '') === String(entry.id);
+    const acoes = !podeApagar
+      ? ''
+      : aguardando
+        ? `<span class="atlas-v2-chat-confirm"><small>Apagar de vez?</small><button class="atlas-v2-chat-confirm-yes" type="button" data-action="chat-delete-confirm" data-message-id="${attr(entry.id)}">Apagar</button><button class="atlas-v2-chat-confirm-no" type="button" data-action="chat-delete-cancel">Cancelar</button></span>`
+        : `<button class="atlas-v2-icon-button is-danger" type="button" data-action="chat-delete" data-message-id="${attr(entry.id)}" title="Apagar mensagem"><i data-lucide="trash-2"></i></button>`;
+    return `<article class="atlas-v2-chat-message ${proprio ? 'is-own' : ''} ${aguardando ? 'is-pending-delete' : ''}">
       <header><strong>${escapeHtml(autor)}</strong><time>${escapeHtml(formatDateTime(entry.createdAt))}</time>
-        ${podeApagar ? `<button class="atlas-v2-icon-button is-danger" type="button" data-action="chat-delete" data-message-id="${attr(entry.id)}" title="Apagar mensagem"><i data-lucide="trash-2"></i></button>` : ''}
+        ${acoes}
       </header>
       ${texto ? `<p>${texto}</p>` : ''}
       ${anexos ? `<div class="atlas-v2-chat-files">${anexos}</div>` : ''}
@@ -3611,6 +3642,7 @@ window.__ATLAS_VERSION__ = '2.4.1 OFICIAL';
     if (!context || !found) return;
     runtime.chatItemId = itemId;
     runtime.chatMentionIds = new Set();
+    runtime.chatPendingDelete = null;
     const podeEscrever = hasPermission('edit', { ...context, itemId });
     openDrawer({
       title: 'Conversa',
@@ -3987,7 +4019,7 @@ window.__ATLAS_VERSION__ = '2.4.1 OFICIAL';
   }
 
   function authVersion() {
-    return window.ATNX_CONFIG?.V2_VERSION || 'V2.4.1 Oficial';
+    return window.ATNX_CONFIG?.V2_VERSION || 'V2.4.2 Oficial';
   }
 
   function authFeatureList() {
@@ -4320,6 +4352,7 @@ window.__ATLAS_VERSION__ = '2.4.1 OFICIAL';
       document.addEventListener('keydown', handleKeydown);
       document.addEventListener('error', handleImageLoadError, true);
       window.addEventListener('resize', handleResize);
+      window.addEventListener('beforeunload', handleBeforeUnload);
       window.addEventListener('online', () => {
         updateOnlineState();
         if (runtime.authSession?.user) {
@@ -6032,6 +6065,22 @@ window.__ATLAS_VERSION__ = '2.4.1 OFICIAL';
     }
   }
 
+  // V2.4.2: excluir definitivamente da lixeira era a UNICA exclusao do Atlas
+  // sem confirmacao - um clique no "x" (vizinho do botao de restaurar, ambos
+  // pequenos) destruia o registro e os anexos sem volta. Mover para a lixeira
+  // ja pedia confirmacao; o passo irreversivel nao pedia.
+  function openPurgeTrashModal(trashId) {
+    if (!requirePermission('admin', null, 'esvaziar a lixeira')) return;
+    const entry = (runtime.data.trash || []).find((candidate) => candidate.id === trashId);
+    if (!entry) return;
+    openModal({
+      title: 'Excluir definitivamente',
+      subtitle: entry.name,
+      body: `<div class="atlas-v2-confirm-card"><i data-lucide="triangle-alert"></i><div><strong>Esta ação não tem volta.</strong><p>${escapeHtml(entry.type)} excluído em ${escapeHtml(formatDateTime(entry.deletedAt))}. O registro sai da lixeira e não poderá mais ser restaurado.</p></div></div>`,
+      actions: `<button class="atlas-v2-button atlas-v2-button-quiet" type="button" data-action="close-overlay">Cancelar</button><button class="atlas-v2-button atlas-v2-button-danger" type="button" data-action="confirm-purge-trash" data-trash-id="${attr(entry.id)}"><i data-lucide="trash-2"></i>Excluir definitivamente</button>`,
+    });
+  }
+
   async function purgeTrash(trashId) {
     if (!requirePermission('admin', null, 'esvaziar a lixeira')) return;
     const entry = runtime.data.trash.find((candidate) => candidate.id === trashId);
@@ -6039,10 +6088,13 @@ window.__ATLAS_VERSION__ = '2.4.1 OFICIAL';
     try {
       await removeRemoteTrashEntry(trashId);
     } catch (error) {
+      // Modal permanece aberto de proposito: o erro aparece por cima e o
+      // registro continua na lixeira, entao a pessoa pode tentar de novo.
       toast(`Não foi possível excluir definitivamente: ${error.message || error}`, true);
       return;
     }
     runtime.data.trash = runtime.data.trash.filter((candidate) => candidate.id !== trashId);
+    closeOverlay();
     saveData(`${entry.name} excluído definitivamente`, { scope: 'system', remote: false });
     render();
   }
@@ -11250,6 +11302,10 @@ window.__ATLAS_VERSION__ = '2.4.1 OFICIAL';
   }
 
   function openImportModal() {
+    // Sair da revisao pelo botao "Voltar" e uma escolha explicita: desliga a
+    // protecao para que o proprio modal de envio feche normalmente depois.
+    runtime.importReviewOpen = false;
+    runtime.importDiscardOpen = false;
     const context = findBoard();
     const batches = Array.isArray(context?.board?.settings?.import_batches) ? context.board.settings.import_batches : [];
     const reversibleBatch = [...batches].reverse().find((entry) => !entry.rolledBackAt && Array.isArray(entry.itemIds) && entry.itemIds.length);
@@ -11456,6 +11512,48 @@ window.__ATLAS_VERSION__ = '2.4.1 OFICIAL';
       body: `<div class="atlas-v2-import-summary"><div><i data-lucide="sheet"></i><span><strong>${preview.headers.length}</strong><small>colunas detectadas</small></span></div><div><i data-lucide="rows-3"></i><span><strong>${preview.rows.length}</strong><small>linhas válidas</small></span></div><div><i data-lucide="copy-check"></i><span><strong>${duplicateCount}</strong><small>possíveis duplicados</small></span></div></div><form id="atlas-v2-import-confirm-form"><div class="atlas-v2-import-mapping">${preview.headers.map((header) => `<label><span><strong>${escapeHtml(header)}</strong><small>${escapeHtml(String(preview.rows[0]?.[header] ?? '').slice(0, 60))} · ${escapeHtml(COLUMN_TYPES[preview.inferredTypes[header]]?.label || preview.inferredTypes[header])}</small></span><i data-lucide="arrow-right"></i><select name="map:${attr(header)}">${importMappingOptions(context, header, preview.mapping[header], preview.inferredTypes[header])}</select></label>`).join('')}</div><div class="atlas-v2-import-sample"><strong>Prévia do que foi lido</strong><div><table><thead><tr>${preview.headers.map((header) => `<th>${escapeHtml(header)}</th>`).join('')}</tr></thead><tbody>${samples.map((row) => `<tr>${preview.headers.map((header) => `<td>${escapeHtml(String(row[header] ?? '').slice(0, 80))}</td>`).join('')}</tr>`).join('')}</tbody></table></div></div><label class="atlas-v2-check-row"><input name="skipDuplicates" type="checkbox" ${preview.skipDuplicates ? 'checked' : ''}><span><strong>Ignorar ${duplicateCount} possível(is) duplicado(s)</strong><small>Revise o mapeamento acima antes de confirmar.</small></span></label></form>`,
       actions: `<button class="atlas-v2-button atlas-v2-button-quiet" type="button" data-action="import">Voltar</button><button class="atlas-v2-button atlas-v2-button-primary" type="submit" form="atlas-v2-import-confirm-form"><i data-lucide="file-check-2"></i>Confirmar importação</button>`,
     });
+    // Liga a protecao contra fechamento acidental (Esc, clique fora, botao X).
+    runtime.importReviewOpen = true;
+    runtime.importDiscardOpen = false;
+  }
+
+  // V2.4.2: fechar o modal de revisao jogava fora o mapeamento de ate 100
+  // colunas sem nenhum aviso - era preciso reenviar a planilha e refazer tudo.
+  // Agora o fechamento acidental cai aqui, e descartar vira escolha explicita.
+  function openImportDiscardModal() {
+    const preview = runtime.importPreview;
+    openModal({
+      title: 'Sair da importação?',
+      subtitle: preview?.fileName || 'Planilha em revisão',
+      body: `<div class="atlas-v2-confirm-card"><i data-lucide="triangle-alert"></i><div><strong>A revisão do mapeamento ainda não foi confirmada.</strong><p>${preview ? `${preview.headers.length} coluna(s) mapeada(s) e ${preview.rows.length} linha(s) lida(s).` : ''} Se descartar agora, será preciso enviar a planilha de novo.</p></div></div>`,
+      actions: '<button class="atlas-v2-button atlas-v2-button-quiet" type="button" data-action="import-discard">Descartar importação</button><button class="atlas-v2-button atlas-v2-button-primary" type="button" data-action="import-resume"><i data-lucide="arrow-left"></i>Continuar revisando</button>',
+    });
+    runtime.importDiscardOpen = true;
+  }
+
+  function discardImportReview() {
+    runtime.importReviewOpen = false;
+    runtime.importDiscardOpen = false;
+    runtime.importPreview = null;
+    closeOverlay();
+    toast('Importação descartada');
+  }
+
+  // Fechamento pedido pelo usuario (Esc, clique fora, botao X). So fecha direto
+  // quando nao ha revisao de importacao pendente.
+  //   - com o aviso de descarte na tela -> volta para a revisao (fechar o aviso
+  //     e cancelar o descarte, nao confirma-lo);
+  //   - com a revisao aberta -> pede confirmacao antes de jogar fora.
+  function requestCloseOverlay() {
+    if (runtime.importDiscardOpen) {
+      openImportPreview();
+      return;
+    }
+    if (runtime.importReviewOpen) {
+      openImportDiscardModal();
+      return;
+    }
+    closeOverlay();
   }
 
   function importedColumnValue(columnEntry, rawValue) {
@@ -11495,6 +11593,9 @@ window.__ATLAS_VERSION__ = '2.4.1 OFICIAL';
     const context = findBoard();
     const preview = runtime.importPreview;
     if (!context || !preview) return;
+    // A revisao foi concluida pelo caminho normal: nao ha mais o que proteger.
+    runtime.importReviewOpen = false;
+    runtime.importDiscardOpen = false;
     const fallbackGroup = context.board.groups.find((entry) => entry.id === preview.groupId);
     if (!fallbackGroup) return toast('O grupo de destino não está mais disponível.', true);
     const data = new FormData(form);
@@ -12477,8 +12578,10 @@ window.__ATLAS_VERSION__ = '2.4.1 OFICIAL';
       'open-sidebar': openSidebar,
       'close-sidebar': closeSidebar,
       'toggle-sidebar': toggleSidebar,
-      'close-overlay': closeOverlay,
-      'overlay-backdrop': closeOverlay,
+      'close-overlay': requestCloseOverlay,
+      'overlay-backdrop': requestCloseOverlay,
+      'import-resume': openImportPreview,
+      'import-discard': discardImportReview,
       'test-create-storage': testCreateStorageConnection,
       'test-admin-storage': testAdminStorageConnection,
       'open-image-viewer': () => openImageViewer(target.dataset.itemId, target.dataset.columnId, target.dataset.imageIndex),
@@ -12521,7 +12624,18 @@ window.__ATLAS_VERSION__ = '2.4.1 OFICIAL';
       },
       'item-chat': () => { void openItemChat(target.dataset.itemId); },
       'chat-mention-select': () => selectChatMention(target.dataset.userId),
-      'chat-delete': () => { void deleteChatMessage(target.dataset.messageId); },
+      'chat-delete': () => {
+        runtime.chatPendingDelete = target.dataset.messageId || null;
+        renderItemChat(runtime.chatItemId);
+      },
+      'chat-delete-cancel': () => {
+        runtime.chatPendingDelete = null;
+        renderItemChat(runtime.chatItemId);
+      },
+      'chat-delete-confirm': () => {
+        runtime.chatPendingDelete = null;
+        void deleteChatMessage(target.dataset.messageId);
+      },
       'chat-open-file': () => { void openChatFile(target.dataset.path); },
       'item-history': () => openItemHistory(target.dataset.itemId),
       'history-restore': () => restoreItemHistory(target.dataset.historyId),
@@ -12692,7 +12806,8 @@ window.__ATLAS_VERSION__ = '2.4.1 OFICIAL';
       'admin-use-field': () => useFieldTemplate(target.dataset.fieldId),
       'admin-delete-field': () => deleteFieldTemplate(target.dataset.fieldId),
       'admin-restore-trash': () => restoreTrash(target.dataset.trashId),
-      'admin-purge-trash': () => purgeTrash(target.dataset.trashId),
+      'admin-purge-trash': () => openPurgeTrashModal(target.dataset.trashId),
+      'confirm-purge-trash': () => { void purgeTrash(target.dataset.trashId); },
       'admin-export': exportAdminBackup,
       'remove-board-member': () => removeBoardMember(target.dataset.userId),
     };
@@ -12711,6 +12826,20 @@ window.__ATLAS_VERSION__ = '2.4.1 OFICIAL';
     if (target.id === 'atlas-v2-chat-file') {
       const nome = document.getElementById('atlas-v2-chat-file-name');
       if (nome) nome.textContent = [...(target.files || [])].map((entry) => entry.name).join(', ');
+      return;
+    }
+    // V2.4.2: cada ajuste de coluna na revisao da importacao passa a ser
+    // guardado na hora. Antes, a escolha vivia so no <select> em tela: bastava
+    // fechar o modal para o trabalho de mapeamento sumir junto com o HTML.
+    if (runtime.importPreview && target.name?.startsWith('map:')) {
+      const header = target.name.slice(4);
+      if (Object.prototype.hasOwnProperty.call(runtime.importPreview.mapping, header)) {
+        runtime.importPreview.mapping[header] = String(target.value || '');
+      }
+      return;
+    }
+    if (runtime.importPreview && target.name === 'skipDuplicates' && runtime.importReviewOpen) {
+      runtime.importPreview.skipDuplicates = Boolean(target.checked);
       return;
     }
     if (target.matches('input[name="create-type"]')) {
@@ -13216,9 +13345,40 @@ window.__ATLAS_VERSION__ = '2.4.1 OFICIAL';
       openGlobalSearch();
     }
     if (event.key === 'Escape') {
-      closeOverlay();
+      requestCloseOverlay();
       closeSidebar();
     }
+  }
+
+  // V2.4.2: ate aqui, a unica protecao contra fechar a aba no meio de uma
+  // sincronizacao era uma frase no manual ("antes de fechar, confirme que o
+  // rodape nao esta mostrando Sincronizando"). Em 4G instavel de campo isso
+  // significa confiar que a pessoa leu, lembrou e olhou o icone certo.
+  function hasUnsavedWork() {
+    return Boolean(
+      runtime.remoteSyncing
+      || runtime.remoteSyncQueued
+      || runtime.remoteSyncTimer
+      // Gravacao de celula/item EM VOO. Sem esta linha o aviso nao aparecia no
+      // caso mais comum de todos: editar um campo e fechar a aba enquanto o
+      // envio ainda esta na rede. O caminho leve (enqueueRemoteItemPersistence
+      // -> persistRemoteItemNow) nao passa por syncRemoteData e portanto nao
+      // liga nenhuma das tres flags acima - ele so marca remoteSyncQueued
+      // DEPOIS de falhar. Descoberto testando na homologacao publicada: com a
+      // rede travada de proposito, havia requisicao pendente e mesmo assim o
+      // navegador deixava fechar sem avisar.
+      || (runtime.itemPersistQueues && runtime.itemPersistQueues.size > 0)
+      || runtime.importReviewOpen,
+    );
+  }
+
+  function handleBeforeUnload(event) {
+    if (!hasUnsavedWork()) return undefined;
+    // O texto e definido pelo proprio navegador ha anos; o que importa e
+    // preventDefault + returnValue para que o aviso nativo apareca.
+    event.preventDefault();
+    event.returnValue = '';
+    return '';
   }
 
   function handleResize() {

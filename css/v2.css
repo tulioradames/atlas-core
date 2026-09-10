@@ -8388,6 +8388,47 @@ body.atlas-v2-right-dragging * {
   gap: 6px;
 }
 
+/* V2.4.2: confirmacao inline de exclusao de mensagem. Fica dentro da propria
+   linha da conversa (e nao num modal) para nao substituir a gaveta aberta e
+   perder o rascunho ja digitado no campo de mensagem. */
+.atlas-v2-chat-confirm {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.atlas-v2-chat-confirm small {
+  color: var(--v2-muted);
+  font-size: 0.72rem;
+}
+
+.atlas-v2-chat-confirm button {
+  border: 1px solid var(--v2-line);
+  border-radius: 999px;
+  padding: 3px 10px;
+  min-height: 28px;
+  background: var(--v2-surface);
+  color: inherit;
+  cursor: pointer;
+  font-size: 0.74rem;
+  font-weight: 600;
+}
+
+.atlas-v2-chat-confirm-yes {
+  border-color: var(--v2-red);
+  color: var(--v2-red);
+}
+
+.atlas-v2-chat-confirm-yes:hover { background: var(--v2-red); color: #fff; }
+
+.atlas-v2-chat-confirm-no:hover { border-color: var(--v2-atlas); }
+
+.atlas-v2-chat-message.is-pending-delete {
+  outline: 1px solid var(--v2-red);
+  outline-offset: 2px;
+}
+
 .atlas-v2-chat-file {
   display: inline-flex;
   align-items: center;
