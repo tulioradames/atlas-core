@@ -1,4 +1,4 @@
-# Atlas V2.4.2 Oficial
+# Atlas V2.4.3 Oficial
 
 ## Edição pública
 
@@ -36,6 +36,48 @@ Atlas, Supabase e Google Drive. A base funcional permanece sendo a V2.1.0.
 
 Detalhes em `docs/V2_4_0_DESENVOLVIMENTO.md`.
 
+## Novidades da V2.4.3
+
+Versão focada em **confiança nos números**: parar de adivinhar o que está
+concluído, tirar o aviso de prazo da dependência do navegador aberto, e dar
+garantia real à escada de aprovação.
+
+- **"Concluído" deixou de ser adivinhado pelo texto do status.** Cada opção
+  agora diz, com todas as letras, se encerra o item — a marca "Encerra o item"
+  fica junto da cor, na configuração da coluna. O palpite antigo errava dos dois
+  lados: contava como concluído um registro em "Não documentado" (a palavra
+  "documentado" está dentro de "Não documentado") e não reconhecia estado
+  terminal nenhum fora do seu vocabulário, deixando "Reprovados" e "Descartado"
+  atrasados para sempre.
+- **Quadro que ninguém revisou continua se comportando como antes**, para nenhum
+  número mudar sozinho. Ao abrir a configuração do status, o Atlas mostra o que
+  vinha adivinhando e pede conferência.
+- **O aviso de prazo passou a ser gerado no servidor.** Antes só existia
+  enquanto alguém estivesse com o Atlas aberto e visível na tela — prazo que
+  vencia de madrugada, no fim de semana ou com a aba fechada não avisava
+  ninguém, e a marca de "já avisei" ficava presa naquele aparelho.
+- **Cada quadro escolhe quem recebe aviso de prazo.** Sem ninguém escolhido, o
+  aviso vai para administradores e supervisores — nenhum quadro fica em silêncio
+  por falta de configuração.
+- **A escada de aprovação ganhou trava e histórico.** Cada etapa pode listar
+  quem tem permissão de colocar o item nela, e a trava vale no servidor: não dá
+  para contornar pela tela. Toda mudança de status passa a ficar registrada com
+  quem fez e quando.
+- **Pular etapa continua permitido, mas o Atlas pergunta antes** e marca o salto
+  no histórico.
+- **A tela "Configurar quadro" voltou a gravar.** Nome, descrição, acesso,
+  coluna de prazo e alerta antecipado eram descartados a cada salvamento, com a
+  mensagem "Outro usuário atualizou esses dados" — e não havia outro usuário: a
+  base usada para detectar conflito acompanhava as próprias alterações em
+  memória, então nunca batia com o servidor.
+- **Miniaturas do Google Drive voltaram a aparecer.** A política de segurança
+  liberava `*.googleusercontent.com`, mas o Drive corporativo serve as
+  miniaturas de `usercontent.google.com` — domínio diferente. As imagens eram
+  bloqueadas em silêncio.
+
+Esta versão **tem migrations**: veja "Atualizar uma V2.4.2 existente" abaixo.
+
+Detalhes em [`docs/RELEASE_V2_4_3.md`](docs/RELEASE_V2_4_3.md).
 ## Novidades da V2.4.2
 
 Pacote focado em não perder trabalho de quem usa, mais a rede de proteção que
@@ -116,6 +158,29 @@ Detalhes completos em
 - criacao de elementos em Obras preservada durante o carregamento remoto;
 - novos cadastros dependem somente da liberacao do Admin, sem confirmacao por e-mail;
 - leitor de Excel carregado somente ao iniciar uma importacao.
+
+## Atualizar uma V2.4.2 existente
+
+1. Publique os arquivos deste pacote.
+2. Aplique, no SQL Editor do Supabase, nesta ordem:
+   - `supabase/ATLAS_V2_4_3_CONCLUSAO_EXPLICITA.sql`
+   - `supabase/ATLAS_V2_4_3_SLA_NO_SERVIDOR.sql`
+   - `supabase/ATLAS_V2_4_3_APROVACAO.sql`
+   - `supabase/ATLAS_V2_4_3_CORRIGE_VERSAO_ANEXO.sql`
+3. **Antes de agendar o aviso de prazo**, rode uma vez em modo silencioso:
+   ```sql
+   select * from public.atlas_v2_scan_sla(true);
+   ```
+   Isso registra o atraso que já existe como "já avisado". Sem este passo, a
+   primeira execução agendada notifica todo o passivo de uma vez.
+4. Só então agende:
+   ```sql
+   select cron.schedule('atlas-v2-sla', '10 7-19 * * *',
+                        'select public.atlas_v2_scan_sla(false);');
+   ```
+5. Pressione `Ctrl + F5` e confirme `V2.4.3 Oficial` no rodapé.
+
+Nenhuma reimplantação de conector: o conector do Drive não muda.
 
 ## Atualizar uma V2.4.1 existente
 

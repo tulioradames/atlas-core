@@ -78,7 +78,11 @@ insert into public.atlas_v2_schema_migrations (filename, environment, sha256, no
   ('ATLAS_V2_4_0_VERSOES_ANEXO.sql', 'homolog', '56fd2cac4039a6c6f38469c25850df7b1d6110981bce989bed65c2fedeae1765', 'Backfill histórico.'),
   ('ATLAS_V2_4_1_SECURE_DRIVE_PREVIEW.sql', 'homolog', 'dc0abb094c4217ab9cfd693b4a25a23b3ebd12f786e803bbc706364468e2ecb9', 'Backfill histórico.'),
   ('ATLAS_V2_4_1_CHAT_ATTACHMENT_ALLOWLIST.sql', 'homolog', '4cccd24cb368faa1d273201bd201ea24c71f3b9f67150a255e6d5f14e96e306c', 'Aplicada nesta mesma sessão, antes desta tabela existir - registrada agora.'),
-  ('ATLAS_V2_4_1_MIGRATION_TRACKING.sql', 'homolog', null, 'Este próprio arquivo - sha256 não aplicável (self-referência).')
+  ('ATLAS_V2_4_1_MIGRATION_TRACKING.sql', 'homolog', null, 'Este próprio arquivo - sha256 não aplicável (self-referência).'),
+  ('ATLAS_V2_4_3_CONCLUSAO_EXPLICITA.sql', 'homolog', 'c6c67cabe7c9e7219ae4aa3293f318d7de86eb87d4ee625f1de1999eef9af55d', 'V2.4.3 (O-01). A própria migration também se registra ao rodar; aqui é só para uma instalação nova nascer com a tabela completa.'),
+  ('ATLAS_V2_4_3_CORRIGE_VERSAO_ANEXO.sql', 'homolog', '2d86a22b3fdb6995c143b22a9a60f0ea94a902faa2335a1ca09180963348454f', 'Remove unique(item_id,column_id,file_id) de atlas_v2_attachments, incompatível com o versionamento.'),
+  ('ATLAS_V2_4_3_SLA_NO_SERVIDOR.sql', 'homolog', '2b8c619f4bc64d95ea986cc8b4629a35cb19972da96438479981234af1f1e4ee', 'V2.4.3 (R-01). Aviso de prazo gerado no servidor: tabela de marcas, visão de estado e a varredura agendada.'),
+  ('ATLAS_V2_4_3_APROVACAO.sql', 'homolog', 'c5c6468d686ca83778bd3b54ef13b22affb67e96e9a588936c7154a9849de7d8', 'V2.4.3 (O-03). Trava por pessoa em cada etapa de aprovação; a transição é gravada em atlas_v2_item_history pelo gatilho.')
 on conflict (filename, environment) do nothing;
 
 commit;
@@ -87,7 +91,7 @@ commit;
 -- Validação (somente leitura) — rode depois de aplicar
 -- =============================================================================
 -- select filename, environment, applied_at from public.atlas_v2_schema_migrations order by applied_at;
--- Esperado: 23 linhas para environment = 'homolog'.
+-- Esperado: 26 linhas para environment = 'homolog'.
 --
 -- Consulta útil para achar o que está em homolog mas falta em produção
 -- (rode contra QUALQUER um dos dois projetos, já que a tabela existe nos

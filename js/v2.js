@@ -1,7 +1,7 @@
 (function atlasV2Official() {
   'use strict';
 
-window.__ATLAS_VERSION__ = '2.4.2 OFICIAL';
+window.__ATLAS_VERSION__ = '2.4.3 OFICIAL';
 
   // ---------------------------------------------------------------------------
   // VERSAO DOS ARQUIVOS WEB - fonte unica.
@@ -15,7 +15,7 @@ window.__ATLAS_VERSION__ = '2.4.2 OFICIAL';
   // pre-cache. tests/static-audit.cjs falha se index.html e ATLAS_BUILD
   // divergirem, que era a causa dos casos de "publiquei mas continua igual".
   // ---------------------------------------------------------------------------
-  const ATLAS_BUILD = '2.4.2-perda-de-trabalho-r2-official';
+  const ATLAS_BUILD = '2.4.3-aprovacao-r14-official';
   window.__ATLAS_BUILD__ = ATLAS_BUILD;
 
   // Changelog exibido na tela de Inicio. Toda alteracao funcional ou correcao
@@ -23,7 +23,22 @@ window.__ATLAS_VERSION__ = '2.4.2 OFICIAL';
   // Ordem: mais recente primeiro.
   const CHANGELOG = [
     {
-      version: 'V2.4.2 Oficial',
+      version: 'V2.4.3 Oficial',
+      date: '2026-09-10',
+      notes: [
+        'Números confiáveis: o aviso de prazo passou a ser gerado no servidor. Antes ele só existia enquanto alguém estivesse com o Atlas aberto e visível na tela - prazo que vencia de madrugada, no fim de semana ou com a aba fechada não avisava ninguém, e a marca de "já avisei" ficava presa naquele aparelho. Em produção o recurso nunca havia gerado um aviso sequer.',
+        'Números confiáveis: a escada de aprovação (Supervisor, Coordenador, Gerente, Diretoria) deixou de ser só convenção de texto. Cada etapa pode ter uma lista de quem tem permissão de colocar o item nela, e a trava vale no servidor - não dá para contornar pela tela.',
+        'Números confiáveis: toda mudança de status passa a ficar registrada com quem fez e quando, formando o histórico da aprovação. Antes só era possível saber quem fez a última alteração; por onde o item passou se perdia.',
+        'Números confiáveis: pular etapa continua permitido, mas o Atlas pergunta antes e marca o salto no histórico. A ordem não trava o trabalho, mas também não passa despercebida.',
+        'Sincronização robusta: a tela "Configurar quadro" voltou a gravar. Nome, descrição, acesso, coluna de prazo e alerta antecipado eram descartados a cada salvamento, com a mensagem "Outro usuário atualizou esses dados" - e não havia outro usuário nenhum: a base de comparação usada para detectar conflito acompanhava as próprias alterações em memória, então nunca batia com o servidor.',
+        'Sincronização robusta: quando um conflito real acontecer, o Atlas passa a registrar no console qual campo divergiu. Antes a mensagem só dizia que alguém havia alterado algo, o que fez um conflito falso passar por normal.',
+        'Números confiáveis: cada quadro passa a escolher quem recebe aviso de prazo, na tela de configuração. Sem ninguém escolhido, o aviso vai para todos os administradores e supervisores - nenhum quadro fica em silêncio por falta de configuração.',
+        'Números confiáveis: cada status agora diz, com todas as letras, se encerra o item ou não - a marca "Encerra o item" fica junto da cor, na configuração da coluna. Até aqui o Atlas adivinhava pelo texto, e errava dos dois lados: 32 registros em "Não documentado" contavam como CONCLUÍDOS (a palavra "documentado" está dentro de "Não documentado") e sumiam dos alertas de prazo, enquanto 77 em "Reprovados" e "Descartado" ficavam atrasados para sempre, porque nenhuma palavra do padrão aparecia neles.',
+        'Números confiáveis: quadros que ainda não foram revisados continuam se comportando como antes, para nenhum número mudar sozinho da noite para o dia. Ao abrir a configuração do status, o Atlas mostra o que vinha adivinhando e pede conferência.',
+      ],
+    },
+    {
+      version: 'V2.4.2 Homologação',
       date: '2026-09-09',
       notes: [
         'Exclusões confirmadas: excluir definitivamente um registro da lixeira agora pede confirmação. Era a única exclusão do Atlas que acontecia no primeiro clique, num botão pequeno colado no de restaurar - e não tinha volta.',
@@ -195,7 +210,7 @@ window.__ATLAS_VERSION__ = '2.4.2 OFICIAL';
       title: 'Segurança e integridade',
       icon: 'shield-check',
       summary: 'Proteção do Drive, exclusões verificadas, recuperação e publicação segura.',
-      prefixes: ['Proteção de arquivos:', 'Exclusões confirmadas:', 'Lixeira confiável:', 'Recuperação administrativa:', 'Sincronização robusta:', 'Uploads protegidos:', 'Publicação segura:', 'Privacidade de homologação:', 'Automações agendadas:'],
+      prefixes: ['Proteção de arquivos:', 'Exclusões confirmadas:', 'Lixeira confiável:', 'Recuperação administrativa:', 'Sincronização robusta:', 'Uploads protegidos:', 'Publicação segura:', 'Privacidade de homologação:', 'Automações agendadas:', 'Números confiáveis:'],
     },
     {
       id: 'interface',
@@ -348,13 +363,39 @@ window.__ATLAS_VERSION__ = '2.4.2 OFICIAL';
     formula: { label: 'Fórmula', icon: 'calculator', width: 160 },
   };
 
+  // `done: true` marca que o status encerra o item: sai dos alertas de prazo e
+  // entra na conta de concluidos do Painel. E dado explicito justamente porque
+  // adivinhar pelo texto nao funciona - ver LEGACY_DONE_PATTERN abaixo.
   const STATUS_OPTIONS = [
-    { label: 'Não iniciado', color: '#657084', background: '#edf0f4' },
-    { label: 'Em análise', color: '#9a5b00', background: '#fff0d7' },
-    { label: 'Em andamento', color: '#0f6cbd', background: '#e3f1fc' },
-    { label: 'Concluído', color: '#08784f', background: '#ddf4e9' },
-    { label: 'Bloqueado', color: '#b42335', background: '#fbe4e7' },
+    { label: 'Não iniciado', color: '#657084', background: '#edf0f4', done: false },
+    { label: 'Em análise', color: '#9a5b00', background: '#fff0d7', done: false },
+    { label: 'Em andamento', color: '#0f6cbd', background: '#e3f1fc', done: false },
+    { label: 'Concluído', color: '#08784f', background: '#ddf4e9', done: true },
+    { label: 'Bloqueado', color: '#b42335', background: '#fbe4e7', done: false },
   ];
+
+  // Palpite antigo, mantido SO para colunas que ainda nao foram configuradas.
+  // Ele erra dos dois lados: casa "documentado" dentro de "Nao documentado" (e
+  // conta como concluido um item que explicitamente nao esta), e nao reconhece
+  // estado terminal nenhum fora do vocabulario dele - "Reprovados",
+  // "Descartado" e afins ficam atrasados para sempre. Assim que alguem marcar
+  // qualquer status da coluna, este padrao para de ser consultado.
+  const LEGACY_DONE_PATTERN = /conclu|finaliz|documentado|feito/i;
+
+  // Rotulo que COMECA com negacao nunca encerra, por mais que o resto do texto
+  // pareca conclusao. E o caso de "Nao documentado", que o padrao acima marcava
+  // como concluido - 32 registros em producao estavam assim.
+  const LEGACY_NEGATION_PATTERN = /^\s*n(ã|a)o\s/i;
+
+  // Palpite unico, usado nos DOIS lugares que precisam adivinhar: o
+  // comportamento de coluna nao revisada e a sugestao que a tela de
+  // configuracao mostra. Antes eram duas regras diferentes - a migration ja
+  // excluia a negacao, mas a tela sugeria "Nao documentado" marcado. Quem
+  // abrisse e salvasse confiando no aviso gravaria a inversao para sempre.
+  function legacyDoneGuess(label) {
+    const texto = String(label || '');
+    return LEGACY_DONE_PATTERN.test(texto) && !LEGACY_NEGATION_PATTERN.test(texto);
+  }
 
 
   const STATUS_FALLBACK_BACKGROUNDS = [
@@ -479,6 +520,7 @@ window.__ATLAS_VERSION__ = '2.4.2 OFICIAL';
     // A confirmacao e inline (dentro da propria lista) de proposito: um modal
     // substituiria a gaveta da conversa e apagaria o rascunho ja digitado.
     chatPendingDelete: null,
+    statusSkipPending: null,
     operationProgress: null,
     operationProgressTimer: null,
     assetLoads: new Map(),
@@ -796,8 +838,8 @@ window.__ATLAS_VERSION__ = '2.4.2 OFICIAL';
     }, Math.max(300, Number(delay) || 700));
   }
 
-  function option(label, color, background) {
-    return { label, color, background };
+  function option(label, color, background, done = false) {
+    return { label, color, background, done: done === true };
   }
 
   function column(key, name, type, extra = {}) {
@@ -2779,6 +2821,19 @@ window.__ATLAS_VERSION__ = '2.4.2 OFICIAL';
     return rows;
   }
 
+  // ATENCAO AO deepClone DE `configuracoes` ABAIXO.
+  //
+  // O retorno desta funcao vira DUAS coisas: as linhas a enviar (`next`) e,
+  // depois, a base de comparacao de conflito (`runtime.remoteRows`). Se um
+  // campo for guardado por REFERENCIA, a base passa a acompanhar as edicoes
+  // feitas em memoria e deixa de ser uma foto do servidor.
+  //
+  // Era exatamente isso que acontecia com o quadro: submitBoardSettings()
+  // altera `board.settings` NO LUGAR, entao a base mudava junto, nunca batia
+  // com o `{}` do banco e TODA gravacao da tela "Configurar quadro" era
+  // descartada como "atualizacao concorrente" - culpando um outro usuario
+  // que nao existia. Nome, descricao, acesso, coluna de prazo e alerta
+  // antecipado nunca chegaram ao Supabase por causa disso.
   function remoteRows(data = runtime.data) {
     const rows = {
       atlas_v2_storage_connections: [], atlas_v2_workspaces: [], atlas_v2_modules: [], atlas_v2_boards: [],
@@ -2796,9 +2851,9 @@ window.__ATLAS_VERSION__ = '2.4.2 OFICIAL';
       (workspace.modules || []).forEach((module, moduleOrder) => {
         rows.atlas_v2_modules.push({ id: module.id, workspace_id: workspace.id, parent_module_id: module.parentId || null, nome: module.name, descricao: module.description || '', icone: module.icon || 'folder', ordem: module.order ?? moduleOrder, ativo: module.active !== false, storage_connection_id: module.storageConnectionId || null });
         (module.boards || []).forEach((boardEntry, boardOrder) => {
-          rows.atlas_v2_boards.push({ id: boardEntry.id, module_id: module.id, nome: boardEntry.name, descricao: boardEntry.description || '', icone: boardEntry.icon || 'table-2', tipo_acesso: boardEntry.access || 'main', origem: boardEntry.origin || (boardEntry.official ? 'official' : 'custom'), configuracoes: boardEntry.settings || {}, oficial: Boolean(boardEntry.official), ativo: boardEntry.active !== false, ordem: boardEntry.order ?? boardOrder, storage_connection_id: boardEntry.storageConnectionId || null });
+          rows.atlas_v2_boards.push({ id: boardEntry.id, module_id: module.id, nome: boardEntry.name, descricao: boardEntry.description || '', icone: boardEntry.icon || 'table-2', tipo_acesso: boardEntry.access || 'main', origem: boardEntry.origin || (boardEntry.official ? 'official' : 'custom'), configuracoes: deepClone(boardEntry.settings || {}), oficial: Boolean(boardEntry.official), ativo: boardEntry.active !== false, ordem: boardEntry.order ?? boardOrder, storage_connection_id: boardEntry.storageConnectionId || null });
           (boardEntry.groups || []).forEach((groupEntry, groupOrder) => rows.atlas_v2_groups.push({ id: groupEntry.id, board_id: boardEntry.id, nome: groupEntry.name, cor: groupEntry.color || '#0f6cbd', recolhido: Boolean(groupEntry.collapsed), ordem: groupEntry.order ?? groupOrder }));
-          (boardEntry.columns || []).forEach((columnEntry, columnOrder) => rows.atlas_v2_columns.push({ id: columnEntry.id, board_id: boardEntry.id, nome: columnEntry.name, tipo: columnEntry.type, configuracoes: { ...(columnEntry.settings || {}), options: columnEntry.options || [], formula: columnEntry.formula || '', format: columnEntry.format || 'number', decimals: Number(columnEntry.decimals ?? 2), versionado: columnEntry.versioned === true }, largura: Number(columnEntry.width || 160), obrigatorio: Boolean(columnEntry.required), ativo: columnEntry.active !== false, ordem: columnEntry.order ?? columnOrder }));
+          (boardEntry.columns || []).forEach((columnEntry, columnOrder) => rows.atlas_v2_columns.push({ id: columnEntry.id, board_id: boardEntry.id, nome: columnEntry.name, tipo: columnEntry.type, configuracoes: { ...deepClone(columnEntry.settings || {}), options: deepClone(columnEntry.options || []), formula: columnEntry.formula || '', format: columnEntry.format || 'number', decimals: Number(columnEntry.decimals ?? 2), versionado: columnEntry.versioned === true }, largura: Number(columnEntry.width || 160), obrigatorio: Boolean(columnEntry.required), ativo: columnEntry.active !== false, ordem: columnEntry.order ?? columnOrder }));
           const columnTypes = new Map((boardEntry.columns || []).map((columnEntry) => [columnEntry.id, columnEntry.type]));
           flattenRemoteItems(boardEntry).forEach(({ item: itemEntry, parentId, groupId, order }) => {
             rows.atlas_v2_items.push({ id: itemEntry.id, board_id: boardEntry.id, group_id: groupId || null, parent_item_id: parentId, nome: itemEntry.name || 'Novo item', ordem: itemEntry.order ?? order, arquivado: Boolean(itemEntry.archived) });
@@ -2975,6 +3030,48 @@ window.__ATLAS_VERSION__ = '2.4.2 OFICIAL';
     }
 
     updateRemoteBaselineFromItemContext(itemContext);
+  }
+
+  // Salto de etapa na escada de aprovacao.
+  //
+  // A ordem NAO e obrigatoria (decisao do usuario): pular continua possivel,
+  // mas nunca em silencio. O banco registra o salto de qualquer jeito - isto
+  // aqui e so a pergunta, para a pessoa saber o que esta fazendo antes.
+  function statusStepOf(columnEntry, label) {
+    if (!columnEntry || !label) return null;
+    const alvo = normalizedStatusLabel(label);
+    const found = (columnEntry.options || []).find(
+      (entry) => entry && typeof entry === 'object' && normalizedStatusLabel(entry.label) === alvo,
+    );
+    const step = Number(found?.step);
+    return Number.isFinite(step) ? step : null;
+  }
+
+  function statusSkipsStep(columnEntry, previousValue, nextValue) {
+    const de = statusStepOf(columnEntry, previousValue);
+    const para = statusStepOf(columnEntry, nextValue);
+    if (de === null || para === null) return false;
+    return para > de + 1;
+  }
+
+  function confirmStatusSkip(previousValue, nextValue) {
+    return new Promise((resolve) => {
+      runtime.statusSkipPending = { resolve };
+      openModal({
+        title: 'Pular etapa de aprovação?',
+        subtitle: `Este item iria de "${previousValue}" direto para "${nextValue}", sem passar pelas etapas do meio.`,
+        body: '<p class="atlas-v2-modal-note">O salto será registrado no histórico do item, com seu nome e a data. Se foi intencional, pode seguir.</p>',
+        actions: '<button class="atlas-v2-button atlas-v2-button-quiet" type="button" data-action="status-skip-cancel">Cancelar</button>'
+          + '<button class="atlas-v2-button atlas-v2-button-primary" type="button" data-action="status-skip-confirm">Pular etapa mesmo assim</button>',
+      });
+    });
+  }
+
+  function resolveStatusSkip(valor) {
+    const pendente = runtime.statusSkipPending;
+    runtime.statusSkipPending = null;
+    closeOverlay();
+    if (pendente) pendente.resolve(valor);
   }
 
   async function commitRemoteItemValueChange(context, found, columnEntry, previousValue, nextValue) {
@@ -3157,6 +3254,26 @@ window.__ATLAS_VERSION__ = '2.4.2 OFICIAL';
     return output;
   }
 
+  // A mensagem de "atualizacao concorrente" nao dizia O QUE divergiu, so que
+  // algo divergiu - e como ela culpa "outro usuario", um conflito FALSO passava
+  // por comportamento normal. Foi assim que a tela de configuracao do quadro
+  // ficou sem gravar nada (nome, descricao, prazo, SLA) sem ninguem perceber.
+  // Este aviso nomeia os campos, para o proximo caso ser diagnosticavel na hora.
+  function descreverConflito(table, key, baseline, atual) {
+    try {
+      const campos = Object.keys(baseline || {}).filter(
+        (campo) => JSON.stringify(baseline?.[campo]) !== JSON.stringify(atual?.[campo]),
+      );
+      if (!campos.length) return;
+      console.warn(
+        `Atlas V2: conflito em ${table}:${key} - campo(s) divergente(s): ${campos.join(', ')}.`,
+        Object.fromEntries(campos.map((campo) => [campo, { base: baseline?.[campo], servidor: atual?.[campo] }])),
+      );
+    } catch (erro) {
+      console.warn('Atlas V2: nao consegui descrever o conflito.', erro);
+    }
+  }
+
   async function verifyRemoteSyncConflicts(table, changedRows, removalKeys, previousRows) {
     const previousByKey = new Map((previousRows || []).map((row) => [remoteKey(table, row), row]));
     const templates = [
@@ -3205,7 +3322,10 @@ window.__ATLAS_VERSION__ = '2.4.2 OFICIAL';
       const currentProjected = projectRemoteRow(baseline, current);
       const serverMatchesBaseline = stableRemoteString(currentProjected) === stableRemoteString(baseline);
       const serverAlreadyMatchesDesired = stableRemoteString(projectRemoteRow(desired, current)) === stableRemoteString(desired);
-      if (!serverMatchesBaseline && !serverAlreadyMatchesDesired) conflicts.push(key);
+      if (!serverMatchesBaseline && !serverAlreadyMatchesDesired) {
+        conflicts.push(key);
+        descreverConflito(table, key, baseline, currentProjected);
+      }
     });
 
     (removalKeys || []).forEach((key) => {
@@ -3413,9 +3533,30 @@ window.__ATLAS_VERSION__ = '2.4.2 OFICIAL';
       userId: currentUser()?.id || '',
       createdAt: new Date().toISOString(),
     };
-    runtime.data.itemHistory.unshift(entry);
-    runtime.data.itemHistory = runtime.data.itemHistory.slice(0, 1000);
-    if (runtime.remoteMode && runtime.authClient && isUuid(boardEntry.id) && isUuid(itemEntry.id)) {
+    const colunaDeStatusLocal = (boardEntry.columns || []).some(
+      (coluna) => coluna.id === columnId && coluna.type === 'status',
+    );
+    // A entrada local existiria so para a tela mostrar a mudanca na hora. Para
+    // status ela ATRAPALHA: o gatilho grava a mesma transicao no servidor com
+    // outro id, o painel junta as duas listas por id e a pessoa ve a alteracao
+    // duas vezes. O painel rele do servidor ao abrir, entao nada se perde.
+    if (!colunaDeStatusLocal) {
+      runtime.data.itemHistory.unshift(entry);
+      runtime.data.itemHistory = runtime.data.itemHistory.slice(0, 1000);
+    }
+    // V2.4.3: coluna de STATUS nao e mais gravada daqui - nem local, nem remoto.
+    //
+    // Quem grava e o gatilho atlas_v2_guard_status_change, na mesma transacao
+    // da alteracao do valor. Duas razoes: (1) este insert e disparado sem
+    // esperar resposta e com erro ignorado - falhou a rede, a linha some e
+    // ninguem percebe, o que e ruim para um registro de aprovacao; (2) manter
+    // os dois gravando produziria a transicao em dobro no historico.
+    // A entrada local (runtime.data.itemHistory, acima) continua, para a tela
+    // mostrar a mudanca na hora, antes de reler do servidor.
+    const colunaDeStatus = (boardEntry.columns || []).some(
+      (entry) => entry.id === columnId && entry.type === 'status',
+    );
+    if (!colunaDeStatus && runtime.remoteMode && runtime.authClient && isUuid(boardEntry.id) && isUuid(itemEntry.id)) {
       void runtime.authClient.from('atlas_v2_item_history').insert({
         id: isUuid(entry.id) ? entry.id : undefined,
         board_id: boardEntry.id,
@@ -3860,7 +4001,7 @@ window.__ATLAS_VERSION__ = '2.4.2 OFICIAL';
       body: `<div class="atlas-v2-item-history">${entries.map((entry) => {
         const columnEntry = context.board.columns.find((column) => column.id === entry.columnId);
         const user = runtime.data.users.find((candidate) => candidate.id === entry.userId);
-        return `<article><span><i data-lucide="history"></i></span><div><strong>${escapeHtml(columnEntry?.name || (entry.columnId === '__name__' ? 'Nome do registro' : entry.label))}</strong><small>${formatDateTime(entry.createdAt)} · ${escapeHtml(user?.name || 'Usuário')}</small><p><del>${escapeHtml(typeof entry.beforeValue === 'object' ? JSON.stringify(entry.beforeValue) : String(entry.beforeValue ?? ''))}</del><i data-lucide="arrow-right"></i><ins>${escapeHtml(typeof entry.afterValue === 'object' ? JSON.stringify(entry.afterValue) : String(entry.afterValue ?? ''))}</ins></p></div>${hasPermission('edit', context) ? `<button type="button" data-action="history-restore" data-history-id="${attr(entry.id)}" title="Restaurar valor anterior"><i data-lucide="undo-2"></i></button>` : ''}</article>`;
+        return `<article><span><i data-lucide="history"></i></span><div><strong>${escapeHtml(columnEntry?.name || (entry.columnId === '__name__' ? 'Nome do registro' : entry.label))}${entry.label && entry.label !== 'Campo atualizado' && entry.label !== columnEntry?.name ? ` · ${escapeHtml(entry.label)}` : ''}</strong><small>${formatDateTime(entry.createdAt)} · ${escapeHtml(user?.name || 'Usuário')}</small><p><del>${escapeHtml(typeof entry.beforeValue === 'object' ? JSON.stringify(entry.beforeValue) : String(entry.beforeValue ?? ''))}</del><i data-lucide="arrow-right"></i><ins>${escapeHtml(typeof entry.afterValue === 'object' ? JSON.stringify(entry.afterValue) : String(entry.afterValue ?? ''))}</ins></p></div>${hasPermission('edit', context) ? `<button type="button" data-action="history-restore" data-history-id="${attr(entry.id)}" title="Restaurar valor anterior"><i data-lucide="undo-2"></i></button>` : ''}</article>`;
       }).join('') || '<div class="atlas-v2-empty-view"><div><i data-lucide="history"></i><strong>Nenhuma alteração registrada</strong></div></div>'}</div>`,
       actions: '<button class="atlas-v2-button atlas-v2-button-quiet" type="button" data-action="close-overlay">Fechar</button>',
     });
@@ -4019,7 +4160,7 @@ window.__ATLAS_VERSION__ = '2.4.2 OFICIAL';
   }
 
   function authVersion() {
-    return window.ATNX_CONFIG?.V2_VERSION || 'V2.4.2 Oficial';
+    return window.ATNX_CONFIG?.V2_VERSION || 'V2.4.3 Oficial';
   }
 
   function authFeatureList() {
@@ -4877,24 +5018,44 @@ window.__ATLAS_VERSION__ = '2.4.2 OFICIAL';
   function defaultStatusOption(label, index = null) {
     const normalized = normalizedStatusLabel(label);
     const known = STATUS_OPTIONS.find((entry) => normalizedStatusLabel(entry.label) === normalized);
-    if (known) return { ...known, label: String(label || known.label) };
+    // `done` NAO entra aqui de proposito. Esta funcao so resolve aparencia. Se
+    // ela devolvesse `done`, toda coluna carregada do banco pareceria revisada
+    // (normalizeStatusOptions passa por aqui), a retrocompatibilidade morreria
+    // e quadros nunca revisados mudariam de numero sozinhos - exatamente o que
+    // esta versao existe para evitar. Quem decide `done` e
+    // normalizeStatusOptions, e so quando ha marca de verdade.
+    if (known) {
+      const { done: _ignorado, ...aparencia } = known;
+      return { ...aparencia, label: String(label || known.label) };
+    }
     const fallbackIndex = Number.isInteger(index) ? index % STATUS_FALLBACK_BACKGROUNDS.length : statusFallbackIndex(label);
     const background = STATUS_FALLBACK_BACKGROUNDS[fallbackIndex];
     return { label: String(label || ''), color: readableTextColor(background), background };
   }
 
   function normalizeStatusOptions(options = []) {
-    const source = Array.isArray(options) && options.length ? options : STATUS_OPTIONS;
+    // Coluna sem opcao salva usa a lista de fabrica, que ja traz `done`
+    // explicito. Coluna com opcoes salvas so ganha `done` se a opcao tiver a
+    // marca de verdade - normalizar NAO pode inventar marca, senao toda coluna
+    // vinda do banco passaria por revisada.
+    const usandoPadraoDeFabrica = !(Array.isArray(options) && options.length);
+    const source = usandoPadraoDeFabrica ? STATUS_OPTIONS : options;
     return source.map((entry, index) => {
       const label = typeof entry === 'string' ? entry : String(entry?.label || '');
       const defaults = defaultStatusOption(label, index);
-      if (!entry || typeof entry === 'string') return defaults;
+      const marcaDeFabrica = usandoPadraoDeFabrica && entry && typeof entry === 'object'
+        ? { done: entry.done === true }
+        : {};
+      if (!entry || typeof entry === 'string') return { ...defaults, ...marcaDeFabrica };
+      const marcaSalva = 'done' in entry ? { done: entry.done === true } : {};
       return {
         ...defaults,
         ...entry,
         label,
         color: normalizedHexColor(entry.color, defaults.color),
         background: normalizedHexColor(entry.background, defaults.background),
+        ...marcaDeFabrica,
+        ...marcaSalva,
       };
     });
   }
@@ -9263,10 +9424,25 @@ window.__ATLAS_VERSION__ = '2.4.2 OFICIAL';
     });
   }
 
+  // Uma coluna esta "configurada" quando pelo menos uma opcao diz, com todas as
+  // letras, se conclui ou nao. Enquanto ninguem disser, nao ha o que ler e o
+  // Atlas volta ao palpite antigo - so para nao mudar em silencio o numero de
+  // quadro que ninguem revisou ainda.
+  function statusColumnHasExplicitDone(columnEntry) {
+    return (columnEntry?.options || []).some((entry) => entry && typeof entry === 'object' && 'done' in entry);
+  }
+
   function itemIsCompleted(boardEntry, itemEntry) {
     const statusColumn = boardEntry.columns.find((entry) => entry.type === 'status');
-    const value = statusColumn ? String(itemEntry.values?.[statusColumn.id] || '') : '';
-    return /conclu|finaliz|documentado|feito/i.test(value);
+    if (!statusColumn) return false;
+    const value = String(itemEntry.values?.[statusColumn.id] || '');
+    if (!value) return false;
+    if (statusColumnHasExplicitDone(statusColumn)) {
+      const normalized = normalizedStatusLabel(value);
+      return normalizeStatusOptions(statusColumn.options || [])
+        .some((entry) => entry.done === true && normalizedStatusLabel(entry.label) === normalized);
+    }
+    return legacyDoneGuess(value);
   }
 
   function boardSlaState(boardEntry, itemEntry) {
@@ -10978,21 +11154,34 @@ window.__ATLAS_VERSION__ = '2.4.2 OFICIAL';
     const columnEntry = context?.board.columns.find((entry) => entry.id === columnId && entry.type === 'status');
     if (!columnEntry) return;
     const palette = ['#657084', '#d68a1f', '#0f6cbd', '#168a5b', '#c33d4b', '#73568f'];
+    const configurada = statusColumnHasExplicitDone(columnEntry);
+    // V2.4.3 (O-03): quem pode colocar o item nesta etapa, e a posicao dela na
+    // escada de aprovacao. Vazio = qualquer um que possa editar, como hoje.
+    const pessoas = (runtime.data.users || []).filter((entry) => entry.status === 'active');
     const options = (columnEntry.options?.length ? columnEntry.options : deepClone(STATUS_OPTIONS)).map((entry, index) => {
       const details = typeof entry === 'string' ? { label: entry } : entry;
+      const label = String(details.label || `Status ${index + 1}`);
       return {
-        label: String(details.label || `Status ${index + 1}`),
+        label,
         background: normalizedHexColor(details.background || details.color, palette[index % palette.length]),
+        // Coluna nunca configurada: mostra o que o palpite antigo esta fazendo
+        // hoje, para a pessoa ver e corrigir em vez de comecar do zero.
+        done: configurada ? details.done === true : legacyDoneGuess(label),
+        approvers: Array.isArray(details.approvers) ? details.approvers.map(String) : [],
+        step: Number.isFinite(Number(details.step)) ? Number(details.step) : '',
       };
     });
+    const aviso = configurada
+      ? ''
+      : '<p class="atlas-v2-modal-note">Esta coluna ainda não foi revisada. As marcas abaixo são o que o Atlas vem <strong>adivinhando</strong> pelo texto do status — confira antes de salvar.</p>';
     openModal({
-      title: `Cores de ${columnEntry.name}`,
-      subtitle: 'Escolha uma cor para cada status. A alteração vale para todos os itens deste quadro.',
-      body: `<form id="atlas-v2-status-colors-form" class="atlas-v2-status-colors-form"><input type="hidden" name="columnId" value="${attr(columnId)}">${options.map((entry) => {
+      title: `Status de ${columnEntry.name}`,
+      subtitle: 'Defina a cor de cada status e quais deles encerram o item. Um status que encerra tira o item dos alertas de prazo e o conta como concluído no Painel.',
+      body: `<form id="atlas-v2-status-colors-form" class="atlas-v2-status-colors-form"><input type="hidden" name="columnId" value="${attr(columnId)}">${aviso}${options.map((entry) => {
         const foreground = readableTextColor(entry.background);
-        return `<div class="atlas-v2-status-color-row" data-status-color-row><input type="hidden" name="statusLabel" value="${attr(entry.label)}"><span class="atlas-v2-status-color-preview" data-status-color-preview style="--status-bg:${attr(entry.background)};--status-color:${attr(foreground)}">${escapeHtml(entry.label)}</span><label><span>Cor</span><input type="color" name="statusBackground" value="${attr(entry.background)}" data-status-color-input></label></div>`;
+        return `<div class="atlas-v2-status-color-row" data-status-color-row><input type="hidden" name="statusLabel" value="${attr(entry.label)}"><span class="atlas-v2-status-color-preview" data-status-color-preview style="--status-bg:${attr(entry.background)};--status-color:${attr(foreground)}">${escapeHtml(entry.label)}</span><label><span>Cor</span><input type="color" name="statusBackground" value="${attr(entry.background)}" data-status-color-input></label><label class="atlas-v2-status-done-toggle"><input type="checkbox" name="statusDone" ${entry.done ? 'checked' : ''} data-status-done-input><span>Encerra o item</span></label><div class="atlas-v2-status-aprovacao"><label><span>Etapa</span><input type="number" min="1" max="99" name="statusStep" value="${attr(entry.step)}" data-status-step-input placeholder="—"></label><label><span>Quem pode marcar</span><select name="statusApprovers" multiple size="3" data-status-approvers-input>${pessoas.map((pessoa) => `<option value="${attr(pessoa.id)}" ${entry.approvers.includes(String(pessoa.id)) ? 'selected' : ''}>${escapeHtml(pessoa.name)}</option>`).join('')}</select></label></div></div>`;
       }).join('')}</form>`,
-      actions: `<button class="atlas-v2-button atlas-v2-button-quiet" type="button" data-action="close-overlay">Cancelar</button><button class="atlas-v2-button atlas-v2-button-primary" type="submit" form="atlas-v2-status-colors-form">Salvar cores</button>`,
+      actions: `<button class="atlas-v2-button atlas-v2-button-quiet" type="button" data-action="close-overlay">Cancelar</button><button class="atlas-v2-button atlas-v2-button-primary" type="submit" form="atlas-v2-status-colors-form">Salvar status</button>`,
     });
   }
 
@@ -11006,10 +11195,20 @@ window.__ATLAS_VERSION__ = '2.4.2 OFICIAL';
     columnEntry.options = rows.map((row) => {
       const label = String(row.querySelector('[name="statusLabel"]')?.value || '').trim();
       const background = normalizedHexColor(row.querySelector('[name="statusBackground"]')?.value, '#e3f1fc');
-      return option(label, readableTextColor(background), background);
+      const done = row.querySelector('[data-status-done-input]')?.checked === true;
+      const stepBruto = Number(row.querySelector('[data-status-step-input]')?.value);
+      const approvers = [...(row.querySelector('[data-status-approvers-input]')?.selectedOptions || [])]
+        .map((entry) => String(entry.value))
+        .filter((entry) => isUuid(entry));
+      const base = option(label, readableTextColor(background), background, done);
+      // Campos so aparecem quando tem conteudo: opcao fora da escada de
+      // aprovacao continua com o mesmo formato de antes, sem chaves vazias.
+      if (Number.isFinite(stepBruto) && stepBruto > 0) base.step = stepBruto;
+      if (approvers.length) base.approvers = approvers;
+      return base;
     }).filter((entry) => entry.label);
     closeOverlay();
-    saveData('Cores dos status atualizadas');
+    saveData('Status atualizados: cores e quais encerram o item');
     render();
   }
 
@@ -11017,11 +11216,21 @@ window.__ATLAS_VERSION__ = '2.4.2 OFICIAL';
     const context = findBoard();
     if (!context) return;
     const boardEntry = context.board;
+    // V2.4.3: quem recebe aviso de prazo neste quadro. Vazio = todos os
+    // admins e supervisores ativos (a reserva vive no banco, em
+    // atlas_v2_sla_destinatarios) - assim nenhum quadro fica silencioso.
+    const slaRecipientIds = Array.isArray(boardEntry.settings?.slaRecipientIds)
+      ? boardEntry.settings.slaRecipientIds.map(String)
+      : [];
+    const recipientOptions = (runtime.data.users || [])
+      .filter((entry) => entry.status === 'active')
+      .map((entry) => `<option value="${attr(entry.id)}" ${slaRecipientIds.includes(String(entry.id)) ? 'selected' : ''}>${escapeHtml(entry.name)}</option>`)
+      .join('');
     const dateOptions = boardEntry.columns.filter((entry) => entry.type === 'date').map((entry) => `<option value="${attr(entry.id)}" ${boardEntry.settings?.slaDateColumnId === entry.id ? 'selected' : ''}>${escapeHtml(entry.name)}</option>`).join('');
     openDrawer({
       title: 'Configurar quadro',
       subtitle: boardEntry.name,
-      body: `<form id="atlas-v2-board-settings-form" class="atlas-v2-form-grid"><label class="atlas-v2-field is-wide"><span>Nome</span><input name="name" maxlength="80" required value="${attr(boardEntry.name)}"></label><label class="atlas-v2-field is-wide"><span>Descrição</span><textarea name="description" maxlength="180">${escapeHtml(boardEntry.description)}</textarea></label><label class="atlas-v2-field"><span>Acesso</span><select name="access">${Object.entries(ACCESS).map(([key, value]) => `<option value="${key}" ${boardEntry.access === key ? 'selected' : ''}>${escapeHtml(value.label)}</option>`).join('')}</select></label><label class="atlas-v2-field"><span>Coluna de prazo/SLA</span><select name="slaDateColumnId"><option value="">Detecção automática</option>${dateOptions}</select></label><label class="atlas-v2-field"><span>Alerta antecipado</span><input name="slaWarningDays" type="number" min="0" max="90" value="${Number(boardEntry.settings?.slaWarningDays ?? 2)}"><small>Dias antes do vencimento.</small></label></form><h3>Colunas</h3><div class="atlas-v2-settings-list">${boardEntry.columns.map((entry, index) => `<div class="atlas-v2-settings-row"><i data-lucide="${attr(COLUMN_TYPES[entry.type]?.icon || 'type')}"></i><span><strong>${escapeHtml(entry.name)}</strong><small>${escapeHtml(COLUMN_TYPES[entry.type]?.label || entry.type)} · ${Number(entry.width || 160)} px</small></span><div class="atlas-v2-settings-actions"><button class="atlas-v2-icon-button" type="button" data-action="move-column" data-column-id="${attr(entry.id)}" data-direction="-1" title="Mover para esquerda" ${index === 0 ? 'disabled' : ''}><i data-lucide="arrow-left"></i></button><button class="atlas-v2-icon-button" type="button" data-action="move-column" data-column-id="${attr(entry.id)}" data-direction="1" title="Mover para direita" ${index === boardEntry.columns.length - 1 ? 'disabled' : ''}><i data-lucide="arrow-right"></i></button>${entry.type === 'status' ? `<button class="atlas-v2-icon-button" type="button" data-action="edit-status-colors" data-column-id="${attr(entry.id)}" title="Alterar cores dos status"><i data-lucide="palette"></i></button>` : ''}<button class="atlas-v2-icon-button" type="button" data-action="edit-column" data-column-id="${attr(entry.id)}" title="Editar"><i data-lucide="pencil"></i></button><button class="atlas-v2-icon-button" type="button" data-action="delete-column" data-column-id="${attr(entry.id)}" title="Excluir"><i data-lucide="trash-2"></i></button></div></div>`).join('')}</div>`,
+      body: `<form id="atlas-v2-board-settings-form" class="atlas-v2-form-grid"><label class="atlas-v2-field is-wide"><span>Nome</span><input name="name" maxlength="80" required value="${attr(boardEntry.name)}"></label><label class="atlas-v2-field is-wide"><span>Descrição</span><textarea name="description" maxlength="180">${escapeHtml(boardEntry.description)}</textarea></label><label class="atlas-v2-field"><span>Acesso</span><select name="access">${Object.entries(ACCESS).map(([key, value]) => `<option value="${key}" ${boardEntry.access === key ? 'selected' : ''}>${escapeHtml(value.label)}</option>`).join('')}</select></label><label class="atlas-v2-field"><span>Coluna de prazo/SLA</span><select name="slaDateColumnId"><option value="">Detecção automática</option>${dateOptions}</select></label><label class="atlas-v2-field"><span>Alerta antecipado</span><input name="slaWarningDays" type="number" min="0" max="90" value="${Number(boardEntry.settings?.slaWarningDays ?? 2)}"><small>Dias antes do vencimento.</small></label><label class="atlas-v2-field is-wide"><span>Quem recebe aviso de prazo</span><select name="slaRecipientIds" multiple size="4">${recipientOptions}</select><small>Nenhum selecionado: avisa todos os administradores e supervisores.</small></label></form><h3>Colunas</h3><div class="atlas-v2-settings-list">${boardEntry.columns.map((entry, index) => `<div class="atlas-v2-settings-row"><i data-lucide="${attr(COLUMN_TYPES[entry.type]?.icon || 'type')}"></i><span><strong>${escapeHtml(entry.name)}</strong><small>${escapeHtml(COLUMN_TYPES[entry.type]?.label || entry.type)} · ${Number(entry.width || 160)} px</small></span><div class="atlas-v2-settings-actions"><button class="atlas-v2-icon-button" type="button" data-action="move-column" data-column-id="${attr(entry.id)}" data-direction="-1" title="Mover para esquerda" ${index === 0 ? 'disabled' : ''}><i data-lucide="arrow-left"></i></button><button class="atlas-v2-icon-button" type="button" data-action="move-column" data-column-id="${attr(entry.id)}" data-direction="1" title="Mover para direita" ${index === boardEntry.columns.length - 1 ? 'disabled' : ''}><i data-lucide="arrow-right"></i></button>${entry.type === 'status' ? `<button class="atlas-v2-icon-button" type="button" data-action="edit-status-colors" data-column-id="${attr(entry.id)}" title="Configurar status: cores e quais encerram o item"><i data-lucide="palette"></i></button>` : ''}<button class="atlas-v2-icon-button" type="button" data-action="edit-column" data-column-id="${attr(entry.id)}" title="Editar"><i data-lucide="pencil"></i></button><button class="atlas-v2-icon-button" type="button" data-action="delete-column" data-column-id="${attr(entry.id)}" title="Excluir"><i data-lucide="trash-2"></i></button></div></div>`).join('')}</div>`,
       actions: `<button class="atlas-v2-button atlas-v2-button-quiet" type="button" data-action="close-overlay">Fechar</button><button class="atlas-v2-button atlas-v2-button-primary" type="submit" form="atlas-v2-board-settings-form">Salvar quadro</button>`,
     });
   }
@@ -11036,6 +11245,11 @@ window.__ATLAS_VERSION__ = '2.4.2 OFICIAL';
     context.board.settings = context.board.settings || {};
     context.board.settings.slaDateColumnId = String(data.get('slaDateColumnId') || '');
     context.board.settings.slaWarningDays = Math.min(90, Math.max(0, Number(data.get('slaWarningDays') || 0)));
+    // getAll: e um <select multiple>. Com data.get() so viria o primeiro e os
+    // demais destinatarios sumiriam em silencio a cada gravacao.
+    context.board.settings.slaRecipientIds = data.getAll('slaRecipientIds')
+      .map((entry) => String(entry).trim())
+      .filter((entry) => isUuid(entry));
     closeOverlay();
     saveData('Quadro atualizado');
     render();
@@ -12288,53 +12502,18 @@ window.__ATLAS_VERSION__ = '2.4.2 OFICIAL';
     openNotificationsDrawer();
   }
 
-  async function scanSlaNotifications() {
-    if (!runtime.data || !currentUser()) return;
-    const today = new Date().toISOString().slice(0, 10);
-    const markKey = `atlas-v2-sla-marks:${currentUser().id}:${today}`;
-    const marks = new Set(JSON.parse(localStorage.getItem(markKey) || '[]'));
-    const created = [];
-    runtime.data.workspaces.forEach((workspace) => workspace.modules.forEach((module) => module.boards.forEach((boardEntry) => {
-      if (!hasPermission('view', { workspace, module, board: boardEntry })) return;
-      flatBoardItems(boardEntry).forEach(({ item: itemEntry }) => {
-        const state = boardSlaState(boardEntry, itemEntry);
-        if (!state || !['late', 'warning'].includes(state.level)) return;
-        const signature = `${boardEntry.id}:${itemEntry.id}:${state.level}`;
-        if (marks.has(signature)) return;
-        marks.add(signature);
-        created.push({
-          id: id('notification'),
-          userId: currentUser().id,
-          boardId: boardEntry.id,
-          itemId: itemEntry.id,
-          title: state.level === 'late' ? `Prazo vencido: ${itemEntry.name}` : `Prazo próximo: ${itemEntry.name}`,
-          message: `${state.label} no quadro ${boardEntry.name}.`,
-          type: 'sla',
-          readAt: null,
-          createdAt: new Date().toISOString(),
-        });
-      });
-    })));
-    if (!created.length) return;
-    runtime.data.notifications = [...created, ...(runtime.data.notifications || [])];
-    localStorage.setItem(markKey, JSON.stringify([...marks]));
-    if (runtime.remoteMode && runtime.authClient && isUuid(currentUser().id)) {
-      const rows = created.filter((entry) => isUuid(entry.boardId) && isUuid(entry.itemId)).map((entry) => ({
-        user_id: currentUser().id,
-        board_id: entry.boardId,
-        item_id: entry.itemId,
-        titulo: entry.title,
-        mensagem: entry.message,
-        tipo: 'sla',
-        dados: { source: 'atlas-v2.1' },
-      }));
-      if (rows.length) {
-        const { error } = await runtime.authClient.from('atlas_v2_notifications').insert(rows);
-        if (error) console.warn('Atlas V2.1: avisos de SLA ficaram na fila local.', error);
-      }
-    }
-    renderNotificationDot();
-  }
+  // scanSlaNotifications() foi REMOVIDA na V2.4.3.
+  //
+  // Ela varria os prazos no navegador e guardava o "ja avisei" em
+  // localStorage - por aparelho e por dia. Consequencias: prazo que vencia
+  // com a aba fechada (ou apenas em segundo plano, porque o monitor exige
+  // !document.hidden) nao avisava ninguem, e trocar de celular repetia
+  // todos os avisos. Em producao ela nunca gerou uma linha sequer.
+  //
+  // Agora quem varre e o banco: public.atlas_v2_scan_sla(), agendada no
+  // pg_cron, com as marcas em atlas_v2_sla_marks (compartilhadas entre
+  // aparelhos) e destinatario configuravel por quadro. Ver
+  // supabase/ATLAS_V2_4_3_SLA_NO_SERVIDOR.sql.
 
   function runLocalScheduledAutomations() {
     if (runtime.remoteMode) return;
@@ -12389,8 +12568,13 @@ window.__ATLAS_VERSION__ = '2.4.2 OFICIAL';
             toast('Uma automação atualizou o quadro.');
           }
         }
+        // V2.4.3: o aviso de prazo passou para o servidor
+        // (atlas_v2_scan_sla, agendado no pg_cron). A varredura que existia
+        // aqui foi REMOVIDA de proposito - manter as duas geraria aviso
+        // duplicado, cada uma com seu proprio controle de "ja avisei" (o
+        // navegador usava localStorage, o servidor usa atlas_v2_sla_marks).
+        // Ela tambem so rodava com a aba aberta e visivel, que era o bug.
         await refreshNotifications();
-        await scanSlaNotifications();
       } catch (error) {
         console.warn('Atlas V2: monitor de automações indisponível.', error);
       }
@@ -12632,6 +12816,8 @@ window.__ATLAS_VERSION__ = '2.4.2 OFICIAL';
         runtime.chatPendingDelete = null;
         renderItemChat(runtime.chatItemId);
       },
+      'status-skip-confirm': () => resolveStatusSkip(true),
+      'status-skip-cancel': () => resolveStatusSkip(false),
       'chat-delete-confirm': () => {
         runtime.chatPendingDelete = null;
         void deleteChatMessage(target.dataset.messageId);
@@ -12927,6 +13113,14 @@ window.__ATLAS_VERSION__ = '2.4.2 OFICIAL';
       }
       const nextValue = found.item.values[target.dataset.columnId];
       captureItemHistory(context.board, found.item, target.dataset.columnId, previousValue, nextValue);
+      if (columnEntry?.type === 'status' && statusSkipsStep(columnEntry, previousValue, nextValue)) {
+        const seguir = await confirmStatusSkip(previousValue, nextValue);
+        if (!seguir) {
+          found.item.values[target.dataset.columnId] = previousValue;
+          renderSoon();
+          return;
+        }
+      }
       if (runtime.remoteMode && runtime.authClient && columnEntry) {
         try {
           target.disabled = true;

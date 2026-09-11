@@ -2297,6 +2297,20 @@ body.atlas-v2-board-loading .atlas-v2-board-content {
   resize: vertical;
 }
 
+/* Selecao multipla (ex.: quem recebe aviso de prazo). O min-height de 38px
+   acima achataria a lista em uma linha e meia e esconderia as opcoes; aqui a
+   altura vem do atributo size, com padding menor porque cada opcao ja tem o
+   seu. */
+.atlas-v2-field select[multiple] {
+  min-height: 0;
+  padding: 4px;
+}
+
+.atlas-v2-field select[multiple] option {
+  padding: 5px 6px;
+  border-radius: 3px;
+}
+
 .atlas-v2-field input:focus,
 .atlas-v2-field select:focus,
 .atlas-v2-field textarea:focus {
@@ -6193,7 +6207,7 @@ body.atlas-v2-right-dragging * {
 
 .atlas-v2-status-color-row {
   display: grid;
-  grid-template-columns: minmax(170px, 1fr) auto;
+  grid-template-columns: minmax(170px, 1fr) auto auto;
   align-items: center;
   gap: 14px;
   min-height: 58px;
@@ -6230,6 +6244,35 @@ body.atlas-v2-right-dragging * {
   letter-spacing: .04em;
 }
 
+/* "Encerra o item": marca que o status conclui. Fica ao lado da cor porque as
+   duas coisas descrevem o mesmo status, e a pessoa costuma revisar as duas
+   juntas quando abre esta tela. */
+.atlas-v2-status-done-toggle {
+  gap: 6px;
+  padding-left: 14px;
+  border-left: 1px solid var(--v2-line);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.atlas-v2-status-done-toggle input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--v2-green);
+  cursor: pointer;
+}
+
+.atlas-v2-modal-note {
+  margin: 0 0 4px;
+  padding: 10px 12px;
+  color: var(--v2-text);
+  font-size: 12px;
+  line-height: 1.5;
+  border: 1px solid color-mix(in srgb, var(--v2-amber) 40%, var(--v2-line));
+  border-radius: 6px;
+  background: var(--v2-amber-soft);
+}
+
 .atlas-v2-status-color-row input[type="color"] {
   width: 46px;
   height: 34px;
@@ -6247,6 +6290,18 @@ body.atlas-v2-right-dragging * {
 
   .atlas-v2-status-color-row label {
     justify-content: space-between;
+  }
+
+  /* Empilhado no celular, a borda lateral vira separador de cima. E o alvo de
+     toque passa a 44px de altura: medido em 375px, o rotulo dava 33px, e o
+     diagnostico ja registra alvo pequeno como problema no modo campo - nao faz
+     sentido estrear um controle novo repetindo isso. */
+  .atlas-v2-status-done-toggle {
+    min-height: 44px;
+    padding-left: 0;
+    padding-top: 10px;
+    border-left: 0;
+    border-top: 1px solid var(--v2-line);
   }
 }
 

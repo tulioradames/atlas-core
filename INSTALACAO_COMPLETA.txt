@@ -1,9 +1,9 @@
-ATLAS V2.4.2 OFICIAL - INSTALACAO E ATUALIZACAO
+ATLAS V2.4.3 OFICIAL - INSTALACAO E ATUALIZACAO
 
 ATUALIZAR UMA V2.4.1 EXISTENTE
 
 1. Publique os arquivos deste pacote.
-2. Pressione Ctrl + F5 e confirme V2.4.2 Oficial no rodape.
+2. Pressione Ctrl + F5 e confirme V2.4.3 Oficial no rodape.
    Nao ha SQL a executar nesta versao e o conector nao muda.
 
 ATUALIZAR UMA V2.4.0 EXISTENTE
@@ -86,3 +86,19 @@ IMPORTANTE
 - Pastas antigas que ficarem vazias sao preservadas.
 - Detalhes completos da V2.4.0 e da V2.4.1 em docs/V2_4_0_DESENVOLVIMENTO.md
   e docs/RELEASE_V2_4_1_OFICIAL.md.
+
+ATUALIZAR DE UMA V2.4.2 (migrations obrigatorias)
+1. Publique os arquivos deste pacote.
+2. No SQL Editor do Supabase, aplique nesta ordem:
+     supabase/ATLAS_V2_4_3_CONCLUSAO_EXPLICITA.sql
+     supabase/ATLAS_V2_4_3_SLA_NO_SERVIDOR.sql
+     supabase/ATLAS_V2_4_3_APROVACAO.sql
+     supabase/ATLAS_V2_4_3_CORRIGE_VERSAO_ANEXO.sql
+3. ANTES de agendar o aviso de prazo, rode uma vez em modo silencioso:
+     select * from public.atlas_v2_scan_sla(true);
+   Isso registra o atraso ja existente como "ja avisado". Sem este passo, a
+   primeira execucao agendada notifica todo o passivo de uma vez.
+4. So entao agende:
+     select cron.schedule('atlas-v2-sla', '10 7-19 * * *',
+                          'select public.atlas_v2_scan_sla(false);');
+5. Ctrl + F5 e confirme V2.4.3 Oficial no rodape.

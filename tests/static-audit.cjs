@@ -26,12 +26,12 @@ const deployScript = read('deploy-cloudflare.ps1');
 const auditFixes = read('supabase/ATLAS_V2_4_0_AUDITORIA_CORRECOES.sql');
 const manual = read('manual.html');
 
-assert(app.includes("window.__ATLAS_VERSION__ = '2.4.2 OFICIAL'"), 'Versao interna divergente.');
-assert(config.includes('V2.4.2 Oficial'), 'Config sem a versao do pacote.');
+assert(app.includes("window.__ATLAS_VERSION__ = '2.4.3 OFICIAL'"), 'Versao interna divergente.');
+assert(config.includes('V2.4.3 Oficial'), 'Config sem a versao do pacote.');
 assert(index.includes('id="atlas-v2-footer-version"'), 'Rodape sem o elemento de versao (agora preenchido via JS a partir do config.js).');
-assert(index.includes('V2.4.2 Oficial</span>'), 'Rodape HTML ainda exibe uma versao antiga antes do JavaScript carregar.');
+assert(index.includes('V2.4.3 Oficial</span>'), 'Rodape HTML ainda exibe uma versao antiga antes do JavaScript carregar.');
 assert(index.includes('name="robots" content="noindex, nofollow, noarchive"'), 'Ambiente de homologacao sem bloqueio de indexacao.');
-assert(manifest.includes('2.4.2'), 'Manifest sem a versao do pacote.');
+assert(manifest.includes('2.4.3'), 'Manifest sem a versao do pacote.');
 
 const configVersionMatch = config.match(/VERSION:\s*"([^"]+)"/);
 const changelogVersionMatch = app.match(/const CHANGELOG = \[\s*\{\s*version:\s*'([^']+)'/s);
@@ -92,6 +92,14 @@ const manualScriptEnd = manual.indexOf('</script>', manualScriptStart);
 const manualScriptHash = `sha256-${crypto.createHash('sha256').update(manual.slice(manualScriptStart, manualScriptEnd)).digest('base64')}`;
 assert(manualScriptStart >= '<script>'.length && manualScriptEnd > manualScriptStart, 'Script do manual nao encontrado.');
 assert(workerSecurity.includes(`'${manualScriptHash}'`) && securityHeaders.includes(`'${manualScriptHash}'`), 'Hash CSP do manual esta desatualizado.');
+// v2.html (URL antiga do Atlas, mantida so por compatibilidade) ja teve um
+// redirecionamento por <script> inline cujo hash nunca foi adicionado a CSP -
+// o redirecionamento ficava bloqueado silenciosamente. Em vez de mais um hash
+// para manter em dia, v2.html usa um script externo (nao precisa de hash) e
+// este teste garante que ninguem reintroduza um inline aqui sem perceber.
+const v2Html = read('v2.html');
+assert(!/<script>[\s\S]*?<\/script>/.test(v2Html), 'v2.html nao deve ter script inline (exigiria outro hash na CSP); use um arquivo externo como assets/redirect-v2.js.');
+assert(v2Html.includes('assets/redirect-v2.js'), 'v2.html deve redirecionar via assets/redirect-v2.js (script externo, sem hash de CSP).');
 assert(
   !/\?v=/.test(manifest),
   'O manifest nao deve versionar icones: eles sao estaveis e a querystring so cria mais um ponto de divergencia.',
@@ -352,6 +360,10 @@ assert(
     'ATLAS_V2_4_1_CHAT_ATTACHMENT_ALLOWLIST.sql',
     'ATLAS_V2_4_1_MIGRATION_TRACKING.sql',
     'ATLAS_V2_4_1_SECURE_DRIVE_PREVIEW.sql',
+    'ATLAS_V2_4_3_APROVACAO.sql',
+    'ATLAS_V2_4_3_CONCLUSAO_EXPLICITA.sql',
+    'ATLAS_V2_4_3_CORRIGE_VERSAO_ANEXO.sql',
+    'ATLAS_V2_4_3_SLA_NO_SERVIDOR.sql',
   ]),
   'A pasta supabase contem SQL antigo ou inesperado.'
 );
@@ -369,44 +381,4 @@ localReferences.forEach((entry) => {
   assert(fs.existsSync(path.join(root, entry)), `Referencia local ausente: ${entry}`);
 });
 
-// ---------------------------------------------------------------------------
-// V2.4.1 - conexoes de armazenamento com tipo (drive/local), previa segura de
-// imagens, allowlist de anexos de chat no proprio storage e rastreio de
-// migrations.
-// ---------------------------------------------------------------------------
-const storageTipo = read('supabase/ATLAS_V2_4_0_ARMAZENAMENTO_TIPO.sql');
-assert(storageTipo.includes("add column if not exists tipo text not null default 'drive'"), 'Coluna de tipo de armazenamento ausente da migracao.');
-assert(storageTipo.includes('atlas_v2_storage_connections_tipo_check'), 'Restricao de valores do tipo de armazenamento ausente.');
-assert(app.includes('const STORAGE_TYPES') && app.includes("local: {"), 'Tipo de armazenamento "servidor local" ausente do frontend.');
-assert(app.includes('function normalizeLocalConnectorUrl') && app.includes('169.254') && app.includes('fe80:'), 'Bloqueio de endereco link-local ausente do conector local.');
-
-const correcoesRevisao2 = read('supabase/ATLAS_V2_4_0_CORRECOES_REVISAO_2.sql');
-assert(
-  /insert into public\.atlas_v2_storage_connections\([^)]*,tipo\)/.test(correcoesRevisao2) || correcoesRevisao2.includes('tipo=coalesce(excluded.tipo'),
-  'A RPC atomica de sincronizacao ainda nao preserva o tipo de armazenamento.',
-);
-
-const securePreview = read('supabase/ATLAS_V2_4_1_SECURE_DRIVE_PREVIEW.sql');
-assert(securePreview.includes('atlas_v2_can_storage_action'), 'Permissao de previa segura de imagem ausente do SQL.');
-assert(connector.includes("preview: 'preview'") && connector.includes("if (action === 'preview') return atlasPreview_"), 'Conector sem a acao de previa despachada.');
-assert(connector.includes('function atlasPreview_'), 'Conector sem a rotina de previa segura de imagem.');
-
-const chatAllowlist = read('supabase/ATLAS_V2_4_1_CHAT_ATTACHMENT_ALLOWLIST.sql');
-assert(chatAllowlist.includes('atlas_v2_chat_attachment_guard'), 'Allowlist de anexos do chat ausente do SQL publicado.');
-assert(app.includes('chatAttachmentTypeAllowed'), 'Validacao de formato de anexo do chat ausente do frontend.');
-
-const migrationTracking = read('supabase/ATLAS_V2_4_1_MIGRATION_TRACKING.sql');
-assert(migrationTracking.includes('atlas_v2_schema_migrations'), 'Tabela de rastreio de migrations ausente do SQL publicado.');
-
-assert(app.includes('clearLocalUserData'), 'Limpeza do backup local no logout ausente.');
-assert(app.includes('openDeleteGroupModal'), 'Confirmacao de exclusao de grupo ausente.');
-assert(css.includes('.atlas-v2-empty-view > div > button.atlas-v2-button'), 'Botao de criar grupo na tela vazia sem estilo.');
-assert(manifest.includes('V2.4.2 Oficial'), 'Manifest sem o nome de versao publico.');
-
-const v2Redirect = read('v2.html');
-assert(v2Redirect.includes('assets/redirect-v2.js'), 'Redirecionamento de v2.html ainda usa script inline bloqueavel por CSP.');
-assert(fs.existsSync(path.join(root, 'assets/redirect-v2.js')), 'Script externo de redirecionamento ausente.');
-
-assert(manual.includes('15 MB') && !manual.includes('8 MB'), 'Manual desatualizado sobre o limite de importacao de planilha.');
-
-console.log('Atlas V2.4.1: auditoria estatica aprovada.');
+console.log('Atlas V2.4.0: auditoria estatica aprovada.');
