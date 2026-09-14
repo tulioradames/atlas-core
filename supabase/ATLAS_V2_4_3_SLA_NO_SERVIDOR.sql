@@ -295,9 +295,15 @@ commit;
 -- 1) Marco zero silencioso - registra o passivo sem avisar ninguem:
 --      select * from public.atlas_v2_scan_sla(true);
 --
--- 2) So depois, agendar. De hora em hora as 07:10..19:10 evita acordar
---    telefone de madrugada; o prazo e por dia, entao nao ha perda:
---      select cron.schedule('atlas-v2-sla', '10 7-19 * * *',
+-- 2) So depois, agendar. De hora em hora das 07:10 as 19:10 no horario de
+--    Brasilia evita acordar telefone de madrugada; o prazo e por dia, entao
+--    nao ha perda.
+--
+--    ATENCAO AO FUSO: o pg_cron le a expressao no timezone do banco, que no
+--    Supabase e UTC. '10 7-19 * * *' nao e 07:10 local - e 04:10..16:10 em
+--    Brasilia (UTC-3), justamente a madrugada que se queria evitar, e parava
+--    antes do fim do expediente. O certo e o intervalo deslocado em 3 horas:
+--      select cron.schedule('atlas-v2-sla', '10 10-22 * * *',
 --                           'select public.atlas_v2_scan_sla(false);');
 --
 -- Conferencia:

@@ -173,9 +173,11 @@ Detalhes completos em
    ```
    Isso registra o atraso que já existe como "já avisado". Sem este passo, a
    primeira execução agendada notifica todo o passivo de uma vez.
-4. Só então agende:
+4. Só então agende. O `pg_cron` lê a expressão no fuso do banco, que no
+   Supabase é **UTC** — o exemplo abaixo é 07:10–19:10 em Brasília (UTC−3).
+   Ajuste o deslocamento se o seu fuso for outro:
    ```sql
-   select cron.schedule('atlas-v2-sla', '10 7-19 * * *',
+   select cron.schedule('atlas-v2-sla', '10 10-22 * * *',
                         'select public.atlas_v2_scan_sla(false);');
    ```
 5. Pressione `Ctrl + F5` e confirme `V2.4.3 Oficial` no rodapé.

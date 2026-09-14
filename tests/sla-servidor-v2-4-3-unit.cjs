@@ -157,4 +157,38 @@ assert(
   'A reserva (todos os admins e supervisores) so pode valer quando NENHUM destinatario valido foi escolhido.',
 );
 
-console.log('V2.4.3: SLA no servidor - varredura do navegador removida, destinatario e acordo SQL/JS validados.');
+// ---------------------------------------------------------------------------
+// 5. O exemplo de agendamento nao pode cair na madrugada de Brasilia.
+//
+// O pg_cron le a expressao no fuso do BANCO, que no Supabase e UTC. A primeira
+// versao documentava '10 7-19 * * *' achando que era 07:10..19:10 local: de
+// fato era 04:10..16:10 em Brasilia (UTC-3) - a madrugada que o proprio
+// comentario dizia evitar, e parando antes do fim do expediente. Este teste
+// interpreta a hora escrita como UTC e exige que a JANELA LOCAL caiba no
+// horario comercial, em vez de comparar com uma string decorada.
+// ---------------------------------------------------------------------------
+const UTC_PARA_BRASILIA = -3;
+const JANELA_LOCAL_MIN = 7;
+const JANELA_LOCAL_MAX = 19;
+
+const agendamentos = [...sql.matchAll(/cron\.schedule\(\s*'atlas-v2-sla'\s*,\s*'([^']+)'/g)]
+  .map((m) => m[1]);
+assert(agendamentos.length > 0, 'O SQL precisa documentar o comando de agendamento.');
+
+for (const expressao of agendamentos) {
+  const campoHora = expressao.trim().split(/\s+/)[1];
+  const faixa = /^(\d{1,2})-(\d{1,2})$/.exec(campoHora);
+  assert(faixa, `Faixa de horas nao reconhecida no agendamento: "${expressao}".`);
+  const horasLocais = [Number(faixa[1]), Number(faixa[2])]
+    .map((h) => ((h + UTC_PARA_BRASILIA) % 24 + 24) % 24);
+  assert(
+    horasLocais[0] <= horasLocais[1],
+    `A faixa "${campoHora}" UTC atravessa a meia-noite em Brasilia (${horasLocais[0]}h..${horasLocais[1]}h).`,
+  );
+  assert(
+    horasLocais[0] >= JANELA_LOCAL_MIN && horasLocais[1] <= JANELA_LOCAL_MAX,
+    `"${campoHora}" em UTC vira ${horasLocais[0]}h..${horasLocais[1]}h em Brasilia, fora de ${JANELA_LOCAL_MIN}h..${JANELA_LOCAL_MAX}h.`,
+  );
+}
+
+console.log('V2.4.3: SLA no servidor - varredura removida, destinatario, acordo SQL/JS e fuso do agendamento validados.');
