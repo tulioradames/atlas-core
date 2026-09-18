@@ -15,7 +15,7 @@ window.__ATLAS_VERSION__ = '2.4.3 OFICIAL';
   // pre-cache. tests/static-audit.cjs falha se index.html e ATLAS_BUILD
   // divergirem, que era a causa dos casos de "publiquei mas continua igual".
   // ---------------------------------------------------------------------------
-  const ATLAS_BUILD = '2.4.3-aprovacao-r14-official';
+  const ATLAS_BUILD = '2.4.3-servidor-proprio-r6-official';
   window.__ATLAS_BUILD__ = ATLAS_BUILD;
 
   // Changelog exibido na tela de Inicio. Toda alteracao funcional ou correcao
@@ -2451,7 +2451,11 @@ window.__ATLAS_VERSION__ = '2.4.3 OFICIAL';
       workspaceRows, moduleRows, boardRows, groupRows, columnRows, itemRows,
       viewRows, storageRows, accessRows, memberRows, automationRows, fieldRows, integrationRows,
     ] = await Promise.all([
-      readRemoteTable('atlas_v2_workspaces', { select: 'id,nome,descricao,cor,tipo_acesso,ativo,ordem,storage_connection_id', order: ['ordem', 'id'] }),
+      // criado_por entra na leitura porque a policy de INSERCAO da tabela exige
+      // `criado_por = uid()`. Sem trazer o valor de volta, a sincronizacao
+      // reenviaria a area com o campo vazio - ou, pior, com o id de quem estiver
+      // salvando, reescrevendo a autoria de areas criadas por outra pessoa.
+      readRemoteTable('atlas_v2_workspaces', { select: 'id,nome,descricao,cor,tipo_acesso,ativo,ordem,storage_connection_id,criado_por', order: ['ordem', 'id'] }),
       readRemoteTable('atlas_v2_modules', { select: 'id,workspace_id,parent_module_id,nome,descricao,icone,ordem,ativo,storage_connection_id', order: ['workspace_id', 'ordem', 'id'] }),
       readRemoteTable('atlas_v2_boards', { select: 'id,module_id,nome,descricao,icone,tipo_acesso,origem,configuracoes,oficial,ativo,ordem,storage_connection_id', order: ['module_id', 'ordem', 'id'] }),
       readRemoteTable('atlas_v2_groups', { select: 'id,board_id,nome,cor,recolhido,ordem', order: ['board_id', 'ordem', 'id'] }),
@@ -2666,6 +2670,10 @@ window.__ATLAS_VERSION__ = '2.4.3 OFICIAL';
       order: Number(entry.ordem || 0),
       active: entry.ativo !== false,
       storageConnectionId: entry.storage_connection_id || null,
+      // Autoria vinda do servidor. Area antiga sem autor gravado continua sem -
+      // nao se inventa um dono aqui, senao o proximo salvamento carimbaria quem
+      // passou por perto como criador.
+      createdBy: entry.criado_por || '',
       modules: (modulesByWorkspace.get(entry.id) || []).map((moduleEntry) => ({
         id: moduleEntry.id,
         name: moduleEntry.nome,
@@ -2847,7 +2855,15 @@ window.__ATLAS_VERSION__ = '2.4.3 OFICIAL';
       tipo: storageType(entry),
     }));
     (data.workspaces || []).forEach((workspace, workspaceOrder) => {
-      rows.atlas_v2_workspaces.push({ id: workspace.id, nome: workspace.name, descricao: workspace.description || '', cor: workspace.color || '#0f6cbd', tipo_acesso: workspace.access || 'main', ativo: workspace.active !== false, ordem: workspace.order ?? workspaceOrder, storage_connection_id: workspace.storageConnectionId || null });
+      // criado_por: a policy de insercao de areas exige `criado_por = uid()` e
+      // esta montagem nao enviava o campo - o banco comparava null contra o
+      // usuario, dava falso, e recusava criar area nova ATE PARA ADMIN. Era o
+      // defeito de 16/09, contornado no banco com um `set default uid()`.
+      // O valor sai de workspace.createdBy, preenchido na criacao (area nova) ou
+      // lido do servidor (area existente). NUNCA se usa o usuario da sessao como
+      // reserva aqui: isso reescreveria a autoria de toda area ja existente no
+      // primeiro salvamento de qualquer pessoa.
+      rows.atlas_v2_workspaces.push({ id: workspace.id, nome: workspace.name, descricao: workspace.description || '', cor: workspace.color || '#0f6cbd', tipo_acesso: workspace.access || 'main', ativo: workspace.active !== false, ordem: workspace.order ?? workspaceOrder, storage_connection_id: workspace.storageConnectionId || null, criado_por: workspace.createdBy || null });
       (workspace.modules || []).forEach((module, moduleOrder) => {
         rows.atlas_v2_modules.push({ id: module.id, workspace_id: workspace.id, parent_module_id: module.parentId || null, nome: module.name, descricao: module.description || '', icone: module.icon || 'folder', ordem: module.order ?? moduleOrder, ativo: module.active !== false, storage_connection_id: module.storageConnectionId || null });
         (module.boards || []).forEach((boardEntry, boardOrder) => {
@@ -3337,6 +3353,43 @@ window.__ATLAS_VERSION__ = '2.4.3 OFICIAL';
     return conflicts;
   }
 
+  // O aviso de falha na sincronizacao repassava o texto cru do Postgres
+  // ("new row violates row-level security policy for table ...") direto para o
+  // usuario, que nao tem o que fazer com isso. Aqui a mensagem vira uma frase
+  // que diz o que aconteceu e o que fazer. O texto tecnico continua inteiro no
+  // console (console.error acima), que e onde o suporte precisa dele.
+  function mensagemDeFalhaNaSincronizacao(error) {
+    const codigo = String(error?.code || '').trim();
+    const cru = String(error?.message || error || '');
+    const bruto = `${cru} ${String(error?.details || '')} ${String(error?.hint || '')}`.toLowerCase();
+    const sufixo = codigo ? ` (código ${codigo})` : '';
+
+    const regra = (texto) => `${texto}${sufixo}`;
+
+    if (codigo === '42501' || bruto.includes('row-level security')) {
+      return regra('Sem permissão para gravar esta alteração. Seu acesso não cobre este setor ou quadro — peça a um administrador para liberar, e não repita o salvamento até lá.');
+    }
+    if (codigo === '23503' || bruto.includes('foreign key')) {
+      return regra('A alteração depende de um registro que não existe mais no servidor (alguém apagou o quadro, a coluna ou o item). Atualize a página e refaça somente a sua alteração.');
+    }
+    if (codigo === '23505' || bruto.includes('duplicate key')) {
+      return regra('Já existe um registro com esse identificador no servidor. Atualize a página antes de salvar de novo.');
+    }
+    if (codigo === '23502' || bruto.includes('not-null') || bruto.includes('null value in column')) {
+      return regra('Um campo obrigatório ficou vazio e o servidor recusou o lote. Nenhuma alteração foi aplicada — confira os campos marcados como obrigatórios.');
+    }
+    if (codigo === 'PGRST301' || bruto.includes('jwt expired') || bruto.includes('invalid token')) {
+      return regra('Sua sessão expirou. Entre de novo para que as alterações sejam salvas — o que está na tela não se perdeu.');
+    }
+    if (bruto.includes('failed to fetch') || bruto.includes('networkerror') || bruto.includes('load failed')) {
+      return 'Sem resposta do servidor. Nenhuma alteração foi aplicada; assim que a conexão voltar, o Atlas tenta de novo sozinho.';
+    }
+    if (bruto.includes('não confirmou o lote')) {
+      return cru;
+    }
+    return regra(`O servidor recusou o lote e nenhuma alteração foi aplicada. Detalhe técnico: ${cru}`);
+  }
+
   async function syncRemoteData() {
     if (!runtime.remoteMode || !runtime.authClient || !runtime.data) return false;
     if (runtime.bootstrapRefreshing || !runtime.remoteReady) {
@@ -3436,9 +3489,10 @@ window.__ATLAS_VERSION__ = '2.4.3 OFICIAL';
     } catch (error) {
       console.error('Atlas V2: falha ao sincronizar dados operacionais.', error);
       if (indicator) indicator.innerHTML = '<i data-lucide="cloud-alert"></i>Falha ao sincronizar';
-      setOperationProgress('Falha na sincronização', 100, error.message || String(error));
+      const explicacao = mensagemDeFalhaNaSincronizacao(error);
+      setOperationProgress('Falha na sincronização', 100, explicacao);
       clearOperationProgress(2500);
-      toast(`Falha ao sincronizar com o Supabase: ${error.message || error}`, true);
+      toast(explicacao, true);
       return false;
     } finally {
       runtime.remoteSyncing = false;
@@ -4835,19 +4889,19 @@ window.__ATLAS_VERSION__ = '2.4.3 OFICIAL';
       )) || null;
       return Boolean(matchedModule);
     });
-    const context = findBoard();
-    const targetModule = matchedModule || (!context?.module?.storageConnectionId ? context?.module : null);
-    if (targetModule) {
-      targetModule.storageConnectionId = connection.id;
-      return `módulo ${targetModule.name}`;
+    // So vincula quando o NOME bate. Antes havia duas reservas que pegavam o
+    // modulo ou a area simplesmente ABERTOS na tela no momento de salvar - foi
+    // assim que a area de producao "Operações" acabou apontando para a conexao
+    // "Teste", sem ninguem ter escolhido isso. Armazenamento que muda pelas
+    // costas de quem administra e pior que a falta do atalho: sem coincidencia
+    // de nome, a conexao fica sem vinculo e quem administra escolhe onde usar.
+    if (matchedModule) {
+      matchedModule.storageConnectionId = connection.id;
+      return `módulo ${matchedModule.name}`;
     }
     if (matchedWorkspace) {
       matchedWorkspace.storageConnectionId = connection.id;
       return `área ${matchedWorkspace.name}`;
-    }
-    if (context?.workspace && !context.workspace.storageConnectionId) {
-      context.workspace.storageConnectionId = connection.id;
-      return `área ${context.workspace.name}`;
     }
     return '';
   }
@@ -5405,7 +5459,7 @@ window.__ATLAS_VERSION__ = '2.4.3 OFICIAL';
       const detail = entry.accountEmail || entry.folderId
         ? `${entry.accountEmail || 'Conta setorial'}${entry.folderId ? ` · Pasta ${entry.folderId.slice(0, 10)}...` : ''}`
         : 'Conexão existente; abra para revisar ou completar os dados.';
-      return `<div class="atlas-v2-admin-storage-row"><span><i data-lucide="hard-drive"></i></span><span><strong>${escapeHtml(entry.name)}</strong><small>${escapeHtml(entry.sector)} · ${escapeHtml(detail)} · ${usage} uso(s)${escapeHtml(warning)}</small></span><b class="is-${attr(entry.status)}">${escapeHtml(storageStatusLabel(entry.status))}</b><button type="button" data-action="admin-organize-storage" data-storage-id="${attr(entry.id)}" title="Organizar arquivos existentes"><i data-lucide="folder-tree"></i></button><button type="button" data-action="admin-edit-storage" data-storage-id="${attr(entry.id)}" title="Configurar conexão"><i data-lucide="settings-2"></i></button></div>`;
+      return `<div class="atlas-v2-admin-storage-row"><span><i data-lucide="hard-drive"></i></span><span><strong>${escapeHtml(entry.name)}</strong><small>${escapeHtml(entry.sector)} · ${escapeHtml(detail)} · ${usage} uso(s)${escapeHtml(warning)}</small></span><b class="is-${attr(entry.status)}">${escapeHtml(storageStatusLabel(entry.status))}</b><button type="button" data-action="admin-organize-storage" data-storage-id="${attr(entry.id)}" title="Organizar arquivos existentes"><i data-lucide="folder-tree"></i></button><button type="button" data-action="admin-edit-storage" data-storage-id="${attr(entry.id)}" title="Configurar conexão"><i data-lucide="settings-2"></i></button><button type="button" data-action="admin-toggle-storage" data-storage-id="${attr(entry.id)}" title="${entry.status === 'disabled' ? 'Reativar conexão' : 'Desativar conexão'}"><i data-lucide="${entry.status === 'disabled' ? 'power' : 'power-off'}"></i></button>${usage === 0 ? `<button class="is-danger" type="button" data-action="admin-delete-storage" data-storage-id="${attr(entry.id)}" title="Excluir conexão"><i data-lucide="trash-2"></i></button>` : ''}</div>`;
     }).join('');
     const trash = (runtime.data.trash || []).map((entry) => `<div class="atlas-v2-admin-trash-row"><i data-lucide="trash-2"></i><span><strong>${escapeHtml(entry.name)}</strong><small>${escapeHtml(entry.type)} · ${formatDateTime(entry.deletedAt)}</small></span><button type="button" data-action="admin-restore-trash" data-trash-id="${attr(entry.id)}" title="Restaurar"><i data-lucide="undo-2"></i></button><button class="is-danger" type="button" data-action="admin-purge-trash" data-trash-id="${attr(entry.id)}" title="Excluir definitivamente"><i data-lucide="x"></i></button></div>`).join('');
     const errors = (runtime.data.errors || []).map((entry) => `<div class="atlas-v2-admin-trash-row"><i data-lucide="triangle-alert"></i><span><strong>${escapeHtml(entry.title)}</strong><small>${escapeHtml(entry.detail || '')}</small></span></div>`).join('');
@@ -6230,6 +6284,80 @@ window.__ATLAS_VERSION__ = '2.4.3 OFICIAL';
   // sem confirmacao - um clique no "x" (vizinho do botao de restaurar, ambos
   // pequenos) destruia o registro e os anexos sem volta. Mover para a lixeira
   // ja pedia confirmacao; o passo irreversivel nao pedia.
+  // Ate aqui a tela de administracao so sabia CRIAR e EDITAR conexao de
+  // armazenamento. O modelo de dados sempre previu status 'disabled' - e o
+  // codigo respeita em 4 pontos - mas nao havia nada na interface que marcasse
+  // isso. Conexao criada era permanente: a conexao "Teste" da migracao precisou
+  // ser removida com SQL direto no banco.
+  function toggleStorageConnection(connectionId) {
+    if (!requirePermission('admin', null, 'desativar a conexão de armazenamento')) return;
+    const connection = storageConnection(connectionId);
+    if (!connection) return;
+    if (connection.status === 'disabled') {
+      // Reativar NAO devolve 'connected': a conexao volta precisando de teste,
+      // porque ninguem sabe o que mudou na pasta enquanto ela esteve fora.
+      connection.status = 'pending';
+      saveData(`Conexão "${connection.name}" reativada. Teste antes de usar.`);
+      render();
+      return;
+    }
+    const usage = storageUsageCount(connectionId);
+    openModal({
+      title: 'Desativar conexão?',
+      subtitle: connection.name,
+      body: `<div class="atlas-v2-confirm-card"><i data-lucide="triangle-alert"></i><div><strong>${usage ? `Esta conexão está em uso por ${usage} escopo(s).` : 'Esta conexão não está em uso.'}</strong><p>Desativar não apaga nada: os arquivos já enviados continuam onde estão. ${usage ? 'Mas os quadros que dependem dela param de enviar e de exibir anexos até que outra conexão seja escolhida.' : 'Ela apenas some das escolhas de novos quadros.'}</p></div></div>`,
+      actions: `<button class="atlas-v2-button atlas-v2-button-quiet" type="button" data-action="close-overlay">Cancelar</button><button class="atlas-v2-button atlas-v2-button-danger" type="button" data-action="confirm-toggle-storage" data-storage-id="${attr(connection.id)}"><i data-lucide="power-off"></i>Desativar</button>`,
+    });
+  }
+
+  function confirmToggleStorageConnection(connectionId) {
+    if (!requirePermission('admin', null, 'desativar a conexão de armazenamento')) return;
+    const connection = storageConnection(connectionId);
+    if (!connection) return;
+    connection.status = 'disabled';
+    closeOverlay();
+    saveData(`Conexão "${connection.name}" desativada`);
+    render();
+  }
+
+  // Excluir so e oferecido quando storageUsageCount e zero - a funcao ja
+  // existia desde a V2.4.0 e nunca tinha sido usada para isso. Com uso > 0 a
+  // exclusao apagaria a referencia de quadros que dependem dela.
+  function openDeleteStorageModal(connectionId) {
+    if (!requirePermission('admin', null, 'excluir a conexão de armazenamento')) return;
+    const connection = storageConnection(connectionId);
+    if (!connection) return;
+    if (storageUsageCount(connectionId) > 0) {
+      toast('Esta conexão está em uso. Troque a conexão dos escopos que dependem dela antes de excluir.', true);
+      return;
+    }
+    openModal({
+      title: 'Excluir conexão',
+      subtitle: connection.name,
+      body: '<div class="atlas-v2-confirm-card"><i data-lucide="triangle-alert"></i><div><strong>Esta ação não tem volta.</strong><p>A conexão sai da lista. Os arquivos já enviados por ela continuam onde estão — o que se perde é o caminho do Atlas até eles, então anexos antigos deixam de abrir se nenhuma outra conexão apontar para a mesma pasta.</p></div></div>',
+      actions: `<button class="atlas-v2-button atlas-v2-button-quiet" type="button" data-action="close-overlay">Cancelar</button><button class="atlas-v2-button atlas-v2-button-danger" type="button" data-action="confirm-delete-storage" data-storage-id="${attr(connection.id)}"><i data-lucide="trash-2"></i>Excluir</button>`,
+    });
+  }
+
+  function deleteStorageConnection(connectionId) {
+    if (!requirePermission('admin', null, 'excluir a conexão de armazenamento')) return;
+    const connection = storageConnection(connectionId);
+    if (!connection) return;
+    // Conferido DE NOVO na hora de apagar: entre abrir o modal e confirmar,
+    // outra pessoa pode ter vinculado a conexao a um quadro.
+    if (storageUsageCount(connectionId) > 0) {
+      closeOverlay();
+      toast('A conexão passou a ser usada enquanto a confirmação estava aberta. Nada foi excluído.', true);
+      render();
+      return;
+    }
+    const nome = connection.name;
+    runtime.data.storageConnections = (runtime.data.storageConnections || []).filter((entry) => entry.id !== connectionId);
+    closeOverlay();
+    saveData(`Conexão "${nome}" excluída`);
+    render();
+  }
+
   function openPurgeTrashModal(trashId) {
     if (!requirePermission('admin', null, 'esvaziar a lixeira')) return;
     const entry = (runtime.data.trash || []).find((candidate) => candidate.id === trashId);
@@ -8601,6 +8729,21 @@ window.__ATLAS_VERSION__ = '2.4.3 OFICIAL';
     return `<div class="atlas-v2-file-preview"><i data-lucide="file"></i><strong>${escapeHtml(entry?.name || 'Arquivo anexado')}</strong><span>${escapeHtml(mimeType || 'Formato sem visualização interna')}</span><small>${entry?.size ? `${Math.max(1, Math.round(Number(entry.size) / 1024))} KB` : 'Use Abrir original para consultar o conteúdo.'}</small></div>`;
   }
 
+  // O rodape do visualizador dizia "Armazenado no Google Drive do setor" em
+  // texto fixo. Depois da virada para o servidor proprio isso virou mentira
+  // para os setores migrados: o arquivo mostrado vem do conector local. O
+  // texto agora pergunta a conexao que de fato serve aquele contexto.
+  function attachmentStorageLabel(entry, context) {
+    if (entry?.localOnly) return 'Prévia local · ainda não enviada para o armazenamento do setor';
+    const connection = storageForContext(context);
+    if (!connection) return 'Arquivo anexado';
+    const nome = String(connection.sector || connection.name || '').trim();
+    const onde = storageType(connection) === 'local'
+      ? 'Armazenado no servidor da empresa'
+      : 'Armazenado no Google Drive';
+    return nome ? `${onde} · ${nome}` : onde;
+  }
+
   function openAttachmentViewer(itemId, columnId, index = 0) {
     const nextIndex = Number(index) || 0;
     const sameAttachment = runtime.imageViewer
@@ -8633,7 +8776,7 @@ window.__ATLAS_VERSION__ = '2.4.3 OFICIAL';
     </div>` : '';
     const root = document.getElementById('atlas-v2-overlay-root');
     const historyPanel = attachmentHistoryMarkup(data);
-    root.innerHTML = `<div class="atlas-v2-overlay atlas-v2-image-overlay" data-action="overlay-backdrop"><section class="atlas-v2-image-viewer ${historyPanel ? 'has-history' : ''}" role="dialog" aria-modal="true" aria-label="Visualizador de anexos"><header><span><strong>${escapeHtml(entry.name || 'Arquivo')}</strong><small>${runtime.imageViewer.index + 1} de ${attachments.length}</small></span>${imageControls}<button type="button" data-action="close-overlay" title="Fechar"><i data-lucide="x"></i></button></header><div class="atlas-v2-image-stage atlas-v2-attachment-stage ${imageLike ? 'is-image' : ''}"><button type="button" data-action="viewer-previous" title="Arquivo anterior" ${attachments.length < 2 ? 'disabled' : ''}><i data-lucide="chevron-left"></i></button><div class="atlas-v2-viewer-media">${attachmentPreviewMarkup(entry, column)}</div><button type="button" data-action="viewer-next" title="Próximo arquivo" ${attachments.length < 2 ? 'disabled' : ''}><i data-lucide="chevron-right"></i></button></div><footer><span>${entry.localOnly ? 'Prévia local · será enviada quando houver um Drive validado' : 'Armazenado no Google Drive do setor'}</span>${entry.viewUrl ? `<a class="atlas-v2-button atlas-v2-button-quiet" href="${attr(entry.viewUrl)}" target="_blank" rel="noopener noreferrer"><i data-lucide="external-link"></i>Abrir original</a>` : ''}${hasPermission('edit', data.context) ? '<button class="atlas-v2-button atlas-v2-button-danger" type="button" data-action="viewer-remove"><i data-lucide="trash-2"></i>Remover</button>' : ''}</footer></section>${historyPanel}</div>`;
+    root.innerHTML = `<div class="atlas-v2-overlay atlas-v2-image-overlay" data-action="overlay-backdrop"><section class="atlas-v2-image-viewer ${historyPanel ? 'has-history' : ''}" role="dialog" aria-modal="true" aria-label="Visualizador de anexos"><header><span><strong>${escapeHtml(entry.name || 'Arquivo')}</strong><small>${runtime.imageViewer.index + 1} de ${attachments.length}</small></span>${imageControls}<button type="button" data-action="close-overlay" title="Fechar"><i data-lucide="x"></i></button></header><div class="atlas-v2-image-stage atlas-v2-attachment-stage ${imageLike ? 'is-image' : ''}"><button type="button" data-action="viewer-previous" title="Arquivo anterior" ${attachments.length < 2 ? 'disabled' : ''}><i data-lucide="chevron-left"></i></button><div class="atlas-v2-viewer-media">${attachmentPreviewMarkup(entry, column)}</div><button type="button" data-action="viewer-next" title="Próximo arquivo" ${attachments.length < 2 ? 'disabled' : ''}><i data-lucide="chevron-right"></i></button></div><footer><span>${escapeHtml(attachmentStorageLabel(entry, data.context))}</span>${entry.viewUrl ? `<a class="atlas-v2-button atlas-v2-button-quiet" href="${attr(entry.viewUrl)}" target="_blank" rel="noopener noreferrer"><i data-lucide="external-link"></i>Abrir original</a>` : ''}${hasPermission('edit', data.context) ? '<button class="atlas-v2-button atlas-v2-button-danger" type="button" data-action="viewer-remove"><i data-lucide="trash-2"></i>Remover</button>' : ''}</footer></section>${historyPanel}</div>`;
     applyImageViewerTransform();
     refreshIcons(root);
     if (imageLike) void hydrateSecureViewerImage(data);
@@ -10897,7 +11040,10 @@ window.__ATLAS_VERSION__ = '2.4.3 OFICIAL';
         runtime.data.storageConnections.push(connection);
         storageConnectionId = connection.id;
       }
-      const workspace = { id: id('ws'), name, color: '#7554a3', access: data.get('access') || 'main', storageConnectionId, modules: [] };
+      // createdBy e gravado AQUI, na criacao, porque e o unico momento em que se
+      // sabe com certeza quem e o autor. A policy do banco confere
+      // `criado_por = uid()` na insercao.
+      const workspace = { id: id('ws'), name, color: '#7554a3', access: data.get('access') || 'main', storageConnectionId, createdBy: runtime.authSession?.user?.id || '', modules: [] };
       runtime.data.workspaces.push(workspace);
       runtime.data.activeWorkspaceId = workspace.id;
       const initialModule = { id: id('module'), name: 'Geral', icon: 'boxes', open: false, storageConnectionId, boards: [] };
@@ -12974,6 +13120,10 @@ window.__ATLAS_VERSION__ = '2.4.3 OFICIAL';
       'admin-new-storage': () => openStorageConnectionModal(),
       'admin-edit-storage': () => openStorageConnectionModal(target.dataset.storageId),
       'admin-organize-storage': () => { void openOrganizeStorageModal(target.dataset.storageId); },
+      'admin-toggle-storage': () => toggleStorageConnection(target.dataset.storageId),
+      'confirm-toggle-storage': () => confirmToggleStorageConnection(target.dataset.storageId),
+      'admin-delete-storage': () => openDeleteStorageModal(target.dataset.storageId),
+      'confirm-delete-storage': () => deleteStorageConnection(target.dataset.storageId),
       'admin-confirm-organize-storage': () => organizeStorageConnection(target.dataset.storageId),
       'admin-new-user': openAdminUserModal,
       'admin-approve-user': () => approveAdminUser(target.dataset.userId),

@@ -20,6 +20,14 @@ try {
 
 (async () => {
   const root = path.resolve(__dirname, '..');
+  // Versao esperada lida das fontes, nao escrita a mao aqui.
+  const versaoEsperada = (fs.readFileSync(path.join(root, 'js/v2.js'), 'utf8')
+    .match(/window\.__ATLAS_VERSION__\s*=\s*'([^']+)'/) || [])[1];
+  const rodapeEsperado = (fs.readFileSync(path.join(root, 'config/config.js'), 'utf8')
+    .match(/V2_VERSION:\s*"([^"]+)"/) || [])[1];
+  if (!versaoEsperada || !rodapeEsperado) {
+    throw new Error('Nao consegui ler a versao de js/v2.js ou config/config.js.');
+  }
   const configuredTarget = String(process.env.ATLAS_BROWSER_TARGET || '').trim();
   const configuredBase = configuredTarget.replace(/\/+$/, '');
   const target = configuredTarget
@@ -81,9 +89,11 @@ try {
           authText: document.querySelector('#atlas-v2-auth-root')?.innerText || '',
           footerText: document.querySelector('#atlas-v2-footer-version')?.textContent || '',
         }));
-        if (publishedState.version !== '2.4.1 OFICIAL'
+        // Mesma podridao do trecho abaixo, e neste ramo ela passou despercebida
+        // ainda mais tempo: so roda com ATLAS_BROWSER_TARGET definido.
+        if (publishedState.version !== versaoEsperada
           || publishedState.testApiExposed
-          || !publishedState.footerText.includes('V2.4.1 Oficial')
+          || !publishedState.footerText.includes(rodapeEsperado)
           || !publishedState.authText.trim()) {
           throw new Error(`Publicacao remota inconsistente em ${viewport.name}: ${JSON.stringify(publishedState)}`);
         }
@@ -123,8 +133,14 @@ try {
         bodyText: document.body.innerText,
         width: document.documentElement.scrollWidth,
       }));
-      if (state.version !== '2.4.1 OFICIAL') throw new Error(`Versao incorreta em ${viewport.name}.`);
-      if (!state.bodyText.includes('V2.4.1 Oficial')) throw new Error(`Rodape ausente em ${viewport.name}.`);
+      // Esta conferencia ficou presa em '2.4.0 HOMOLOGACAO' e passou a falhar
+      // sozinha a partir da 2.4.3, escondendo o resto do smoke. Agora a versao
+      // esperada vem das proprias fontes (js/v2.js e config/config.js), entao
+      // ela acompanha cada publicacao em vez de apodrecer.
+      if (state.version !== versaoEsperada) {
+        throw new Error(`Versao incorreta em ${viewport.name}: esperava "${versaoEsperada}", veio "${state.version}".`);
+      }
+      if (!state.bodyText.includes(rodapeEsperado)) throw new Error(`Rodape ausente em ${viewport.name}.`);
       if (state.width < viewport.width) throw new Error(`Layout invalido em ${viewport.name}.`);
 
       if (viewport.name === 'desktop') {
@@ -136,9 +152,20 @@ try {
             rendered: topics.reduce((total, topic) => total + topic.querySelectorAll('li').length, 0),
             topics: topics.length,
             initiallyOpen: topics.filter((topic) => topic.open).length,
+            semTopico: topics.filter((topic) => topic.dataset.updateTopic === 'other')
+              .reduce((total, topic) => total + topic.querySelectorAll('li').length, 0),
           };
         });
-        if (homeUpdates.topics < 5 || homeUpdates.expected !== homeUpdates.rendered || homeUpdates.initiallyOpen !== 0) {
+        // Antes esta conferencia exigia 5 topicos ou mais, o que era um retrato
+        // do changelog da 2.4.0 e nao uma propriedade do Atlas: a 2.4.3 tratou
+        // de um tema so e caiu legitimamente num topico unico. O que precisa
+        // valer sempre: toda nota declarada aparece na tela, nada comeca
+        // aberto, e nenhuma nota cai na vala comum 'Outras melhorias' - isso
+        // ultimo denuncia nota publicada sem o prefixo do tema.
+        if (homeUpdates.topics < 1
+          || homeUpdates.expected !== homeUpdates.rendered
+          || homeUpdates.initiallyOpen !== 0
+          || homeUpdates.semTopico > 0) {
           throw new Error(`Novidades agrupadas incorretamente: ${JSON.stringify(homeUpdates)}`);
         }
         await page.locator('.atlas-v2-update-topic > summary').first().click();
@@ -367,7 +394,20 @@ try {
         if (!importText.includes('cabeçalho na linha 3') || !importText.includes('Elemento pai')) {
           throw new Error(`Importador universal nao detectou a estrutura irregular: ${importText.slice(0, 500)}`);
         }
+        // V2.4.2 pos uma guarda aqui de proposito: fechar a revisao da
+        // importacao NAO descarta o mapeamento em silencio - abre uma
+        // confirmacao (openImportDiscardModal). Este teste foi escrito antes
+        // disso e continuou clicando uma vez so, entao ficava preso com a
+        // confirmacao por cima interceptando o clique seguinte. Fechar de
+        // verdade agora exige a escolha explicita - que e justamente o
+        // comportamento que a V2.4.2 quis, e que este trecho passa a cobrir.
         await page.locator('[data-action="close-overlay"]').first().click();
+        await page.waitForSelector('[data-action="import-discard"]');
+        if (!(await page.locator('[data-action="import-resume"]').count())) {
+          throw new Error('A confirmacao de saida da importacao nao ofereceu "Continuar revisando".');
+        }
+        await page.locator('[data-action="import-discard"]').click();
+        await page.waitForSelector('#atlas-v2-import-confirm-form', { state: 'detached' });
 
         const sourceMoveState = await page.evaluate(() => ({
           boardId: document.querySelector('[data-board-id]')?.dataset.boardId || '',
@@ -506,7 +546,15 @@ try {
       text: document.body.innerText,
       sections: document.querySelectorAll('section.section').length,
     }));
-    if (!manualState.title.includes('V2.4.1')) throw new Error('Título do manual desatualizado.');
+    // O manual e a unica porta de entrada de quem nao acompanhou as versoes.
+    // Esta conferencia estava presa em 'V2.4.0' e por isso nao acusou o manual
+    // ficar para tras na 2.4.2 e de novo na 2.4.3. Agora ela compara com a
+    // versao publicada (config/config.js) - se falhar, o manual e que precisa
+    // ser atualizado, nao esta linha.
+    const versaoDoManual = rodapeEsperado.replace(/^V/, '').split(' ')[0];
+    if (!manualState.title.includes(versaoDoManual)) {
+      throw new Error(`Manual desatualizado: titulo diz "${manualState.title}", a versao publicada e ${rodapeEsperado}.`);
+    }
     if (!manualState.text.includes('Recursos da V2.1')) throw new Error('Novidades ausentes do manual.');
     if (manualState.sections < 10) throw new Error('Manual interativo incompleto.');
     await manual.screenshot({
@@ -515,7 +563,7 @@ try {
     });
     await manual.close();
     if (errors.length) throw new Error(errors.join('\n'));
-    console.log('Atlas V2.4.1: smoke visual aprovado.');
+    console.log('Atlas V2.4.0: smoke visual aprovado.');
   } finally {
     await browser.close();
   }

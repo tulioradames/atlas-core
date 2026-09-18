@@ -32,6 +32,18 @@ assert(index.includes('id="atlas-v2-footer-version"'), 'Rodape sem o elemento de
 assert(index.includes('V2.4.3 Oficial</span>'), 'Rodape HTML ainda exibe uma versao antiga antes do JavaScript carregar.');
 assert(index.includes('name="robots" content="noindex, nofollow, noarchive"'), 'Ambiente de homologacao sem bloqueio de indexacao.');
 assert(manifest.includes('2.4.3'), 'Manifest sem a versao do pacote.');
+// O manual ficou uma versao inteira para tras (dizia V2.4.2 com a 2.4.3 no ar)
+// e nada acusou: nenhuma trava conferia isso, e a unica conferencia que existia
+// vivia no browser-smoke, que o script de publicacao nao roda. Agora a defasagem
+// barra o deploy. Se falhar aqui, o manual e que precisa ser atualizado.
+{
+  const versaoPublicada = (config.match(/V2_VERSION:\s*"V?([0-9.]+)/) || [])[1];
+  assert(versaoPublicada, 'Nao consegui ler V2_VERSION de config/config.js.');
+  assert(
+    manual.includes(`<title>Manual Interativo | Atlas V${versaoPublicada}</title>`),
+    `Manual desatualizado: nao declara a versao publicada (V${versaoPublicada}).`,
+  );
+}
 
 const configVersionMatch = config.match(/VERSION:\s*"([^"]+)"/);
 const changelogVersionMatch = app.match(/const CHANGELOG = \[\s*\{\s*version:\s*'([^']+)'/s);
@@ -364,6 +376,9 @@ assert(
     'ATLAS_V2_4_3_CONCLUSAO_EXPLICITA.sql',
     'ATLAS_V2_4_3_CORRIGE_VERSAO_ANEXO.sql',
     'ATLAS_V2_4_3_SLA_NO_SERVIDOR.sql',
+    // Nao e migracao: e o retrato do esquema em producao, e a unica fonte
+    // confiavel sobre o estado do banco. Ver supabase/README.md.
+    'BASELINE_PRODUCAO.sql',
   ]),
   'A pasta supabase contem SQL antigo ou inesperado.'
 );

@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Manual Interativo | Atlas V2.4.2</title>
-<meta name="description" content="Manual simplificado e interativo de utilização do Atlas V2.4.2.">
+<title>Manual Interativo | Atlas V2.4.3</title>
+<meta name="description" content="Manual simplificado e interativo de utilização do Atlas V2.4.3.">
   <meta name="author" content="Túlio Radamés">
   <style>
     :root {
@@ -145,7 +145,7 @@
   <aside class="sidebar">
     <div class="brand">
       <a class="brand-mark" href="index.html" title="Voltar ao Atlas"><span class="brand-a">A</span><strong>ATLAS</strong></a>
-          <span class="version">V2.4.2</span>
+          <span class="version">V2.4.3</span>
     </div>
     <div class="side-actions">
       <input class="search" id="guide-search" type="search" placeholder="Pesquisar no manual" aria-label="Pesquisar no manual">
@@ -174,7 +174,7 @@
     <header class="hero">
       <div class="eyebrow">Manual interativo de utilização</div>
       <h1>Use o Atlas com <em>segurança e agilidade.</em></h1>
-<p class="lead">Aprenda o essencial da V2.4.2 em poucos minutos. Marque os passos concluídos, pesquise qualquer função e consulte os procedimentos quando precisar.</p>
+<p class="lead">Aprenda o essencial da V2.4.3 em poucos minutos. Marque os passos concluídos, pesquise qualquer função e consulte os procedimentos quando precisar.</p>
       <div class="hero-actions">
         <button class="btn primary" id="start-tour">▶ Iniciar tour de 2 minutos</button>
         <a class="btn" href="#inicio">✓ Começar pelo básico</a>
@@ -238,8 +238,44 @@
         </div>
       </section>
 
+      <section class="section" id="conclusao" data-title="Status que encerra o item">
+        <div class="section-head"><span class="section-num">4</span><div><h2>Status que encerra o item</h2><p>Cada status agora diz, com todas as letras, se o item está encerrado.</p></div></div>
+        <div class="section-body">
+          <p>Na configuração de uma coluna de Status, ao lado da cor de cada opção, existe a marca <strong>“Encerra o item”</strong>. É ela que diz ao Atlas se aquele estado fecha o registro — e é o que alimenta a contagem de concluídos no Painel e o alerta de prazo.</p>
+          <div class="tip warning"><strong>Por que isso mudou:</strong> até aqui o Atlas adivinhava pelo texto do status, e errava dos dois lados. <strong>32</strong> registros em “Não documentado” eram contados como CONCLUÍDOS — a palavra “documentado” está dentro de “Não documentado” — e sumiam dos alertas de prazo. Ao mesmo tempo, <strong>77</strong> em “Reprovados” e “Descartado” ficavam atrasados para sempre, porque nenhuma palavra do padrão aparecia neles.</div>
+          <div class="steps">
+            <div class="step"><div><strong>Abra a configuração da coluna de Status</strong><small>Clique no cabeçalho da coluna e escolha configurar as opções.</small></div><label class="check"><input type="checkbox" data-check="conclusao-abrir"> Concluído</label></div>
+            <div class="step"><div><strong>Confira o que o Atlas vinha adivinhando</strong><small>Numa coluna ainda não revisada aparece um aviso mostrando o palpite antigo. Ele é sugestão, não verdade — confira opção por opção.</small></div><label class="check"><input type="checkbox" data-check="conclusao-conferir"> Concluído</label></div>
+            <div class="step"><div><strong>Marque os estados que fecham o registro</strong><small>Estados terminais que não são sucesso — “Reprovados”, “Descartado” — também encerram o item: eles saem do fluxo e não devem gerar atraso.</small></div><label class="check"><input type="checkbox" data-check="conclusao-marcar"> Concluído</label></div>
+            <div class="step"><div><strong>Salve e confira o Painel</strong><small>A contagem de concluídos e os itens fora do prazo reagem na hora.</small></div><label class="check"><input type="checkbox" data-check="conclusao-salvar"> Concluído</label></div>
+          </div>
+          <div class="tip success"><strong>Nada muda sozinho:</strong> coluna que ninguém revisou continua se comportando exatamente como antes, para nenhum número mudar da noite para o dia. Basta <em>uma</em> opção marcada para a coluna passar a valer pelo que está escrito, e não pelo palpite.</div>
+          <details><summary>Quem deve fazer essa revisão?</summary><div>Quem conhece o processo daquele quadro. Os quadros de produção usam mais de 50 rótulos diferentes de status, e só quem trabalha com eles sabe se “Vistoria Concluída” encerra o item ou é etapa do meio. Trocar um palpite por outro não resolveria.</div></details>
+        </div>
+      </section>
+
+      <section class="section" id="aprovacao" data-title="Aprovação em etapas">
+        <div class="section-head"><span class="section-num">5</span><div><h2>Aprovação em etapas</h2><p>Quem pode carimbar cada etapa, e o registro de por onde o item passou.</p></div></div>
+        <div class="section-body">
+          <p>A escada de avaliação — Supervisor, Coordenador, Gerente, Diretoria — deixou de ser só convenção de texto. Na mesma tela de configuração do Status, cada opção pode receber duas coisas: a <strong>Etapa</strong> (a posição dela na escada) e <strong>Quem pode marcar</strong> (a lista de pessoas autorizadas a colocar o item naquela etapa).</p>
+          <div class="cards">
+            <div class="card"><h3>A trava é no servidor</h3><p>Quem não está na lista recebe a recusa e o item volta ao valor anterior. Não dá para contornar pela tela.</p></div>
+            <div class="card"><h3>Pular etapa continua possível</h3><p>A ordem não trava o trabalho. O Atlas pergunta antes e marca o salto no histórico.</p></div>
+            <div class="card"><h3>Tudo fica registrado</h3><p>Cada mudança de status grava de onde veio, para onde foi, quem fez e quando.</p></div>
+          </div>
+          <div class="steps">
+            <div class="step"><div><strong>Numere as etapas</strong><small>Na configuração do Status, dê a cada opção da escada o seu número de etapa.</small></div><label class="check"><input type="checkbox" data-check="aprov-etapas"> Concluído</label></div>
+            <div class="step"><div><strong>Escolha quem pode marcar cada uma</strong><small>Liste as pessoas autorizadas. Opção sem lista continua livre para quem pode editar o quadro.</small></div><label class="check"><input type="checkbox" data-check="aprov-pessoas"> Concluído</label></div>
+            <div class="step"><div><strong>Consulte o histórico pelo botão “Histórico” da linha</strong><small>Um salto aparece assim: <em>Status · Etapa pulada (1 → 3)</em>, com quem fez e quando.</small></div><label class="check"><input type="checkbox" data-check="aprov-historico"> Concluído</label></div>
+          </div>
+          <div class="tip warning"><strong>Sem configuração, sem trava.</strong> Enquanto um quadro não tiver etapas numeradas e listas preenchidas, ele se comporta exatamente como antes. A escada só existe depois que alguém a descreve.</div>
+          <div class="role-only role-admin tip"><strong>Admin:</strong> administradores passam por cima de qualquer lista de aprovadores. Isso é proposital — evita item intransponível quando a lista está errada ou a pessoa saiu da empresa —, mas significa que a trava vale de fato para quem <em>não</em> é administrador. Vale considerar isso ao decidir quem precisa ser admin.</div>
+          <details><summary>Por que a autoridade não virou um nível de usuário?</summary><div>Porque autoridade de aprovação e poder no sistema são coisas diferentes. Um Diretor não precisa de mais poder de excluir ou compartilhar que um Coordenador — precisa de autoridade para carimbar uma etapa. Se a escada virasse nível de usuário, dar autoridade de aprovação passaria a exigir dar poder de exclusão junto. Por isso a escada é uma lista de pessoas por etapa.</div></details>
+        </div>
+      </section>
+
       <section class="section" id="visualizacoes" data-title="Visualizações do quadro">
-        <div class="section-head"><span class="section-num">4</span><div><h2>Visualizações do quadro</h2><p>Escolha a perspectiva que melhor responde à sua tarefa.</p></div></div>
+        <div class="section-head"><span class="section-num">6</span><div><h2>Visualizações do quadro</h2><p>Escolha a perspectiva que melhor responde à sua tarefa.</p></div></div>
         <div class="section-body">
           <div class="tabs" data-tabs="views">
             <button class="tab is-active" data-tab="table">Tabela</button><button class="tab" data-tab="works">Obras</button><button class="tab" data-tab="kanban">Kanban</button><button class="tab" data-tab="gantt">Gantt</button><button class="tab" data-tab="calendar">Calendário</button><button class="tab" data-tab="dashboard">Painel</button>
@@ -254,7 +290,7 @@
       </section>
 
       <section class="section" id="busca" data-title="Busca e filtros">
-        <div class="section-head"><span class="section-num">5</span><div><h2>Busca e filtros</h2><p>Encontre o que precisa sem percorrer o quadro inteiro.</p></div></div>
+        <div class="section-head"><span class="section-num">7</span><div><h2>Busca e filtros</h2><p>Encontre o que precisa sem percorrer o quadro inteiro.</p></div></div>
         <div class="section-body">
           <div class="cards">
             <div class="card"><h3>Filtrar itens</h3><p>Pesquisa setores, registros, subitens e valores. Os filtros avançados combinam grupo, campo, período e presença de anexo, e podem ser salvos.</p></div>
@@ -266,7 +302,7 @@
       </section>
 
       <section class="section" id="v21" data-title="Recursos da V2.1">
-        <div class="section-head"><span class="section-num">6</span><div><h2>Recursos da V2.1</h2><p>Análise, prazos e operação de campo no mesmo quadro.</p></div></div>
+        <div class="section-head"><span class="section-num">8</span><div><h2>Recursos da V2.1</h2><p>Análise, prazos e operação de campo no mesmo quadro.</p></div></div>
         <div class="section-body">
           <div class="cards">
             <div class="card"><h3>Fórmulas</h3><p>Crie uma coluna do tipo Fórmula e use nomes entre chaves, como <kbd>{Lançado} / {Projetado} * 100</kbd>.</p></div>
@@ -281,7 +317,7 @@
       </section>
 
 <section class="section" id="imagens" data-title="Imagens arquivos e Google Drive">
-<div class="section-head"><span class="section-num">6</span><div><h2>Imagens, arquivos e Google Drive</h2><p>Anexe, visualize e remova evidências sem sair do Atlas.</p></div></div>
+<div class="section-head"><span class="section-num">9</span><div><h2>Imagens, arquivos e Google Drive</h2><p>Anexe, visualize e remova evidências sem sair do Atlas.</p></div></div>
         <div class="section-body">
           <div class="steps">
 <div class="step"><div><strong>Abra a célula de imagem ou arquivo</strong><small>Clique no campo configurado como Imagens, Fotos, Diagramas, Planilhas ou Arquivos.</small></div><label class="check"><input type="checkbox" data-check="image-open"> Concluído</label></div>
@@ -295,7 +331,7 @@
       </section>
 
       <section class="section" id="automacoes" data-title="Automações">
-        <div class="section-head"><span class="section-num">7</span><div><h2>Automações</h2><p>Transforme regras repetitivas em ações automáticas.</p></div></div>
+        <div class="section-head"><span class="section-num">10</span><div><h2>Automações</h2><p>Transforme regras repetitivas em ações automáticas.</p></div></div>
         <div class="section-body">
           <div class="cards">
             <div class="card"><h3>Gatilho</h3><p>Define quando a regra começa: campo alterado, item criado, setor alterado ou data atingida.</p></div>
@@ -314,8 +350,28 @@
         </div>
       </section>
 
+      <section class="section" id="prazo" data-title="Aviso de prazo">
+        <div class="section-head"><span class="section-num">11</span><div><h2>Aviso de prazo</h2><p>O alerta de vencimento agora é gerado pelo servidor, não pelo seu navegador.</p></div></div>
+        <div class="section-body">
+          <div class="tip warning"><strong>O que estava errado:</strong> o aviso de prazo só era gerado enquanto alguém estivesse com o Atlas aberto <em>e visível na tela</em>. Prazo que vencia de madrugada, no fim de semana ou com a aba em segundo plano não avisava ninguém, e a marca de “já avisei” ficava presa naquele aparelho — trocar de celular repetia tudo. Na prática, o recurso nunca havia gerado um aviso sequer.</div>
+          <p>Agora a varredura roda no servidor, de hora em hora entre 7h e 19h. Não depende de ninguém estar com o Atlas aberto, nem do aparelho que você usa.</p>
+          <div class="steps">
+            <div class="step"><div><strong>Indique a coluna de prazo do quadro</strong><small>Em “Configurar quadro”, escolha qual coluna de data representa o prazo.</small></div><label class="check"><input type="checkbox" data-check="prazo-coluna"> Concluído</label></div>
+            <div class="step"><div><strong>Defina o alerta antecipado</strong><small>Quantos dias antes do vencimento o Atlas deve avisar.</small></div><label class="check"><input type="checkbox" data-check="prazo-antecedencia"> Concluído</label></div>
+            <div class="step"><div><strong>Escolha quem recebe</strong><small>Campo “Quem recebe aviso de prazo”, na mesma tela. Sem ninguém escolhido, o aviso vai para todos os administradores e supervisores.</small></div><label class="check"><input type="checkbox" data-check="prazo-destinatarios"> Concluído</label></div>
+          </div>
+          <div class="cards">
+            <div class="card"><h3>Não repete à toa</h3><p>Avisado uma vez, o item não volta a avisar enquanto continuar no mesmo estado.</p></div>
+            <div class="card"><h3>Reincidência avisa de novo</h3><p>Item que sai do atraso e volta a atrasar gera um aviso novo.</p></div>
+            <div class="card"><h3>Depende do status</h3><p>Item com status marcado como “Encerra o item” não gera alerta. Veja <a href="#conclusao">Status que encerra o item</a>.</p></div>
+          </div>
+          <div class="tip success"><strong>Nenhum quadro fica em silêncio por falta de configuração:</strong> se ninguém for escolhido, a reserva é o conjunto de administradores e supervisores. O campo serve para <em>estreitar</em> a lista, não para ligar o recurso.</div>
+          <details><summary>Por que eu não recebi uma enxurrada de avisos quando isso foi ligado?</summary><div>Porque o atraso que já existia foi registrado como “já avisado” na primeira varredura, sem notificar ninguém. Eram mais de mil itens em aberto atrasados; avisar todos de uma vez teria enterrado o recurso no primeiro dia. Daí em diante, só avisa quem cruzar o prazo de novo.</div></details>
+        </div>
+      </section>
+
       <section class="section" id="permissoes" data-title="Permissões e compartilhamento">
-        <div class="section-head"><span class="section-num">8</span><div><h2>Permissões e compartilhamento</h2><p>Cada usuário vê e altera apenas o que seu nível permite.</p></div></div>
+        <div class="section-head"><span class="section-num">12</span><div><h2>Permissões e compartilhamento</h2><p>Cada usuário vê e altera apenas o que seu nível permite.</p></div></div>
         <div class="section-body">
           <div class="cards">
             <div class="card"><h3>Administrador</h3><p>Controle total do Atlas, usuários, integrações, configurações e quadros.</p></div>
@@ -329,7 +385,7 @@
       </section>
 
       <section class="section" id="importacao" data-title="Importação exportação modelos e lixeira">
-        <div class="section-head"><span class="section-num">9</span><div><h2>Importação, modelos e lixeira</h2><p>Recursos para acelerar atividades e recuperar erros.</p></div></div>
+        <div class="section-head"><span class="section-num">13</span><div><h2>Importação, modelos e lixeira</h2><p>Recursos para acelerar atividades e recuperar erros.</p></div></div>
         <div class="section-body">
           <div class="cards">
 <div class="card"><h3>Importar planilha</h3><p>Use o ícone de arquivo na barra do quadro. São aceitos até 15 MB, 5.000 linhas e 100 colunas por importação.</p></div>
@@ -341,7 +397,7 @@
       </section>
 
       <section class="section" id="realtime" data-title="Sincronização Realtime e salvamento">
-<div class="section-head"><span class="section-num">10</span><div><h2>Sincronização autenticada</h2><p>Como saber se os dados estão atualizados com segurança.</p></div></div>
+<div class="section-head"><span class="section-num">14</span><div><h2>Sincronização autenticada</h2><p>Como saber se os dados estão atualizados com segurança.</p></div></div>
         <div class="section-body">
           <div class="cards">
             <div class="card"><h3><span class="status connected">Conectado</span></h3><p>O canal em tempo real está ativo. Alterações de outros usuários podem aparecer automaticamente.</p></div>
@@ -353,7 +409,7 @@
       </section>
 
       <section class="section" id="atalhos" data-title="Atalhos e gestos">
-        <div class="section-head"><span class="section-num">11</span><div><h2>Atalhos e gestos</h2><p>Trabalhe mais rápido com estes comandos.</p></div></div>
+        <div class="section-head"><span class="section-num">15</span><div><h2>Atalhos e gestos</h2><p>Trabalhe mais rápido com estes comandos.</p></div></div>
         <div class="section-body">
           <div class="shortcut-grid">
             <div class="shortcut"><span>Busca global</span><kbd>Ctrl K</kbd></div>
@@ -369,7 +425,7 @@
       </section>
 
       <section class="section" id="problemas" data-title="Solução de problemas">
-        <div class="section-head"><span class="section-num">12</span><div><h2>Solução rápida de problemas</h2><p>Resolva os casos mais comuns antes de solicitar suporte.</p></div></div>
+        <div class="section-head"><span class="section-num">16</span><div><h2>Solução rápida de problemas</h2><p>Resolva os casos mais comuns antes de solicitar suporte.</p></div></div>
         <div class="section-body">
           <details><summary>O site ficou muito tempo validando o acesso</summary><div>Confira a internet e aguarde alguns segundos. O Atlas usa um cache local para abrir mais rápido. Se persistir, faça <kbd>Ctrl F5</kbd> e entre novamente.</div></details>
           <details><summary>Minha alteração não apareceu para outro usuário</summary><div>Confirme “Alterações salvas” no rodapé e o Realtime como Conectado. O outro usuário pode atualizar a página se a conexão tiver sido interrompida.</div></details>

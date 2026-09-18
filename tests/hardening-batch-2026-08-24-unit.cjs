@@ -104,7 +104,12 @@ function testMigrationTrackingTable() {
 
   // Todo arquivo supabase/*.sql hoje no repositorio (exceto ele mesmo) deveria
   // aparecer no backfill - senao a tabela nasce incompleta.
-  const sqlFiles = fs.readdirSync(path.join(root, 'supabase')).filter((f) => f.toLowerCase().endsWith('.sql'));
+  // BASELINE_PRODUCAO.sql fica de fora: nao e migracao, e o retrato do esquema
+  // em producao (pg_dump --schema-only). Registrar no backfill diria que ele
+  // "foi aplicado", o que nao quer dizer nada. Ver supabase/README.md.
+  const sqlFiles = fs.readdirSync(path.join(root, 'supabase'))
+    .filter((f) => f.toLowerCase().endsWith('.sql'))
+    .filter((f) => f !== 'BASELINE_PRODUCAO.sql');
   sqlFiles.forEach((file) => {
     assert(sql.includes(`'${file}'`), `${file} deveria estar registrado no backfill da tabela de rastreio.`);
   });
