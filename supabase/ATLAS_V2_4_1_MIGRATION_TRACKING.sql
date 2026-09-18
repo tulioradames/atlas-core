@@ -68,7 +68,7 @@ insert into public.atlas_v2_schema_migrations (filename, environment, sha256, no
   ('ATLAS_V2_3_1_AUTOMACAO_DUPLICADA.sql', 'homolog', 'c7fb041c21d46df3e9d6d57e99e6fefb046b46628b5db46955f4c953bfeee7c7', 'Backfill histórico.'),
   ('ATLAS_V2_3_1_MOVE_GROUP_ORDEM.sql', 'homolog', '6dc8d82bb605e973cf8338aaed6f1c260f5a52c044da034febb32eca2ee450f3', 'Backfill histórico.'),
   ('ATLAS_V2_3_3_REALTIME_BROADCAST_PRIVADO.sql', 'homolog', '6b98250ff539dce80332b24540af5f142d4d0931069449e9e7cdb2edf3bd8a32', 'Backfill histórico.'),
-  ('ATLAS_V2_4_0_ARMAZENAMENTO_TIPO.sql', 'homolog', '1066b79a1882ba865d86a7b72289d85278b4ba9b2fb2bbf526733524d861342c', 'Backfill histórico.'),
+  ('ATLAS_V2_4_0_ARMAZENAMENTO_TIPO.sql', 'homolog', '39684c7ac1b78d1868b834711c61f78fa9c3240804c537113f70530bc3ca9595', 'Backfill histórico.'),
   ('ATLAS_V2_4_0_AUDITORIA_CORRECOES.sql', 'homolog', 'ac60ded9f685a33feb77b4eb9303fcd0bc00cb9e1ffcb5c64304be5e756c34de', 'Backfill histórico.'),
   ('ATLAS_V2_4_0_AUDITORIA_VALIDAR.sql', 'homolog', 'a6913fe95a8a345e7776221889db584fbbd7dcc217bf889d9921c2d7f5856100', 'Backfill histórico (script de validação, não altera schema).'),
   ('ATLAS_V2_4_0_CHAT_ELEMENTO.sql', 'homolog', '8a08794b64ee0f66e335c91e171dd70804c3d6f52982aab8ef78597b16c93735', 'Backfill histórico.'),
@@ -77,11 +77,11 @@ insert into public.atlas_v2_schema_migrations (filename, environment, sha256, no
   ('ATLAS_V2_4_0_VERSAO_AUTOMATICA_DRIVE.sql', 'homolog', 'd3cca0c29359436ef8424c7632aaf44d50df9f27587065c1b4d90d876f8014dd', 'Backfill histórico.'),
   ('ATLAS_V2_4_0_VERSOES_ANEXO.sql', 'homolog', '56fd2cac4039a6c6f38469c25850df7b1d6110981bce989bed65c2fedeae1765', 'Backfill histórico.'),
   ('ATLAS_V2_4_1_SECURE_DRIVE_PREVIEW.sql', 'homolog', 'dc0abb094c4217ab9cfd693b4a25a23b3ebd12f786e803bbc706364468e2ecb9', 'Backfill histórico.'),
-  ('ATLAS_V2_4_1_CHAT_ATTACHMENT_ALLOWLIST.sql', 'homolog', '4cccd24cb368faa1d273201bd201ea24c71f3b9f67150a255e6d5f14e96e306c', 'Aplicada nesta mesma sessão, antes desta tabela existir - registrada agora.'),
+  ('ATLAS_V2_4_1_CHAT_ATTACHMENT_ALLOWLIST.sql', 'homolog', 'a98bea6aa7234ec1b55119c29ea97ee9fbc7a83b3af1ed852b668509c3ab192b', 'Aplicada nesta mesma sessão, antes desta tabela existir - registrada agora.'),
   ('ATLAS_V2_4_1_MIGRATION_TRACKING.sql', 'homolog', null, 'Este próprio arquivo - sha256 não aplicável (self-referência).'),
   ('ATLAS_V2_4_3_CONCLUSAO_EXPLICITA.sql', 'homolog', 'c6c67cabe7c9e7219ae4aa3293f318d7de86eb87d4ee625f1de1999eef9af55d', 'V2.4.3 (O-01). A própria migration também se registra ao rodar; aqui é só para uma instalação nova nascer com a tabela completa.'),
-  ('ATLAS_V2_4_3_CORRIGE_VERSAO_ANEXO.sql', 'homolog', '2d86a22b3fdb6995c143b22a9a60f0ea94a902faa2335a1ca09180963348454f', 'Remove unique(item_id,column_id,file_id) de atlas_v2_attachments, incompatível com o versionamento.'),
-  ('ATLAS_V2_4_3_SLA_NO_SERVIDOR.sql', 'homolog', '2b8c619f4bc64d95ea986cc8b4629a35cb19972da96438479981234af1f1e4ee', 'V2.4.3 (R-01). Aviso de prazo gerado no servidor: tabela de marcas, visão de estado e a varredura agendada.'),
+  ('ATLAS_V2_4_3_CORRIGE_VERSAO_ANEXO.sql', 'homolog', 'b01b57e77269efc20599064fb9848adf8637f1be610d5f5563ea7d046a778bc3', 'Remove unique(item_id,column_id,file_id) de atlas_v2_attachments, incompatível com o versionamento.'),
+  ('ATLAS_V2_4_3_SLA_NO_SERVIDOR.sql', 'homolog', '285d7d6b2faa6e5b5024d8abede5f7410044ad230f0936929b65ed26518ccae1', 'V2.4.3 (R-01). Aviso de prazo gerado no servidor: tabela de marcas, visão de estado e a varredura agendada.'),
   ('ATLAS_V2_4_3_APROVACAO.sql', 'homolog', 'c5c6468d686ca83778bd3b54ef13b22affb67e96e9a588936c7154a9849de7d8', 'V2.4.3 (O-03). Trava por pessoa em cada etapa de aprovação; a transição é gravada em atlas_v2_item_history pelo gatilho.')
 on conflict (filename, environment) do nothing;
 

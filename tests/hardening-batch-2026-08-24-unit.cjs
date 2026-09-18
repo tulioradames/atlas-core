@@ -110,8 +110,37 @@ function testMigrationTrackingTable() {
   const sqlFiles = fs.readdirSync(path.join(root, 'supabase'))
     .filter((f) => f.toLowerCase().endsWith('.sql'))
     .filter((f) => f !== 'BASELINE_PRODUCAO.sql');
+  // A regra real nao e "estar no backfill": e NAO FICAR INVISIVEL na tabela de
+  // rastreio. O backfill e um retrato para instalacao nova, com todas as linhas
+  // em 'homolog'; migration criada depois da tabela se REGISTRA SOZINHA no
+  // proprio arquivo. Exigir o backfill obrigaria a declarar como aplicada, em
+  // homologacao, uma migration que ninguem rodou - exatamente o tipo de mentira
+  // que esta tabela existe para evitar.
+  // O sha256 do backfill era DECORATIVO: nada conferia, e o hash da migration
+  // do SLA ficou defasado quando ela foi corrigida em 14/09 (fuso do cron).
+  // Outros tres estavam divergentes do mesmo jeito. O backfill existe para uma
+  // instalacao nova nascer com a tabela completa - entao o hash tem de descrever
+  // o ARQUIVO EM DISCO, que e o que essa instalacao vai aplicar. Um hash que
+  // ninguem confere e pior que nenhum: passa confianca que nao existe.
   sqlFiles.forEach((file) => {
-    assert(sql.includes(`'${file}'`), `${file} deveria estar registrado no backfill da tabela de rastreio.`);
+    const registrado = (sql.match(new RegExp(`'${file.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&')}', '[a-z]+', '([a-f0-9]{64})'`)) || [])[1];
+    if (!registrado) return;
+    const real = require('node:crypto').createHash('sha256').update(fs.readFileSync(path.join(root, 'supabase', file))).digest('hex');
+    assert(
+      registrado === real,
+      `sha256 de ${file} no backfill nao bate com o arquivo (backfill ${registrado.slice(0, 12)}..., arquivo ${real.slice(0, 12)}...). Se a migration foi editada, atualize o hash.`,
+    );
+  });
+
+  sqlFiles.forEach((file) => {
+    const noBackfill = sql.includes(`'${file}'`);
+    const corpo = fs.readFileSync(path.join(root, 'supabase', file), 'utf8');
+    const seRegistra = corpo.includes('insert into public.atlas_v2_schema_migrations')
+      && corpo.includes(`'${file}'`);
+    assert(
+      noBackfill || seRegistra,
+      `${file} nao aparece no backfill nem se registra na tabela de rastreio - ficaria invisivel.`,
+    );
   });
 }
 
