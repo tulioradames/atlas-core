@@ -378,6 +378,8 @@ assert(
     'ATLAS_V2_4_3_CORRIGE_VERSAO_ANEXO.sql',
     'ATLAS_V2_4_3_SLA_NO_SERVIDOR.sql',
     'ATLAS_V2_4_4_LEITURA_EM_CONJUNTO.sql',
+    'ATLAS_V2_5_0_PAPEIS.sql',
+    'ATLAS_V2_5_0_VISAO_SEM_PODER.sql',
     // Nao e migracao: e o retrato do esquema em producao, e a unica fonte
     // confiavel sobre o estado do banco. Ver supabase/README.md.
     'BASELINE_PRODUCAO.sql',

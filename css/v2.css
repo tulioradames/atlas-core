@@ -8697,3 +8697,23 @@ body.atlas-v2-right-dragging * {
   -webkit-backdrop-filter: blur(20px) saturate(145%);
   backdrop-filter: blur(20px) saturate(145%);
 }
+
+/* V2.5.0 - coluna "ve todos os quadros" na tela de usuarios.
+   Esse poder deixou de vir junto com o papel, entao ele precisa de um lugar
+   proprio na tabela em vez de ficar implicito no perfil. */
+.atlas-v2-admin-flag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.atlas-v2-admin-flag input[disabled] { cursor: not-allowed; }
+.atlas-v2-admin-flag input[disabled] + span { opacity: .55; }
+.atlas-v2-admin-flag.is-fixo {
+  cursor: default;
+  opacity: .8;
+  gap: 4px;
+}
+.atlas-v2-admin-flag.is-fixo i { width: 15px; height: 15px; }

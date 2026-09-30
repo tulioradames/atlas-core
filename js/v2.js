@@ -15,7 +15,7 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
   // pre-cache. tests/static-audit.cjs falha se index.html e ATLAS_BUILD
   // divergirem, que era a causa dos casos de "publiquei mas continua igual".
   // ---------------------------------------------------------------------------
-  const ATLAS_BUILD = '2.4.4-oficial-r1';
+  const ATLAS_BUILD = '2.5.0-papeis-r1';
   window.__ATLAS_BUILD__ = ATLAS_BUILD;
 
   // Changelog exibido na tela de Inicio. Toda alteracao funcional ou correcao
@@ -281,12 +281,28 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
     shareable: { label: 'Compartilhável', icon: 'users' },
   };
 
+  // V2.5.0: os papeis espelham exatamente a funcao atlas_v2_role_allows do banco.
+  // Se divergirem, a tela promete o que o servidor recusa - foi assim que
+  // nasceram varias telas que "salvavam" e nao salvavam.
   const ROLE_DEFINITIONS = {
-    admin: { label: 'Admin', description: 'Controle total do Atlas.', permissions: ['view', 'create', 'edit', 'delete', 'share', 'configure', 'admin'] },
-    supervisor: { label: 'Supervisor', description: 'Gestão operacional e exclusão de registros.', permissions: ['view', 'create', 'edit', 'delete', 'share'] },
-    operador: { label: 'Operador', description: 'Operação diária, criação e edição.', permissions: ['view', 'create', 'edit'] },
-    visualizador: { label: 'Visualizador', description: 'Consulta sem alteração de dados.', permissions: ['view'] },
+    root:      { label: 'Root',      description: 'Controle total, inclusive de usuários. Um só no Atlas.', permissions: ['view', 'create', 'edit', 'delete', 'share', 'configure', 'admin'] },
+    gestor:    { label: 'Gestor',    description: 'Cria, edita, exclui, compartilha e configura.', permissions: ['view', 'create', 'edit', 'delete', 'share', 'configure'] },
+    analista:  { label: 'Analista',  description: 'Cria, edita e exclui registros.', permissions: ['view', 'create', 'edit', 'delete'] },
+    visitante: { label: 'Visitante', description: 'Consulta sem alterar nada.', permissions: ['view'] },
   };
+
+  const PAPEL_PADRAO = 'visitante';
+
+  function isRootUser(user) {
+    return user?.role === 'root';
+  }
+
+  // "Enxerga todos os quadros" e SEPARADO do papel: no banco e a coluna
+  // ve_todos_os_quadros. Enxergar nao da poder - as capacidades continuam
+  // vindo do papel (ver atlas_v2_can_board apos a V2.5.0).
+  function enxergaTodosOsQuadros(user) {
+    return isRootUser(user) || Boolean(user?.seesAllBoards);
+  }
 
   const ACCESS_LEVELS = {
     viewer: { label: 'Visualização', permissions: ['view'] },
@@ -1027,9 +1043,9 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
       activeBoardId: 'board-rede-status',
       currentUserId: 'user-admin',
       users: [
-        { id: 'user-admin', name: 'Túlio Radamés', email: 'admin@atlas.local', role: 'admin', status: 'active', title: 'Administrador do sistema', lastActivity: new Date().toISOString() },
-        { id: 'user-supervisor', name: 'Equipe Supervisora', email: 'supervisor@atlas.local', role: 'supervisor', status: 'active', title: 'Supervisão operacional', lastActivity: '2026-07-19T16:30:00.000Z' },
-        { id: 'user-pending', name: 'Novo acesso', email: 'novo.usuario@atlas.local', role: 'visualizador', status: 'pending', title: '', lastActivity: null },
+        { id: 'user-admin', name: 'Túlio Radamés', email: 'admin@atlas.local', role: 'root', status: 'active', title: 'Administrador do sistema', seesAllBoards: true, lastActivity: new Date().toISOString() },
+        { id: 'user-supervisor', name: 'Equipe de Gestão', email: 'gestor@atlas.local', role: 'gestor', status: 'active', title: 'Gestão operacional', lastActivity: '2026-07-19T16:30:00.000Z' },
+        { id: 'user-pending', name: 'Novo acesso', email: 'novo.usuario@atlas.local', role: 'visitante', status: 'pending', title: '', lastActivity: null },
       ],
       accessRules: [],
       boardMembers: [],
@@ -2302,7 +2318,7 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
       runtime.realtimeRefreshFull = runtime.realtimeRefreshFull || ['atlas_v2_field_templates', 'atlas_v2_integrations'].includes(table);
     }
     if (table === 'atlas_v2_notifications') refreshNotifications();
-    if (table === 'atlas_profiles' && runtime.authProfile?.role === 'admin') {
+    if (table === 'atlas_profiles') {
       syncAuthUsersFromSupabase({ renderAfter: false, notify: false });
     }
     clearTimeout(runtime.realtimeRefreshTimer);
@@ -3441,7 +3457,7 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
         return true;
       });
     });
-    if (runtime.authProfile?.role !== 'admin') {
+    if (runtime.authProfile?.role !== 'root') {
       ['atlas_v2_storage_connections', 'atlas_v2_access_rules', 'atlas_v2_board_members', 'atlas_v2_field_templates'].forEach((table) => {
         changes[table] = [];
         removals[table] = [];
@@ -3774,7 +3790,7 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
   function chatMessageMarkup(entry) {
     const autor = chatUserName(entry.autorId);
     const proprio = entry.autorId === runtime.authSession?.user?.id;
-    const podeApagar = proprio || runtime.authProfile?.role === 'admin';
+    const podeApagar = proprio || runtime.authProfile?.role === 'root';
     const texto = chatTextMarkup(entry);
     const anexos = (entry.anexos || []).map((anexo) => `<button class="atlas-v2-chat-file" type="button" data-action="chat-open-file" data-path="${attr(anexo.path)}" title="Abrir ${attr(anexo.nome)}"><i data-lucide="paperclip"></i>${escapeHtml(anexo.nome || 'arquivo')}</button>`).join('');
     // V2.4.2: apagar mensagem era imediato e definitivo (nao vai para a lixeira,
@@ -4145,7 +4161,7 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
   }
 
   function roleLabel(role) {
-    return ROLE_DEFINITIONS[role]?.label || ROLE_DEFINITIONS.visualizador.label;
+    return ROLE_DEFINITIONS[role]?.label || ROLE_DEFINITIONS[PAPEL_PADRAO].label;
   }
 
   function scopeMatches(rule, context) {
@@ -4180,8 +4196,15 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
   function hasPermission(permission, context = findBoard()) {
     const user = currentUser();
     if (!user || user.status !== 'active') return false;
-    if (user.role === 'admin') return true;
+    // Espelha o banco depois da V2.5.0: o Root passa direto; quem enxerga todos
+    // os quadros pula o ESCOPO, mas continua limitado ao que o papel permite.
+    // Antes daqui sair um `return true` para qualquer capacidade, um Visitante
+    // com essa permissao ganhava excluir em tudo.
+    if (isRootUser(user)) return true;
     if (permission === 'admin') return false;
+    if (enxergaTodosOsQuadros(user)) {
+      return (ROLE_DEFINITIONS[user.role]?.permissions || []).includes(permission);
+    }
 
     const rule = permissionRule(user.id, context);
     if (rule) return (ACCESS_LEVELS[rule.level]?.permissions || []).includes(permission);
@@ -4190,7 +4213,7 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
     if (member) return (ACCESS_LEVELS[membershipLevel(member.role)]?.permissions || []).includes(permission);
 
     if (context?.board && context.board.access !== 'main') return false;
-    return (ROLE_DEFINITIONS[user.role]?.permissions || ROLE_DEFINITIONS.visualizador.permissions).includes(permission);
+    return (ROLE_DEFINITIONS[user.role]?.permissions || ROLE_DEFINITIONS[PAPEL_PADRAO].permissions).includes(permission);
   }
 
   function requirePermission(permission, context = findBoard(), label = 'executar esta ação') {
@@ -4422,9 +4445,10 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
       id: profile.id,
       name: profile.nome || profile.email || authUser?.email || 'Usuário Atlas',
       email: profile.email || authUser?.email || '',
-      role: ROLE_DEFINITIONS[profile.role] ? profile.role : 'visualizador',
+      role: ROLE_DEFINITIONS[profile.role] ? profile.role : PAPEL_PADRAO,
       status: PROFILE_STATUS_FROM_DATABASE[profile.status] || 'pending',
       title: profile.cargo || '',
+      seesAllBoards: Boolean(profile.ve_todos_os_quadros),
       lastActivity: profile.last_sign_in_at || profile.updated_at || null,
     };
   }
@@ -4610,7 +4634,7 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
         render();
         scheduleLocalBackupCompaction();
         refreshRemoteApplication(profile, authUser, { full: false, silent: true });
-        if (profile.role === 'admin') syncAuthUsersFromSupabase({ renderAfter: false, notify: false });
+        syncAuthUsersFromSupabase({ renderAfter: false, notify: false });
         startAutomationMonitor();
         refreshNotifications();
         startRealtime();
@@ -4634,7 +4658,7 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
     scheduleLocalBackupCompaction();
     if (profile && !runtime.remoteMode) toast('A estrutura V2 ainda não foi carregada do Supabase. Execute o SQL completo da versão.', true);
     if (profile && runtime.remoteMode) hydrateDeferredRemoteData();
-    if (profile?.role === 'admin') syncAuthUsersFromSupabase({ renderAfter: false });
+    if (profile) syncAuthUsersFromSupabase({ renderAfter: false });
     if (profile) { startAutomationMonitor(); refreshNotifications(); startRealtime(); }
   }
 
@@ -4680,7 +4704,8 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
   }
 
   async function syncAuthUsersFromSupabase(options = {}) {
-    if (!runtime.authClient || runtime.authUsersLoading || runtime.authProfile?.role !== 'admin') return;
+    if (!runtime.authClient || runtime.authUsersLoading) return;
+    if (runtime.authProfile?.status !== 'ativo') return;
     runtime.authUsersLoading = true;
     try {
       const { data, error } = await runtime.authClient.from('atlas_profiles').select('*').order('created_at', { ascending: true });
@@ -5399,13 +5424,58 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
     return `<article class="atlas-v2-admin-metric" style="--metric-color:${color}"><span><i data-lucide="${icon}"></i></span><div><strong>${Number(value)}</strong><small>${escapeHtml(label)}</small></div></article>`;
   }
 
+  // A coluna "vê todos os quadros" existe porque, na V2.5.0, esse poder deixou
+  // de vir junto com o papel. O Root sempre tem e nao pode perder; para os
+  // demais e uma chave que o Root liga e desliga.
+  function enxergaTudoCelula(user) {
+    if (isRootUser(user)) {
+      return '<span class="atlas-v2-admin-flag is-fixo" title="O Root sempre enxerga todos os quadros."><i data-lucide="shield-check"></i>sempre</span>';
+    }
+    const ligado = Boolean(user.seesAllBoards);
+    const podeMexer = isRootUser(currentUser());
+    return `<label class="atlas-v2-admin-flag"><input type="checkbox" data-action="admin-user-ve-tudo" data-user-id="${attr(user.id)}" ${ligado ? 'checked' : ''} ${podeMexer ? '' : 'disabled'}><span>${ligado ? 'sim' : 'não'}</span></label>`;
+  }
+
+  async function definirEnxergaTudo(userId, valor) {
+    const user = runtime.data.users.find((entry) => entry.id === userId);
+    if (!user) return;
+    if (!isRootUser(currentUser())) {
+      toast('Somente o Root concede a visão de todos os quadros.', true);
+      render();
+      return;
+    }
+    const anterior = Boolean(user.seesAllBoards);
+    user.seesAllBoards = valor;
+    render();
+    try {
+      if (runtime.authClient && runtime.authSession) {
+        const { error } = await runtime.authClient.rpc('atlas_admin_set_ve_todos_os_quadros', {
+          p_user_id: userId,
+          p_valor: valor,
+        });
+        if (error) throw error;
+      }
+      toast(valor
+        ? `${user.name} passa a enxergar todos os quadros (sem ganhar permissão além do perfil).`
+        : `${user.name} volta a enxergar apenas o que lhe for concedido.`);
+    } catch (error) {
+      // Devolver o estado anterior importa: sem isso a tela mostraria concedido
+      // e o servidor teria recusado - o tipo de mentira que a V2.4.3 corrigiu
+      // no rodape do visualizador.
+      user.seesAllBoards = anterior;
+      render();
+      console.error('Atlas V2: falha ao alterar a visão de todos os quadros.', error);
+      toast(mensagemDeFalhaNaSincronizacao(error), true);
+    }
+  }
+
   function renderAdminUsers() {
-    const activeAdmins = runtime.data.users.filter((entry) => entry.role === 'admin' && entry.status === 'active').length;
+
     const rows = runtime.data.users.map((user) => {
-      const protectedAccount = user.id === runtime.data.currentUserId || (user.role === 'admin' && user.status === 'active' && activeAdmins <= 1);
-      return `<tr data-admin-user-row="${attr(user.id)}"><td><div class="atlas-v2-admin-user"><span class="atlas-v2-avatar">${escapeHtml(user.name.split(/\s+/).slice(0, 2).map((entry) => entry[0]).join('').toUpperCase())}</span><span><strong>${escapeHtml(user.name)}</strong><small>${escapeHtml(user.email)}</small></span></div></td><td>${escapeHtml(user.title || 'Sem cargo')}</td><td><select data-action="admin-user-role" data-user-id="${attr(user.id)}">${Object.entries(ROLE_DEFINITIONS).map(([key, value]) => `<option value="${key}" ${user.role === key ? 'selected' : ''}>${value.label}</option>`).join('')}</select></td><td><select data-action="admin-user-status" data-user-id="${attr(user.id)}">${Object.entries(USER_STATUSES).map(([key, label]) => `<option value="${key}" ${user.status === key ? 'selected' : ''}>${label}</option>`).join('')}</select></td><td>${formatDateTime(user.lastActivity)}</td><td><div class="atlas-v2-admin-actions">${user.status !== 'active' ? `<button type="button" data-action="admin-approve-user" data-user-id="${attr(user.id)}" title="Liberar acesso"><i data-lucide="user-check"></i></button>` : ''}<button class="is-danger" type="button" data-action="admin-delete-user" data-user-id="${attr(user.id)}" title="${protectedAccount ? 'Conta protegida' : 'Excluir usuário'}" ${protectedAccount ? 'disabled' : ''}><i data-lucide="trash-2"></i></button></div></td></tr>`;
+      const protectedAccount = user.id === runtime.data.currentUserId || contaProtegida(user);
+      return `<tr data-admin-user-row="${attr(user.id)}"><td><div class="atlas-v2-admin-user"><span class="atlas-v2-avatar">${escapeHtml(user.name.split(/\s+/).slice(0, 2).map((entry) => entry[0]).join('').toUpperCase())}</span><span><strong>${escapeHtml(user.name)}</strong><small>${escapeHtml(user.email)}</small></span></div></td><td>${escapeHtml(user.title || 'Sem cargo')}</td><td><select data-action="admin-user-role" data-user-id="${attr(user.id)}">${Object.entries(ROLE_DEFINITIONS).map(([key, value]) => `<option value="${key}" ${user.role === key ? 'selected' : ''}>${value.label}</option>`).join('')}</select></td><td>${enxergaTudoCelula(user)}</td><td><select data-action="admin-user-status" data-user-id="${attr(user.id)}">${Object.entries(USER_STATUSES).map(([key, label]) => `<option value="${key}" ${user.status === key ? 'selected' : ''}>${label}</option>`).join('')}</select></td><td>${formatDateTime(user.lastActivity)}</td><td><div class="atlas-v2-admin-actions">${user.status !== 'active' ? `<button type="button" data-action="admin-approve-user" data-user-id="${attr(user.id)}" title="Liberar acesso"><i data-lucide="user-check"></i></button>` : ''}<button class="is-danger" type="button" data-action="admin-delete-user" data-user-id="${attr(user.id)}" title="${protectedAccount ? 'Conta protegida' : 'Excluir usuário'}" ${protectedAccount ? 'disabled' : ''}><i data-lucide="trash-2"></i></button></div></td></tr>`;
     }).join('');
-    return `<div class="atlas-v2-admin-section-head"><div><span>IDENTIDADES</span><h2>Usuários e acessos</h2><p>Novos cadastros entram como Visualizador e aguardam liberação.</p></div><button class="atlas-v2-button atlas-v2-button-primary" type="button" data-action="admin-sync-users"><i data-lucide="refresh-cw"></i>Atualizar usuários</button></div><div class="atlas-v2-admin-table-wrap"><table class="atlas-v2-admin-table"><thead><tr><th>Usuário</th><th>Cargo</th><th>Perfil</th><th>Status</th><th>Última atividade</th><th>Ações</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+    return `<div class="atlas-v2-admin-section-head"><div><span>IDENTIDADES</span><h2>Usuários e acessos</h2><p>Novos cadastros entram como Visitante e aguardam liberação. Só o Root altera acessos.</p></div><button class="atlas-v2-button atlas-v2-button-primary" type="button" data-action="admin-sync-users"><i data-lucide="refresh-cw"></i>Atualizar usuários</button></div><div class="atlas-v2-admin-table-wrap"><table class="atlas-v2-admin-table"><thead><tr><th>Usuário</th><th>Cargo</th><th>Perfil</th><th title="Enxerga qualquer quadro, mesmo sem regra. Não dá poder: as ações continuam limitadas ao perfil.">Vê todos os quadros</th><th>Status</th><th>Última atividade</th><th>Ações</th></tr></thead><tbody>${rows}</tbody></table></div>`;
   }
 
   function renderAdminPermissions() {
@@ -5728,24 +5798,31 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
       toast('Já existe um usuário com este e-mail', true);
       return;
     }
-    runtime.data.users.push({ id: id('user'), name: String(data.get('name') || '').trim(), email, role: 'visualizador', status: 'pending', title: String(data.get('title') || '').trim(), lastActivity: null });
+    runtime.data.users.push({ id: id('user'), name: String(data.get('name') || '').trim(), email, role: PAPEL_PADRAO, status: 'pending', title: String(data.get('title') || '').trim(), lastActivity: null });
     closeOverlay();
     runtime.adminTab = 'users';
     saveData('Solicitação de acesso criada', { scope: 'system' });
     render();
   }
 
-  function activeAdminCount() {
-    return runtime.data.users.filter((entry) => entry.role === 'admin' && entry.status === 'active').length;
+  // V2.5.0: nao ha mais "ultimo admin" a proteger por contagem. O Root e unico
+  // (indice unico no banco) e nao pode ser rebaixado, bloqueado nem excluido -
+  // as funcoes do servidor recusam, e a tela nem oferece.
+  function contaProtegida(user) {
+    return user?.role === 'root';
   }
 
   async function updateAdminUser(userId, field, value) {
     if (!requirePermission('admin', null, 'gerenciar usuários')) return;
     const user = runtime.data.users.find((entry) => entry.id === userId);
     if (!user || !['role', 'status'].includes(field)) return;
-    const removesLastAdmin = user.role === 'admin' && user.status === 'active' && activeAdminCount() <= 1 && ((field === 'role' && value !== 'admin') || (field === 'status' && value !== 'active'));
-    if (removesLastAdmin) {
-      toast('Ative outro Admin antes de alterar o último administrador', true);
+    if (contaProtegida(user)) {
+      toast('O Root não pode ser alterado por aqui. Transfira o Root antes.', true);
+      render();
+      return;
+    }
+    if (field === 'role' && value === 'root') {
+      toast('Já existe um Root. Para transferir, use a transferência de Root.', true);
       render();
       return;
     }
@@ -5779,7 +5856,7 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
 
   function openDeleteAdminUser(userId) {
     const user = runtime.data.users.find((entry) => entry.id === userId);
-    if (!user || user.id === runtime.data.currentUserId || (user.role === 'admin' && user.status === 'active' && activeAdminCount() <= 1)) return;
+    if (!user || user.id === runtime.data.currentUserId || contaProtegida(user)) return;
     openModal({
       title: 'Excluir usuário',
       subtitle: user.name,
@@ -5791,7 +5868,7 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
   async function deleteAdminUser(userId) {
     if (!requirePermission('admin', null, 'excluir usuários')) return;
     const user = runtime.data.users.find((entry) => entry.id === userId);
-    if (!user || user.id === runtime.data.currentUserId || (user.role === 'admin' && user.status === 'active' && activeAdminCount() <= 1)) return;
+    if (!user || user.id === runtime.data.currentUserId || contaProtegida(user)) return;
     try {
       if (runtime.authClient && runtime.authSession) {
         const { error } = await runtime.authClient.rpc('atlas_delete_user', { p_user_id: userId });
@@ -13226,6 +13303,10 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
     }
     const context = findBoard();
     if (!context) return;
+    if (target.matches('[data-action="admin-user-ve-tudo"]')) {
+      definirEnxergaTudo(target.dataset.userId, target.checked);
+      return;
+    }
     if (target.matches('[data-action="admin-user-role"]')) {
       updateAdminUser(target.dataset.userId, 'role', target.value);
       return;
