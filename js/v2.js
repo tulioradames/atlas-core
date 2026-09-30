@@ -1,7 +1,7 @@
 (function atlasV2Official() {
   'use strict';
 
-window.__ATLAS_VERSION__ = '2.4.3 OFICIAL';
+window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
 
   // ---------------------------------------------------------------------------
   // VERSAO DOS ARQUIVOS WEB - fonte unica.
@@ -15,13 +15,22 @@ window.__ATLAS_VERSION__ = '2.4.3 OFICIAL';
   // pre-cache. tests/static-audit.cjs falha se index.html e ATLAS_BUILD
   // divergirem, que era a causa dos casos de "publiquei mas continua igual".
   // ---------------------------------------------------------------------------
-  const ATLAS_BUILD = '2.4.3-servidor-proprio-r6-official';
+  const ATLAS_BUILD = '2.4.4-oficial-r1';
   window.__ATLAS_BUILD__ = ATLAS_BUILD;
 
   // Changelog exibido na tela de Inicio. Toda alteracao funcional ou correcao
   // publicada precisa ser registrada aqui antes do deploy.
   // Ordem: mais recente primeiro.
   const CHANGELOG = [
+    {
+      version: 'V2.4.4 Oficial',
+      date: '2026-09-30',
+      notes: [
+        'Armazenamento no servidor: cada setor pode guardar seus anexos no servidor da própria empresa, em vez do Google Drive. Enviar um arquivo, abrir a prévia e consultar as versões continua igual na tela - o que muda é onde o documento fica guardado e quem responde por ele.',
+        'Desempenho: quadros com muitos itens e muitas colunas voltaram a abrir rápido. A leitura dos valores e dos anexos perguntava a permissão uma vez por LINHA, então um quadro grande estourava o tempo limite e mostrava erro em vez dos dados. Agora a permissão é resolvida uma vez por consulta: um quadro que levava 7,6 segundos passou a levar 0,25.',
+        'Independência de nuvem: o Atlas deixou de depender da nuvem da Supabase. Banco, login, tempo real e arquivos rodam no servidor da empresa, e o aplicativo não tem mais nem endereço nem permissão para falar com aquele serviço.',
+      ],
+    },
     {
       version: 'V2.4.3 Oficial',
       date: '2026-09-10',
@@ -182,7 +191,7 @@ window.__ATLAS_VERSION__ = '2.4.3 OFICIAL';
       title: 'Arquivos e versões',
       icon: 'files',
       summary: 'Histórico, visualização e controle dos documentos.',
-      prefixes: ['Campos de arquivo', 'O visualizador', 'Cada versão', 'O limite de 12 arquivos'],
+      prefixes: ['Campos de arquivo', 'O visualizador', 'Cada versão', 'O limite de 12 arquivos', 'Armazenamento no servidor:'],
     },
     {
       id: 'chat',
@@ -206,11 +215,18 @@ window.__ATLAS_VERSION__ = '2.4.3 OFICIAL';
       prefixes: ['Fórmulas de coluna:', 'Cálculo ao vivo:'],
     },
     {
+      id: 'performance',
+      title: 'Desempenho',
+      icon: 'gauge',
+      summary: 'Tempo de abertura dos quadros e das consultas pesadas.',
+      prefixes: ['Desempenho:'],
+    },
+    {
       id: 'security',
       title: 'Segurança e integridade',
       icon: 'shield-check',
       summary: 'Proteção do Drive, exclusões verificadas, recuperação e publicação segura.',
-      prefixes: ['Proteção de arquivos:', 'Exclusões confirmadas:', 'Lixeira confiável:', 'Recuperação administrativa:', 'Sincronização robusta:', 'Uploads protegidos:', 'Publicação segura:', 'Privacidade de homologação:', 'Automações agendadas:', 'Números confiáveis:'],
+      prefixes: ['Proteção de arquivos:', 'Exclusões confirmadas:', 'Lixeira confiável:', 'Recuperação administrativa:', 'Sincronização robusta:', 'Uploads protegidos:', 'Publicação segura:', 'Privacidade de homologação:', 'Automações agendadas:', 'Números confiáveis:', 'Independência de nuvem:'],
     },
     {
       id: 'interface',
@@ -4214,7 +4230,7 @@ window.__ATLAS_VERSION__ = '2.4.3 OFICIAL';
   }
 
   function authVersion() {
-    return window.ATNX_CONFIG?.V2_VERSION || 'V2.4.3 Oficial';
+    return window.ATNX_CONFIG?.V2_VERSION || 'V2.4.4 Oficial';
   }
 
   function authFeatureList() {
@@ -4246,7 +4262,7 @@ window.__ATLAS_VERSION__ = '2.4.3 OFICIAL';
       <div class="atlas-v2-auth-feature-list">
         ${authFeatureList().map(([icon, title, copy]) => `<article><i data-lucide="${icon}"></i><span><strong>${title}</strong><small>${copy}</small></span></article>`).join('')}
       </div>
-      <footer><span><i data-lucide="radio-tower"></i>Supabase em tempo real</span><span><i data-lucide="shield"></i>Acesso por perfil</span><span><i data-lucide="code-2"></i>Criado por Túlio Radamés</span></footer>
+      <footer><span><i data-lucide="radio-tower"></i>Tempo real no servidor próprio</span><span><i data-lucide="shield"></i>Acesso por perfil</span><span><i data-lucide="code-2"></i>Criado por Túlio Radamés</span></footer>
     </section>`;
   }
 

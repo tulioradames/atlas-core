@@ -35,8 +35,23 @@ assert(migration.includes('perform public.atlas_v2_assert_move_roots(p_item_ids)
 // O publicador precisa vincular alvo, Worker e banco e conferir o resultado remoto.
 assert(deploy.includes('if ($ScriptName -ne $presets[$Target].ScriptName)'), 'Worker pode ser sobrescrito para outro ambiente.');
 assert(deploy.includes("$ScriptName -eq \"atlas\""), 'Worker de producao nao aciona a confirmacao obrigatoria.');
-assert(deploy.includes('ProjectRef = "SEU_PROJECT_REF_HOMOLOGACAO"'), 'Referencia de homologacao ausente do bloqueio.');
-assert(deploy.includes('ProjectRef = "SEU_PROJECT_REF_PRODUCAO"'), 'Referencia de producao ausente do bloqueio.');
+// A trava que liga ambiente e banco existia como "project ref da Supabase".
+// Com a saida da nuvem nao ha ref nenhum, entao ela passou a comparar a URL
+// INTEIRA do backend. Estas conferencias olham o MECANISMO, nao um texto fixo:
+// a copia publica do script leva marcador, o pacote de producao leva o valor
+// real, e as duas precisam continuar travando.
+assert(
+  deploy.includes('$backendEsperado = $presets[$Target].Backend'),
+  'O publicador nao liga mais o ambiente ao backend configurado.',
+);
+assert(
+  /throw "O backend configurado no pacote[\s\S]{0,120}nao e o do ambiente/.test(deploy),
+  'Publicar um pacote apontando para outro ambiente deixou de ser recusado.',
+);
+assert(
+  deploy.includes("if ($configSource -match 'supabase\\.co')"),
+  'O publicador nao recusa mais um pacote que ainda aponte para a nuvem da Supabase.',
+);
 assert(deploy.includes('Validando a versao publicada no endereco do ambiente'), 'Publicador nao executa verificacao remota.');
 assert(deploy.includes("build $ExpectedBuild verificado"), 'Sucesso pode ser informado sem confirmar o build remoto.');
 

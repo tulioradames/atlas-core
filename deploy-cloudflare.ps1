@@ -60,20 +60,20 @@ param(
 $ErrorActionPreference = "Stop"
 Add-Type -AssemblyName System.Net.Http
 
-$AccountId = "SEU_ACCOUNT_ID_CLOUDFLARE"
+$AccountId = ""   # descoberto pela API a partir do proprio token (ver abaixo)
 $CloudflareTokenPath = Join-Path $HOME ".atlas-secrets\cloudflare_token.txt"
 
 $presets = @{
   homolog  = @{
     SourceDir  = $PSScriptRoot
     ScriptName = "test-atlas"
-    ProjectRef = "SEU_PROJECT_REF_HOMOLOGACAO"
+    Backend    = ""   # homologacao sem backend definido apos a saida da nuvem
     PublicUrl  = "https://SEU-WORKER-HOMOLOGACAO.workers.dev"
   }
   producao = @{
     SourceDir  = $PSScriptRoot
     ScriptName = "atlas"
-    ProjectRef = "SEU_PROJECT_REF_PRODUCAO"
+    Backend    = "https://seu-backend.exemplo.com.br"
     PublicUrl  = "https://SEU-WORKER-PRODUCAO.workers.dev"
   }
 }
@@ -100,9 +100,20 @@ $appPath = Join-Path $SourceDir "js\v2.js"
 if (-not (Test-Path -LiteralPath $configPath -PathType Leaf)) { throw "Configuracao ausente: $configPath" }
 if (-not (Test-Path -LiteralPath $appPath -PathType Leaf)) { throw "Aplicacao ausente: $appPath" }
 $configSource = [System.IO.File]::ReadAllText($configPath)
-$projectMatch = [regex]::Match($configSource, 'https://([a-z0-9]+)\.supabase\.co', 'IgnoreCase')
-if (-not $projectMatch.Success -or $projectMatch.Groups[1].Value -ne $presets[$Target].ProjectRef) {
-  throw "O projeto Supabase configurado no pacote nao pertence ao ambiente '$Target'."
+# Ate a saida da nuvem esta trava comparava o "project ref" extraido de
+# https://<ref>.supabase.co. Com o backend proprio nao existe ref nenhum, entao
+# ela passou a comparar a URL INTEIRA - que prova a mesma coisa: que ninguem
+# esta publicando em producao um pacote apontando para outro ambiente.
+$backendEsperado = $presets[$Target].Backend
+if ($backendEsperado) {
+  $backendMatch = [regex]::Match($configSource, 'SUPABASE_URL:\s*"([^"]+)"', 'IgnoreCase')
+  if (-not $backendMatch.Success -or $backendMatch.Groups[1].Value.TrimEnd('/') -ne $backendEsperado) {
+    $achado = if ($backendMatch.Success) { $backendMatch.Groups[1].Value } else { '(nao encontrado)' }
+    throw "O backend configurado no pacote ($achado) nao e o do ambiente '$Target' ($backendEsperado)."
+  }
+}
+if ($configSource -match 'supabase\.co') {
+  throw "O pacote ainda aponta para a nuvem da Supabase (supabase.co) no config.js."
 }
 $appSource = [System.IO.File]::ReadAllText($appPath)
 $buildMatch = [regex]::Match($appSource, "const ATLAS_BUILD = '([^']+)'", 'IgnoreCase')
@@ -186,6 +197,23 @@ if ($SkipTests) {
 }
 
 $token = [System.IO.File]::ReadAllText($CloudflareTokenPath).Trim()
+
+# O AccountId era uma constante no script. Depois da saida da nuvem o pacote
+# passou a ser gerado a partir do repositorio publico, onde esse valor nao pode
+# ficar - entao ele e descoberto pelo proprio token. Um token da Cloudflare
+# pertence a uma conta; nao ha o que adivinhar.
+if (-not $AccountId) {
+  $contas = Invoke-RestMethod -Uri "https://api.cloudflare.com/client/v4/accounts" `
+    -Headers @{ Authorization = "Bearer $token" } -Method Get
+  if (-not $contas.success) { throw "Nao consegui listar as contas da Cloudflare com este token." }
+  if ($contas.result.Count -eq 0) { throw "O token nao da acesso a nenhuma conta da Cloudflare." }
+  if ($contas.result.Count -gt 1) {
+    $nomes = ($contas.result | ForEach-Object { "$($_.name) [$($_.id)]" }) -join ", "
+    throw "O token alcanca mais de uma conta ($nomes). Preencha `$AccountId no topo do script."
+  }
+  $AccountId = $contas.result[0].id
+  Write-Output "Conta da Cloudflare: $($contas.result[0].name)"
+}
 $base = "https://api.cloudflare.com/client/v4/accounts/$AccountId"
 
 # So os arquivos web REAIS do app - nunca a pasta inteira do repositorio (que

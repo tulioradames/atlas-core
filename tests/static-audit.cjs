@@ -26,12 +26,12 @@ const deployScript = read('deploy-cloudflare.ps1');
 const auditFixes = read('supabase/ATLAS_V2_4_0_AUDITORIA_CORRECOES.sql');
 const manual = read('manual.html');
 
-assert(app.includes("window.__ATLAS_VERSION__ = '2.4.3 OFICIAL'"), 'Versao interna divergente.');
-assert(config.includes('V2.4.3 Oficial'), 'Config sem a versao do pacote.');
+assert(app.includes("window.__ATLAS_VERSION__ = '2.4.4 OFICIAL'"), 'Versao interna divergente.');
+assert(config.includes('V2.4.4 Oficial'), 'Config sem a versao do pacote.');
 assert(index.includes('id="atlas-v2-footer-version"'), 'Rodape sem o elemento de versao (agora preenchido via JS a partir do config.js).');
-assert(index.includes('V2.4.3 Oficial</span>'), 'Rodape HTML ainda exibe uma versao antiga antes do JavaScript carregar.');
+assert(index.includes('V2.4.4 Oficial</span>'), 'Rodape HTML ainda exibe uma versao antiga antes do JavaScript carregar.');
 assert(index.includes('name="robots" content="noindex, nofollow, noarchive"'), 'Ambiente de homologacao sem bloqueio de indexacao.');
-assert(manifest.includes('2.4.3'), 'Manifest sem a versao do pacote.');
+assert(manifest.includes('2.4.4'), 'Manifest sem a versao do pacote.');
 // O manual ficou uma versao inteira para tras (dizia V2.4.2 com a 2.4.3 no ar)
 // e nada acusou: nenhuma trava conferia isso, e a unica conferencia que existia
 // vivia no browser-smoke, que o script de publicacao nao roda. Agora a defasagem

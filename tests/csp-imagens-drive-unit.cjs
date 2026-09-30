@@ -111,7 +111,23 @@ assert(
 // 4. O que ja funcionava tem de continuar funcionando.
 // ---------------------------------------------------------------------------
 const connectSrc = fontesDe(cspHeaders, 'connect-src');
-assert(hostPermitido(connectSrc, 'https://abc.supabase.co/rest/v1/x'), 'connect-src deveria permitir o Supabase.');
+
+// O backend saiu da nuvem da Supabase e passou a ser o servidor proprio. Esta
+// conferencia acompanha o config.js em vez de citar um host fixo: o que a CSP
+// tem de liberar e o backend CONFIGURADO, seja ele qual for.
+const backend = (read('config/config.js').match(/SUPABASE_URL:\s*"([^"]+)"/) || [])[1];
+assert(backend, 'Nao encontrei SUPABASE_URL em config/config.js.');
+assert(
+  hostPermitido(connectSrc, `${backend.replace(/\/+$/, '')}/rest/v1/x`),
+  `connect-src precisa liberar o backend configurado (${backend}) - sem isso o app nao fala com o proprio servidor.`,
+);
+// E a porta da nuvem fica FECHADA. Nao e detalhe de limpeza: enquanto
+// *.supabase.co estiver liberado, um config errado ou um script injetado pode
+// mandar dado da empresa para fora sem o navegador reclamar.
+assert(
+  !hostPermitido(connectSrc, 'https://abc.supabase.co/rest/v1/x'),
+  'connect-src NAO pode mais liberar *.supabase.co - o Atlas saiu da nuvem da Supabase.',
+);
 assert(hostPermitido(connectSrc, 'https://script.google.com/macros/s/x/exec'), 'connect-src deveria permitir o conector do Apps Script.');
 assert(!hostPermitido(connectSrc, 'https://exemplo-malicioso.com/x'), 'connect-src nao deveria permitir host qualquer.');
 
