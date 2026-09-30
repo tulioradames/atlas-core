@@ -1,4 +1,4 @@
-# Atlas V2.4.3 Oficial
+# Atlas V2.4.4 Oficial
 
 ## Edição pública
 
@@ -6,13 +6,21 @@ Este repositório não contém credenciais, URLs de produção, IDs de pastas do
 Google Drive nem dados operacionais. Antes de executar:
 
 1. configure `SUPABASE_URL` e `SUPABASE_KEY` em `config/config.js`;
-2. execute o schema adequado da pasta `supabase/`;
-3. configure as mesmas credenciais e o ID da pasta permitida no conector em
-   `appscript/GoogleDriveUpload_AppsScript_V2_CONECTOR_SETOR.gs`;
-4. publique uma cópia do conector em cada conta setorial do Google Drive.
+2. troque o marcador `seu-backend.exemplo.com.br` pelo seu backend em `_headers`
+   **e** em `worker-security.js` — a política de segurança vive nos dois
+   arquivos, e eles precisam ficar idênticos;
+3. execute o schema adequado da pasta `supabase/`;
+4. se for usar o Google Drive como armazenamento, configure o conector em
+   `appscript/GoogleDriveUpload_AppsScript_V2_CONECTOR_SETOR.gs` e publique uma
+   cópia em cada conta setorial.
 
-Use somente uma chave publicável do Supabase. Nunca coloque `service_role`,
-senhas, tokens de sessão ou identificadores internos no repositório.
+A partir da **V2.4.4** o `SUPABASE_URL` é o endereço do **seu próprio servidor**
+(Supabase auto-hospedado), não um projeto na nuvem da Supabase — e a política de
+segurança não permite mais falar com `*.supabase.co`. O armazenamento de arquivos
+também pode ser o seu servidor, por setor, sem depender do Drive.
+
+Use somente uma chave publicável. Nunca coloque `service_role`, senhas, tokens
+de sessão ou identificadores internos no repositório.
 
 Esta revisao troca o carregamento integral por carregamento sob demanda: o Atlas
 abre primeiro os elementos visiveis e busca subelementos, valores e anexos somente
@@ -20,6 +28,31 @@ quando a visualizacao precisar deles.
 
 Pacote de validação da organização por cidade e da exclusão sincronizada entre
 Atlas, Supabase e Google Drive. A base funcional permanece sendo a V2.1.0.
+
+## Novidades da V2.4.4
+
+Versão focada em **autonomia e desempenho**: sair da nuvem, guardar os arquivos
+em casa e fazer os quadros grandes voltarem a abrir.
+
+- **Armazenamento no servidor da empresa.** Cada setor pode guardar seus anexos
+  no próprio servidor em vez do Google Drive. Enviar, abrir a prévia e consultar
+  versões continua igual na tela — o que muda é onde o documento fica e quem
+  responde por ele. O Drive continua funcionando para quem preferir.
+- **Quadros grandes voltaram a abrir rápido.** A leitura dos valores e dos
+  anexos perguntava a permissão uma vez por **linha**: num quadro com milhares
+  de itens e dezenas de colunas isso estourava o limite de tempo do Postgres e
+  a pessoa via erro em vez dos dados. A permissão passou a ser resolvida uma vez
+  por consulta, para o conjunto inteiro. Medido em produção: quadro completo de
+  7,6 s para 0,25 s; lote de 100 itens de 872 ms para 222 ms. **A semântica das
+  regras não mudou** — as funções novas chamam as mesmas funções de permissão de
+  sempre, só que uma vez por escopo em vez de uma vez por linha.
+- **O Atlas deixou de depender da nuvem da Supabase.** Banco, login, tempo real
+  e arquivos rodam no servidor da empresa. A política de segurança do navegador
+  não permite mais conexão com `*.supabase.co`: enquanto aquele domínio
+  estivesse liberado, um `config.js` errado ou um script injetado poderia mandar
+  dado para fora sem o navegador reclamar.
+
+Esta versão **tem migration**: veja "Atualizar uma V2.4.3 existente" abaixo.
 
 ## Novidades da V2.4.0
 
@@ -158,6 +191,22 @@ Detalhes completos em
 - criacao de elementos em Obras preservada durante o carregamento remoto;
 - novos cadastros dependem somente da liberacao do Admin, sem confirmacao por e-mail;
 - leitor de Excel carregado somente ao iniciar uma importacao.
+
+## Atualizar uma V2.4.3 existente
+
+1. Publique os arquivos deste pacote.
+2. Aplique no banco:
+   - `supabase/ATLAS_V2_4_4_LEITURA_EM_CONJUNTO.sql`
+
+   O arquivo traz, no próprio cabeçalho, a medição de antes e depois e como
+   desfazer. Ele **não muda quem enxerga o quê**: reescreve apenas as duas
+   policies de leitura (`atlas_v2_item_values` e `atlas_v2_attachments`) para
+   resolver a permissão uma vez por consulta.
+3. Se for migrar o armazenamento para o próprio servidor, cadastre a conexão do
+   setor com tipo **Servidor local** e o endpoint do seu conector.
+4. Pressione `Ctrl + F5` e confirme `V2.4.4 Oficial` no rodapé.
+
+Nenhuma reimplantação de conector do Drive: ele não muda.
 
 ## Atualizar uma V2.4.2 existente
 
