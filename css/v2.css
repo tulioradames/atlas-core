@@ -8732,3 +8732,46 @@ body.atlas-v2-right-dragging * {
   opacity: .6;
   cursor: not-allowed;
 }
+
+/* V2.5.0 - foto de perfil.
+   O avatar vira moldura da imagem quando ha foto; sem foto continua sendo o
+   circulo com as iniciais, que e o estado de quem ainda nao enviou nada. */
+.atlas-v2-avatar.tem-foto {
+  padding: 0;
+  overflow: hidden;
+  background: transparent;
+}
+.atlas-v2-avatar.tem-foto img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.atlas-v2-perfil-foto {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+.atlas-v2-perfil-foto .atlas-v2-avatar.is-grande {
+  width: 72px;
+  height: 72px;
+  min-width: 72px;
+  font-size: 24px;
+}
+.atlas-v2-perfil-foto strong { display: block; }
+.atlas-v2-perfil-foto small {
+  display: block;
+  margin-top: 2px;
+  font-size: 12px;
+  opacity: .7;
+}
+.atlas-v2-perfil-foto-acoes {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+/* O label faz o papel de botao para abrir o seletor de arquivo sem JavaScript
+   extra; precisa parecer e responder como botao. */
+.atlas-v2-perfil-foto-acoes label { cursor: pointer; }

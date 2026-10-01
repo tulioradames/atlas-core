@@ -15,7 +15,7 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
   // pre-cache. tests/static-audit.cjs falha se index.html e ATLAS_BUILD
   // divergirem, que era a causa dos casos de "publiquei mas continua igual".
   // ---------------------------------------------------------------------------
-  const ATLAS_BUILD = '2.5.0-perfil-r1';
+  const ATLAS_BUILD = '2.5.0-foto-r1';
   window.__ATLAS_BUILD__ = ATLAS_BUILD;
 
   // Changelog exibido na tela de Inicio. Toda alteracao funcional ou correcao
@@ -3912,7 +3912,7 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
     const normalize = (value) => String(value || '').toLocaleLowerCase('pt-BR').normalize('NFD').replace(/[\u0300-\u036f]/g, '');
     const query = normalize(context.query);
     const users = chatUsers().filter((user) => chatMentionAliases(user).some((alias) => normalize(alias).includes(query))).slice(0, 6);
-    root.innerHTML = users.map((user) => `<button type="button" data-action="chat-mention-select" data-user-id="${attr(user.id)}"><span class="atlas-v2-avatar">${escapeHtml((user.name || user.email || 'U').split(/\s+/).slice(0, 2).map((part) => part[0]).join('').toUpperCase())}</span><span><strong>${escapeHtml(user.name || user.email)}</strong><small>${escapeHtml(user.email || '')}</small></span></button>`).join('') || '<p>Nenhum usuário com acesso a este elemento.</p>';
+    root.innerHTML = users.map((user) => `<button type="button" data-action="chat-mention-select" data-user-id="${attr(user.id)}">${avatarMarkup(user)}<span><strong>${escapeHtml(user.name || user.email)}</strong><small>${escapeHtml(user.email || '')}</small></span></button>`).join('') || '<p>Nenhum usuário com acesso a este elemento.</p>';
     root.hidden = false;
   }
 
@@ -4228,16 +4228,79 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
   function renderIdentity() {
     const user = currentUser();
     if (!user) return;
-    const initials = user.name.split(/\s+/).filter(Boolean).slice(0, 2).map((entry) => entry[0]).join('').toUpperCase() || 'AT';
     const avatar = document.getElementById('atlas-v2-user-avatar');
     const name = document.getElementById('atlas-v2-user-name');
     const role = document.getElementById('atlas-v2-user-role');
-    if (avatar) avatar.textContent = initials;
+    if (avatar) {
+      const url = user.photoPath ? fotoUrl(user.photoPath) : '';
+      if (url) {
+        avatar.classList.add('tem-foto');
+        avatar.innerHTML = `<img src="${attr(url)}" alt="${attr(user.name || 'Foto')}">`;
+      } else {
+        avatar.classList.remove('tem-foto');
+        avatar.textContent = iniciaisDe(user.name);
+      }
+    }
     if (name) name.textContent = user.name || user.email;
     if (role) role.textContent = roleLabel(user.role);
     const footerVersion = document.getElementById('atlas-v2-footer-version');
     if (footerVersion) footerVersion.textContent = window.ATNX_CONFIG?.V2_VERSION || ATLAS_BUILD;
     renderNotificationDot();
+  }
+
+  // ---------------------------------------------------------------------------
+  // Foto de perfil
+  // ---------------------------------------------------------------------------
+  // O bucket e PRIVADO, como os anexos do chat: foto de funcionario e dado
+  // pessoal e nao vai ficar acessivel a quem tiver o endereco. O preco e este
+  // cache: a foto aparece no cabecalho, nas listas e nas mencoes, e assinar uma
+  // URL a cada desenho seria uma chamada de rede por avatar por render.
+  //
+  // Guardo a URL e o instante em que ela expira, com margem de 60s. Quem pede
+  // uma foto ainda nao assinada recebe as iniciais agora e a foto no proximo
+  // desenho - preferivel a segurar a tela esperando rede.
+  const fotoCache = new Map();   // caminho -> { url, expiraEm }
+  const fotoPedindo = new Set();
+  const FOTO_VALIDADE = 3600;    // segundos pedidos ao Supabase
+  const FOTO_MARGEM = 60000;     // ms de folga antes de considerar vencida
+
+  function fotoUrl(caminho) {
+    if (!caminho || !runtime.authClient) return '';
+    const guardada = fotoCache.get(caminho);
+    if (guardada && guardada.expiraEm - FOTO_MARGEM > Date.now()) return guardada.url;
+    if (!fotoPedindo.has(caminho)) {
+      fotoPedindo.add(caminho);
+      runtime.authClient.storage.from('atlas-avatares').createSignedUrl(caminho, FOTO_VALIDADE)
+        .then(({ data, error }) => {
+          if (error || !data?.signedUrl) throw error || new Error('sem URL');
+          fotoCache.set(caminho, { url: data.signedUrl, expiraEm: Date.now() + FOTO_VALIDADE * 1000 });
+          renderSoon();
+        })
+        .catch((error) => {
+          // Falhar aqui nao pode quebrar a tela: o avatar volta a ser as
+          // iniciais, que e exatamente o estado de quem nao tem foto.
+          console.error('Atlas V2: nao consegui assinar a foto de perfil.', error);
+          fotoCache.set(caminho, { url: '', expiraEm: Date.now() + 30000 });
+        })
+        .finally(() => fotoPedindo.delete(caminho));
+    }
+    return guardada?.url || '';
+  }
+
+  function iniciaisDe(nome) {
+    return String(nome || '').split(/\s+/).filter(Boolean).slice(0, 2)
+      .map((parte) => parte[0]).join('').toUpperCase() || 'AT';
+  }
+
+  // Um unico lugar que decide foto-ou-iniciais. Antes da V2.5.0 as iniciais
+  // eram remontadas em cinco pontos diferentes, cada um com sua variacao.
+  function avatarMarkup(user, extraClasse = '') {
+    const classe = `atlas-v2-avatar${extraClasse ? ' ' + extraClasse : ''}`;
+    const url = user?.photoPath ? fotoUrl(user.photoPath) : '';
+    if (url) {
+      return `<span class="${classe} tem-foto"><img src="${attr(url)}" alt="${attr(user.name || 'Foto')}" loading="lazy"></span>`;
+    }
+    return `<span class="${classe}">${escapeHtml(iniciaisDe(user?.name))}</span>`;
   }
 
   function refreshIcons(root = document) {
@@ -4450,6 +4513,7 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
       title: profile.cargo || '',
       sector: profile.setor || '',
       phone: profile.telefone || '',
+      photoPath: profile.foto_path || '',
       seesAllBoards: Boolean(profile.ve_todos_os_quadros),
       lastActivity: profile.last_sign_in_at || profile.updated_at || null,
     };
@@ -5414,7 +5478,7 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
       </div>
       <div class="atlas-v2-admin-split">
         <section class="atlas-v2-admin-block"><header><div><span>ENTRADA</span><h3>Solicitações pendentes</h3></div><button type="button" data-action="admin-tab" data-admin-tab="users">Ver usuários</button></header>
-          <div class="atlas-v2-admin-list">${pendingUsers.length ? pendingUsers.map((user) => `<div><span class="atlas-v2-avatar">${escapeHtml(user.name.slice(0, 2).toUpperCase())}</span><span><strong>${escapeHtml(user.name)}</strong><small>${escapeHtml(user.email)}</small></span><button class="atlas-v2-button atlas-v2-button-primary" type="button" data-action="admin-approve-user" data-user-id="${attr(user.id)}">Liberar</button></div>`).join('') : '<p class="atlas-v2-admin-empty">Nenhum acesso aguardando liberação.</p>'}</div>
+          <div class="atlas-v2-admin-list">${pendingUsers.length ? pendingUsers.map((user) => `<div>${avatarMarkup(user)}<span><strong>${escapeHtml(user.name)}</strong><small>${escapeHtml(user.email)}</small></span><button class="atlas-v2-button atlas-v2-button-primary" type="button" data-action="admin-approve-user" data-user-id="${attr(user.id)}">Liberar</button></div>`).join('') : '<p class="atlas-v2-admin-empty">Nenhum acesso aguardando liberação.</p>'}</div>
         </section>
         <section class="atlas-v2-admin-block"><header><div><span>SEGURANÇA</span><h3>Estado do ambiente</h3></div><button type="button" data-action="admin-tab" data-admin-tab="system">Abrir sistema</button></header>
           <div class="atlas-v2-admin-health"><div><i data-lucide="database"></i><span><strong>Base operacional</strong><small>${runtime.remoteMode ? 'Quadros e registros sincronizados com o Supabase.' : 'Modo local; aplique o SQL completo para conectar a base.'}</small></span><b>${runtime.remoteMode ? 'ONLINE' : 'LOCAL'}</b></div><div><i data-lucide="workflow"></i><span><strong>Automações</strong><small>${(runtime.data.automations || []).filter((entry) => entry.active !== false).length} regra(s) ativa(s) nos quadros.</small></span><b>ATIVAS</b></div><div><i data-lucide="scroll-text"></i><span><strong>Auditoria</strong><small>${runtime.data.auditLog.length} atividade(s) registrada(s).</small></span><b>ATIVA</b></div></div>
@@ -5475,7 +5539,7 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
 
     const rows = runtime.data.users.map((user) => {
       const protectedAccount = user.id === runtime.data.currentUserId || contaProtegida(user);
-      return `<tr data-admin-user-row="${attr(user.id)}"><td><div class="atlas-v2-admin-user"><span class="atlas-v2-avatar">${escapeHtml(user.name.split(/\s+/).slice(0, 2).map((entry) => entry[0]).join('').toUpperCase())}</span><span><strong>${escapeHtml(user.name)}</strong><small>${escapeHtml(user.email)}</small></span></div></td><td>${escapeHtml(user.title || 'Sem cargo')}</td><td><select data-action="admin-user-role" data-user-id="${attr(user.id)}">${Object.entries(ROLE_DEFINITIONS).map(([key, value]) => `<option value="${key}" ${user.role === key ? 'selected' : ''}>${value.label}</option>`).join('')}</select></td><td>${enxergaTudoCelula(user)}</td><td><select data-action="admin-user-status" data-user-id="${attr(user.id)}">${Object.entries(USER_STATUSES).map(([key, label]) => `<option value="${key}" ${user.status === key ? 'selected' : ''}>${label}</option>`).join('')}</select></td><td>${formatDateTime(user.lastActivity)}</td><td><div class="atlas-v2-admin-actions">${user.status !== 'active' ? `<button type="button" data-action="admin-approve-user" data-user-id="${attr(user.id)}" title="Liberar acesso"><i data-lucide="user-check"></i></button>` : ''}<button class="is-danger" type="button" data-action="admin-delete-user" data-user-id="${attr(user.id)}" title="${protectedAccount ? 'Conta protegida' : 'Excluir usuário'}" ${protectedAccount ? 'disabled' : ''}><i data-lucide="trash-2"></i></button></div></td></tr>`;
+      return `<tr data-admin-user-row="${attr(user.id)}"><td><div class="atlas-v2-admin-user">${avatarMarkup(user)}<span><strong>${escapeHtml(user.name)}</strong><small>${escapeHtml(user.email)}</small></span></div></td><td>${escapeHtml(user.title || 'Sem cargo')}</td><td><select data-action="admin-user-role" data-user-id="${attr(user.id)}">${Object.entries(ROLE_DEFINITIONS).map(([key, value]) => `<option value="${key}" ${user.role === key ? 'selected' : ''}>${value.label}</option>`).join('')}</select></td><td>${enxergaTudoCelula(user)}</td><td><select data-action="admin-user-status" data-user-id="${attr(user.id)}">${Object.entries(USER_STATUSES).map(([key, label]) => `<option value="${key}" ${user.status === key ? 'selected' : ''}>${label}</option>`).join('')}</select></td><td>${formatDateTime(user.lastActivity)}</td><td><div class="atlas-v2-admin-actions">${user.status !== 'active' ? `<button type="button" data-action="admin-approve-user" data-user-id="${attr(user.id)}" title="Liberar acesso"><i data-lucide="user-check"></i></button>` : ''}<button class="is-danger" type="button" data-action="admin-delete-user" data-user-id="${attr(user.id)}" title="${protectedAccount ? 'Conta protegida' : 'Excluir usuário'}" ${protectedAccount ? 'disabled' : ''}><i data-lucide="trash-2"></i></button></div></td></tr>`;
     }).join('');
     return `<div class="atlas-v2-admin-section-head"><div><span>IDENTIDADES</span><h2>Usuários e acessos</h2><p>Novos cadastros entram como Visitante e aguardam liberação. Só o Root altera acessos.</p></div><button class="atlas-v2-button atlas-v2-button-primary" type="button" data-action="admin-sync-users"><i data-lucide="refresh-cw"></i>Atualizar usuários</button></div><div class="atlas-v2-admin-table-wrap"><table class="atlas-v2-admin-table"><thead><tr><th>Usuário</th><th>Cargo</th><th>Perfil</th><th title="Enxerga qualquer quadro, mesmo sem regra. Não dá poder: as ações continuam limitadas ao perfil.">Vê todos os quadros</th><th>Status</th><th>Última atividade</th><th>Ações</th></tr></thead><tbody>${rows}</tbody></table></div>`;
   }
@@ -5772,6 +5836,109 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
   // dois codigos depende de envio de e-mail, que hoje nao existe (o SMTP e o
   // falso de fabrica), entao a tela diz isso em vez de oferecer um campo que
   // nao funcionaria.
+  // Reduz no NAVEGADOR antes de enviar. A foto do celular tem 4 ou 5 MB e vai
+  // ser exibida num circulo de 40 pixels: enviar o original custa rede de quem
+  // envia, espaco no servidor e rede de todo mundo que depois a visualiza.
+  // Recorte central para o circulo nao achatar rostos de fotos retangulares.
+  function reduzirImagem(arquivo, lado = 256) {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      const url = URL.createObjectURL(arquivo);
+      img.onload = () => {
+        URL.revokeObjectURL(url);
+        const menor = Math.min(img.width, img.height);
+        if (!menor) { reject(new Error('imagem sem dimensoes')); return; }
+        const canvas = document.createElement('canvas');
+        canvas.width = lado;
+        canvas.height = lado;
+        canvas.getContext('2d').drawImage(
+          img, (img.width - menor) / 2, (img.height - menor) / 2, menor, menor, 0, 0, lado, lado,
+        );
+        canvas.toBlob(
+          (blob) => (blob ? resolve(blob) : reject(new Error('nao consegui gerar a imagem'))),
+          'image/jpeg', 0.85,
+        );
+      };
+      img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('arquivo nao e uma imagem valida')); };
+      img.src = url;
+    });
+  }
+
+  async function enviarFotoPerfil(input) {
+    const arquivo = input?.files?.[0];
+    input.value = '';
+    const user = currentUser();
+    if (!arquivo || !user) return;
+    if (!runtime.authClient || !runtime.authSession) {
+      toast('A foto precisa do Atlas conectado ao servidor.', true);
+      return;
+    }
+    if (!/^image\//.test(arquivo.type)) {
+      toast('Escolha uma imagem (JPG, PNG ou WEBP).', true);
+      return;
+    }
+
+    const anterior = user.photoPath;
+    try {
+      const reduzida = await reduzirImagem(arquivo);
+      // Carimbo de tempo no nome: o navegador guarda imagem em cache com
+      // agressividade, e reaproveitar o mesmo nome faria a foto antiga
+      // continuar aparecendo depois da troca.
+      const caminho = `${user.id}/${Date.now()}.jpg`;
+      const { error } = await runtime.authClient.storage
+        .from('atlas-avatares')
+        .upload(caminho, reduzida, { contentType: 'image/jpeg', upsert: false });
+      if (error) throw error;
+
+      const { error: erroPerfil } = await runtime.authClient
+        .from('atlas_profiles').update({ foto_path: caminho }).eq('id', user.id);
+      if (erroPerfil) {
+        // O arquivo subiu mas o perfil nao apontou para ele: sem isto ficaria
+        // lixo no bucket que ninguem mais alcanca.
+        await runtime.authClient.storage.from('atlas-avatares').remove([caminho]).catch(() => {});
+        throw erroPerfil;
+      }
+
+      user.photoPath = caminho;
+      if (runtime.authProfile) runtime.authProfile.foto_path = caminho;
+      if (anterior) {
+        await runtime.authClient.storage.from('atlas-avatares').remove([anterior]).catch(() => {});
+      }
+      render();
+      openMeuPerfil();
+      toast('Foto atualizada.');
+    } catch (error) {
+      console.error('Atlas V2: falha ao enviar a foto.', error);
+      toast(error?.message === 'arquivo nao e uma imagem valida'
+        ? 'Esse arquivo nao e uma imagem valida.'
+        : mensagemDeFalhaNaSincronizacao(error), true);
+    }
+  }
+
+  async function removerFotoPerfil() {
+    const user = currentUser();
+    if (!user?.photoPath) return;
+    const caminho = user.photoPath;
+    user.photoPath = '';
+    if (runtime.authProfile) runtime.authProfile.foto_path = null;
+    render();
+    openMeuPerfil();
+    if (!runtime.authClient || !runtime.authSession) return;
+    try {
+      const { error } = await runtime.authClient
+        .from('atlas_profiles').update({ foto_path: null }).eq('id', user.id);
+      if (error) throw error;
+      await runtime.authClient.storage.from('atlas-avatares').remove([caminho]).catch(() => {});
+      toast('Foto removida.');
+    } catch (error) {
+      user.photoPath = caminho;
+      if (runtime.authProfile) runtime.authProfile.foto_path = caminho;
+      render();
+      console.error('Atlas V2: falha ao remover a foto.', error);
+      toast(mensagemDeFalhaNaSincronizacao(error), true);
+    }
+  }
+
   function openMeuPerfil() {
     const user = currentUser();
     if (!user) return;
@@ -5781,7 +5948,21 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
     openModal({
       title: 'Meu perfil',
       subtitle: `${user.email} \u00b7 ${roleLabel(user.role)}`,
-      body: `<form id="atlas-v2-perfil-form" class="atlas-v2-form-grid">
+      body: `<div class="atlas-v2-perfil-foto">
+        ${avatarMarkup(user, 'is-grande')}
+        <div>
+          <strong>Foto de perfil</strong>
+          <small>Quadrada, at\u00e9 2 MB. O Atlas reduz para 256\u00d7256 antes de enviar.</small>
+          <div class="atlas-v2-perfil-foto-acoes">
+            <label class="atlas-v2-button atlas-v2-button-quiet">
+              <i data-lucide="image-up"></i>${user.photoPath ? 'Trocar' : 'Escolher'} foto
+              <input type="file" accept="image/jpeg,image/png,image/webp" data-action="perfil-foto" hidden>
+            </label>
+            ${user.photoPath ? '<button class="atlas-v2-button atlas-v2-button-quiet is-danger" type="button" data-action="perfil-foto-remover"><i data-lucide="trash-2"></i>Remover</button>' : ''}
+          </div>
+        </div>
+      </div>
+      <form id="atlas-v2-perfil-form" class="atlas-v2-form-grid">
         ${campo('nome', 'Nome', user.name, 'required maxlength="120" autofocus placeholder="Como voc\u00ea quer ser chamado"')}
         ${campo('cargo', 'Cargo', user.title, 'maxlength="120" placeholder="Ex.: Analista de documenta\u00e7\u00e3o"')}
         ${campo('setor', 'Setor', user.sector, 'maxlength="120" placeholder="Ex.: Documenta\u00e7\u00e3o"')}
@@ -11772,7 +11953,7 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
     if (!context || !requirePermission('share', context, 'compartilhar este quadro')) return;
     const members = runtime.data.boardMembers.filter((entry) => entry.boardId === context.board.id);
     const availableUsers = runtime.data.users.filter((entry) => entry.status === 'active' && entry.id !== runtime.data.currentUserId).map((entry) => `<option value="${attr(entry.id)}">${escapeHtml(entry.name)} · ${roleLabel(entry.role)}</option>`).join('');
-    const memberRows = members.map((entry) => { const user = runtime.data.users.find((candidate) => candidate.id === entry.userId); return `<div class="atlas-v2-settings-row"><span class="atlas-v2-avatar">${escapeHtml((user?.name || 'U').slice(0, 2).toUpperCase())}</span><span><strong>${escapeHtml(user?.name || 'Usuário removido')}</strong><small>${escapeHtml(ACCESS_LEVELS[membershipLevel(entry.role)]?.label || 'Visualização')}</small></span><button class="atlas-v2-admin-icon-danger" type="button" data-action="remove-board-member" data-user-id="${attr(entry.userId)}" title="Remover acesso"><i data-lucide="x"></i></button></div>`; }).join('');
+    const memberRows = members.map((entry) => { const user = runtime.data.users.find((candidate) => candidate.id === entry.userId); return `<div class="atlas-v2-settings-row">${avatarMarkup(user)}<span><strong>${escapeHtml(user?.name || 'Usuário removido')}</strong><small>${escapeHtml(ACCESS_LEVELS[membershipLevel(entry.role)]?.label || 'Visualização')}</small></span><button class="atlas-v2-admin-icon-danger" type="button" data-action="remove-board-member" data-user-id="${attr(entry.userId)}" title="Remover acesso"><i data-lucide="x"></i></button></div>`; }).join('');
     openDrawer({
       title: 'Compartilhar quadro',
       subtitle: context.board.name,
@@ -13287,6 +13468,7 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
       },
       'user-menu': openUserMenu,
       'open-meu-perfil': openMeuPerfil,
+      'perfil-foto-remover': removerFotoPerfil,
       'open-administration': () => openAdministration('overview'),
       'admin-tab': () => { void openAdminTab(target.dataset.adminTab || 'overview'); },
       'admin-sync-users': () => syncAuthUsersFromSupabase(),
@@ -13384,6 +13566,10 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
     }
     const context = findBoard();
     if (!context) return;
+    if (target.matches('[data-action="perfil-foto"]')) {
+      enviarFotoPerfil(target);
+      return;
+    }
     if (target.matches('[data-action="admin-user-ve-tudo"]')) {
       definirEnxergaTudo(target.dataset.userId, target.checked);
       return;
