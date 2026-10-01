@@ -144,4 +144,43 @@ assert(
   'A URL assinada precisa de margem antes de vencer, senao a foto some no meio da sessao.',
 );
 
-console.log('Foto V2.5.0: bucket privado, so JPG/PNG/WEBP, pasta propria, reducao 256px e cache com margem.');
+// ---------------------------------------------------------------------------
+// 8. O gatilho NAO pode conferir dono
+// ---------------------------------------------------------------------------
+// A primeira versao do guard conferia se o caminho comecava pelo uuid de quem
+// envia - redundante com a policy, posta so para a mensagem ficar bonita. Ela
+// recusou TODO envio de foto: gatilho BEFORE INSERT roda antes de a policy ser
+// avaliada, e na conexao do servico de storage o auth.uid() nao e confiavel. O
+// guard dos anexos do chat nunca usou auth.uid(), e por isso sempre funcionou.
+const guard = ler('supabase/ATLAS_V2_5_0_FOTO_GUARD_SEM_DONO.sql');
+const corpoGuard = guard.match(/create or replace function public\.atlas_v2_avatar_guard[\s\S]*?\$\$;/);
+assert(corpoGuard, 'Nao encontrei a versao corrigida do gatilho da foto.');
+assert(
+  !/auth\.uid\(\)/.test(corpoGuard[0]),
+  'O gatilho da foto voltou a usar auth.uid(). Na conexao do storage ele nao e confiavel, '
+  + 'e o gatilho roda antes da policy - isso recusa todo envio de foto. Quem decide o dono e a policy.',
+);
+// E a policy precisa continuar existindo, porque e ela que sustenta a decisao
+// de tirar a checagem do gatilho.
+assert(
+  /atlas_avatares_insert/.test(guard) && /atlas_avatares_update/.test(guard),
+  'A migration que tira a checagem do gatilho precisa conferir que as policies de dono existem.',
+);
+
+// ---------------------------------------------------------------------------
+// 9. Erro de foto nao fala em "lote"
+// ---------------------------------------------------------------------------
+// O tradutor da sincronizacao em lote produziu "O servidor recusou o lote e
+// nenhuma alteracao foi aplicada" no envio de uma foto so - mandando a pessoa
+// procurar o problema no lugar errado.
+assert(
+  /function mensagemDeFalhaNaFoto\(/.test(app),
+  'A foto precisa do proprio tradutor de erro.',
+);
+const envioErro = envio[0] + (app.match(/async function removerFotoPerfil\([\s\S]*?\n  \}/) || [''])[0];
+assert(
+  !/mensagemDeFalhaNaSincronizacao/.test(envioErro),
+  'O caminho da foto ainda usa o tradutor da sincronizacao em lote, que fala em "lote" e "alteracoes".',
+);
+
+console.log('Foto V2.5.0: bucket privado, so JPG/PNG/WEBP, pasta propria pela policy, reducao 256px, cache com margem e erro proprio.');

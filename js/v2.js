@@ -15,7 +15,7 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
   // pre-cache. tests/static-audit.cjs falha se index.html e ATLAS_BUILD
   // divergirem, que era a causa dos casos de "publiquei mas continua igual".
   // ---------------------------------------------------------------------------
-  const ATLAS_BUILD = '2.5.0-foto-r1';
+  const ATLAS_BUILD = '2.5.0-foto-r2';
   window.__ATLAS_BUILD__ = ATLAS_BUILD;
 
   // Changelog exibido na tela de Inicio. Toda alteracao funcional ou correcao
@@ -5864,6 +5864,28 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
     });
   }
 
+  // A sincronizacao em lote tem o tradutor dela, que fala em "lote" e em
+  // "alteracoes". Aqui nao ha lote nenhum: e um arquivo. Reaproveitar aquele
+  // tradutor produziu "O servidor recusou o lote e nenhuma alteracao foi
+  // aplicada" quando o que falhou foi o envio de uma foto - mensagem que manda
+  // a pessoa procurar o problema no lugar errado.
+  function mensagemDeFalhaNaFoto(error) {
+    const texto = String(error?.message || error || '').toLowerCase();
+    if (texto.includes('exceeded') || texto.includes('too large') || texto.includes('payload')) {
+      return 'A imagem ficou grande demais para o servidor. Tente uma foto menor.';
+    }
+    if (texto.includes('mime') || texto.includes('formato') || texto.includes('tipo de arquivo')) {
+      return 'Formato nao aceito. Use JPG, PNG ou WEBP.';
+    }
+    if (texto.includes('row-level security') || texto.includes('policy') || texto.includes('42501')) {
+      return 'O servidor recusou a foto: sem permissao para gravar neste lugar.';
+    }
+    if (texto.includes('failed to fetch') || texto.includes('network')) {
+      return 'Nao consegui falar com o servidor para enviar a foto.';
+    }
+    return 'Nao consegui salvar a foto. Detalhe tecnico no console.';
+  }
+
   async function enviarFotoPerfil(input) {
     const arquivo = input?.files?.[0];
     input.value = '';
@@ -5910,8 +5932,8 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
     } catch (error) {
       console.error('Atlas V2: falha ao enviar a foto.', error);
       toast(error?.message === 'arquivo nao e uma imagem valida'
-        ? 'Esse arquivo nao e uma imagem valida.'
-        : mensagemDeFalhaNaSincronizacao(error), true);
+        ? 'Esse arquivo n\u00e3o \u00e9 uma imagem v\u00e1lida.'
+        : mensagemDeFalhaNaFoto(error), true);
     }
   }
 
@@ -5935,7 +5957,7 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
       if (runtime.authProfile) runtime.authProfile.foto_path = caminho;
       render();
       console.error('Atlas V2: falha ao remover a foto.', error);
-      toast(mensagemDeFalhaNaSincronizacao(error), true);
+      toast(mensagemDeFalhaNaFoto(error), true);
     }
   }
 
