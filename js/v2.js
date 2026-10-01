@@ -15,7 +15,7 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
   // pre-cache. tests/static-audit.cjs falha se index.html e ATLAS_BUILD
   // divergirem, que era a causa dos casos de "publiquei mas continua igual".
   // ---------------------------------------------------------------------------
-  const ATLAS_BUILD = '2.5.0-papeis-r1';
+  const ATLAS_BUILD = '2.5.0-perfil-r1';
   window.__ATLAS_BUILD__ = ATLAS_BUILD;
 
   // Changelog exibido na tela de Inicio. Toda alteracao funcional ou correcao
@@ -4448,6 +4448,8 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
       role: ROLE_DEFINITIONS[profile.role] ? profile.role : PAPEL_PADRAO,
       status: PROFILE_STATUS_FROM_DATABASE[profile.status] || 'pending',
       title: profile.cargo || '',
+      sector: profile.setor || '',
+      phone: profile.telefone || '',
       seesAllBoards: Boolean(profile.ve_todos_os_quadros),
       lastActivity: profile.last_sign_in_at || profile.updated_at || null,
     };
@@ -5756,9 +5758,87 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
     openModal({
       title: 'Conta',
       subtitle: `${user?.name || 'Usuário'} · ${roleLabel(user?.role)}`,
-      body: `<div class="atlas-v2-settings-list">${hasPermission('admin', null) ? '<button class="atlas-v2-button atlas-v2-button-primary" type="button" data-action="open-administration"><i data-lucide="shield"></i>Central de Administração</button>' : ''}<button class="atlas-v2-button atlas-v2-button-danger" type="button" data-auth-action="logout"><i data-lucide="log-out"></i>Sair do Atlas</button></div>`,
+      body: `<div class="atlas-v2-settings-list"><button class="atlas-v2-button atlas-v2-button-quiet" type="button" data-action="open-meu-perfil"><i data-lucide="user-round-cog"></i>Meu perfil</button>${hasPermission('admin', null) ? '<button class="atlas-v2-button atlas-v2-button-primary" type="button" data-action="open-administration"><i data-lucide="shield"></i>Central de Administração</button>' : ''}<button class="atlas-v2-button atlas-v2-button-danger" type="button" data-auth-action="logout"><i data-lucide="log-out"></i>Sair do Atlas</button></div>`,
       actions: '<button class="atlas-v2-button atlas-v2-button-primary" type="button" data-action="close-overlay">Fechar</button>',
     });
+  }
+
+  // V2.5.0: ate aqui so o administrador editava cadastro, e o cargo aparecia
+  // como "Sem cargo" na lista de quase todo mundo - o campo existia no banco
+  // desde sempre e nao tinha por onde ser preenchido.
+  //
+  // O e-mail fica VISIVEL e BLOQUEADO. Ele identifica a conta no login; troca-lo
+  // sem confirmacao nos dois enderecos tranca a pessoa para fora. O fluxo com os
+  // dois codigos depende de envio de e-mail, que hoje nao existe (o SMTP e o
+  // falso de fabrica), entao a tela diz isso em vez de oferecer um campo que
+  // nao funcionaria.
+  function openMeuPerfil() {
+    const user = currentUser();
+    if (!user) return;
+    const campo = (nome, rotulo, valor, extra = '') =>
+      `<label class="atlas-v2-field is-wide"><span>${rotulo}</span><input name="${nome}" value="${attr(valor || '')}" ${extra}></label>`;
+
+    openModal({
+      title: 'Meu perfil',
+      subtitle: `${user.email} \u00b7 ${roleLabel(user.role)}`,
+      body: `<form id="atlas-v2-perfil-form" class="atlas-v2-form-grid">
+        ${campo('nome', 'Nome', user.name, 'required maxlength="120" autofocus placeholder="Como voc\u00ea quer ser chamado"')}
+        ${campo('cargo', 'Cargo', user.title, 'maxlength="120" placeholder="Ex.: Analista de documenta\u00e7\u00e3o"')}
+        ${campo('setor', 'Setor', user.sector, 'maxlength="120" placeholder="Ex.: Documenta\u00e7\u00e3o"')}
+        ${campo('telefone', 'Telefone', user.phone, 'maxlength="40" placeholder="(83) 99999-9999"')}
+        <label class="atlas-v2-field is-wide">
+          <span>E-mail</span>
+          <input value="${attr(user.email)}" disabled>
+          <small class="atlas-v2-field-hint">O e-mail identifica sua conta no login e n\u00e3o pode ser trocado por aqui. Fale com o Root.</small>
+        </label>
+        <label class="atlas-v2-field is-wide">
+          <span>Perfil de acesso</span>
+          <input value="${attr(roleLabel(user.role))}" disabled>
+          <small class="atlas-v2-field-hint">Somente o Root altera perfis de acesso.</small>
+        </label>
+      </form>`,
+      actions: '<button class="atlas-v2-button atlas-v2-button-quiet" type="button" data-action="close-overlay">Cancelar</button><button class="atlas-v2-button atlas-v2-button-primary" type="submit" form="atlas-v2-perfil-form"><i data-lucide="save"></i>Salvar</button>',
+    });
+  }
+
+  async function submitMeuPerfil(form) {
+    const user = currentUser();
+    if (!user) return;
+    const dados = new FormData(form);
+    const limpo = (chave, max) => String(dados.get(chave) || '').trim().slice(0, max);
+    const nome = limpo('nome', 120);
+    if (!nome) {
+      toast('O nome n\u00e3o pode ficar em branco.', true);
+      return;
+    }
+    const novo = { nome, cargo: limpo('cargo', 120), setor: limpo('setor', 120), telefone: limpo('telefone', 40) };
+
+    // Guardo o estado anterior para devolver em caso de falha. Tela que mostra
+    // salvo quando o servidor recusou e o defeito que a V2.4.3 corrigiu no
+    // rodape do visualizador - nao vou reintroduzi-lo aqui.
+    const antes = { name: user.name, title: user.title, sector: user.sector, phone: user.phone };
+    Object.assign(user, { name: novo.nome, title: novo.cargo, sector: novo.setor, phone: novo.telefone });
+    closeOverlay();
+    render();
+
+    if (!runtime.authClient || !runtime.authSession) {
+      saveData('Perfil atualizado', { audit: false });
+      return;
+    }
+    try {
+      const { error } = await runtime.authClient
+        .from('atlas_profiles')
+        .update(novo)
+        .eq('id', user.id);
+      if (error) throw error;
+      if (runtime.authProfile) Object.assign(runtime.authProfile, novo);
+      toast('Perfil atualizado.');
+    } catch (error) {
+      Object.assign(user, antes);
+      render();
+      console.error('Atlas V2: falha ao salvar o perfil.', error);
+      toast(mensagemDeFalhaNaSincronizacao(error), true);
+    }
   }
 
   function openAdminUserModal() {
@@ -13206,6 +13286,7 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
         if (!document.fullscreenElement) document.documentElement.requestFullscreen?.(); else document.exitFullscreen?.();
       },
       'user-menu': openUserMenu,
+      'open-meu-perfil': openMeuPerfil,
       'open-administration': () => openAdministration('overview'),
       'admin-tab': () => { void openAdminTab(target.dataset.adminTab || 'overview'); },
       'admin-sync-users': () => syncAuthUsersFromSupabase(),
@@ -13551,6 +13632,7 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
     const form = event.target;
     if (!form.id?.startsWith('atlas-v2-')) return;
     event.preventDefault();
+    if (form.id === 'atlas-v2-perfil-form') submitMeuPerfil(form);
     if (form.id === 'atlas-v2-create-form') submitCreate(form);
     if (form.id === 'atlas-v2-group-form') submitGroup(form);
     if (form.id === 'atlas-v2-column-form') submitColumn(form);

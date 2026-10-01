@@ -8717,3 +8717,18 @@ body.atlas-v2-right-dragging * {
   gap: 4px;
 }
 .atlas-v2-admin-flag.is-fixo i { width: 15px; height: 15px; }
+
+/* V2.5.0 - dica abaixo de um campo. Usada nos campos BLOQUEADOS da tela de
+   perfil: sem explicar por que estao bloqueados, a pessoa fica tentando
+   clicar e conclui que o Atlas esta quebrado. */
+.atlas-v2-field-hint {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+  line-height: 1.35;
+  opacity: .7;
+}
+.atlas-v2-field input[disabled] {
+  opacity: .6;
+  cursor: not-allowed;
+}
