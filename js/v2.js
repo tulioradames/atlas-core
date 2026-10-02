@@ -15,7 +15,7 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
   // pre-cache. tests/static-audit.cjs falha se index.html e ATLAS_BUILD
   // divergirem, que era a causa dos casos de "publiquei mas continua igual".
   // ---------------------------------------------------------------------------
-  const ATLAS_BUILD = '2.5.0-foto-r2';
+  const ATLAS_BUILD = '2.5.0-email';
   window.__ATLAS_BUILD__ = ATLAS_BUILD;
 
   // Changelog exibido na tela de Inicio. Toda alteracao funcional ou correcao
