@@ -382,6 +382,7 @@ assert(
     'ATLAS_V2_5_0_FOTO_PERFIL.sql',
     'ATLAS_V2_5_0_PAPEIS.sql',
     'ATLAS_V2_5_0_PERFIL.sql',
+    'ATLAS_V2_5_0_TROCA_EMAIL.sql',
     'ATLAS_V2_5_0_VISAO_SEM_PODER.sql',
     // Nao e migracao: e o retrato do esquema em producao, e a unica fonte
     // confiavel sobre o estado do banco. Ver supabase/README.md.

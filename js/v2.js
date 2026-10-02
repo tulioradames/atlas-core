@@ -5961,6 +5961,150 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
     }
   }
 
+  // ===========================================================================
+  // Troca de e-mail
+  // ===========================================================================
+  // Quem faz a troca e o GoTrue, nao o Atlas. Ele ja manda um codigo de 6
+  // digitos para o endereco ATUAL e outro, diferente, para o NOVO, e so troca
+  // quando os dois forem conferidos. Medido na homologacao com envio real.
+  //
+  // O papel da tela e so: pedir o endereco novo, pedir os dois codigos, e
+  // explicar o que esta acontecendo. Nada de logica de seguranca aqui - ela
+  // mora no servidor, que e onde nao da para burlar pelo console do navegador.
+
+  // O erro do servidor chega em ingles e generico. Sem traducao, "Error sending
+  // email change email" manda a pessoa procurar defeito no proprio e-mail -
+  // quando o que falta e SMTP configurado no ambiente.
+  function mensagemDeFalhaNaTrocaDeEmail(error) {
+    const bruto = String(error?.message || error || '');
+    const texto = bruto.toLowerCase();
+    if (texto.includes('error sending') || texto.includes('unexpected_failure') || texto.includes('smtp')) {
+      return 'O Atlas não conseguiu enviar os códigos: este ambiente ainda não tem servidor de e-mail configurado. '
+        + 'Nada foi alterado — seu e-mail continua o mesmo.';
+    }
+    if (texto.includes('already been registered') || texto.includes('already registered') || texto.includes('duplicate')) {
+      return 'Já existe uma conta com esse e-mail.';
+    }
+    if (texto.includes('invalid') && texto.includes('email')) return 'E-mail inválido.';
+    if (texto.includes('token has expired') || texto.includes('expired')) {
+      return 'O código venceu. Peça a troca de novo para receber códigos novos.';
+    }
+    if (texto.includes('token') || texto.includes('otp')) {
+      return 'Código incorreto. Confira os dois códigos — cada caixa recebeu um diferente.';
+    }
+    if (texto.includes('rate limit') || texto.includes('too many')) {
+      return 'Muitas tentativas seguidas. Espere alguns minutos e tente de novo.';
+    }
+    return bruto ? `Não foi possível trocar o e-mail. Detalhe técnico: ${bruto}` : 'Não foi possível trocar o e-mail.';
+  }
+
+  function openTrocarEmail() {
+    const user = currentUser();
+    if (!user || !runtime.remoteMode) return;
+    openModal({
+      title: 'Alterar e-mail',
+      subtitle: user.email,
+      body: `<form id="atlas-v2-trocar-email-form" class="atlas-v2-form-grid">
+        <label class="atlas-v2-field is-wide">
+          <span>Novo e-mail</span>
+          <input name="novo" type="email" required autofocus maxlength="160" placeholder="nome@proxxima.net">
+        </label>
+        <p class="atlas-v2-modal-note">Ao continuar, o Atlas envia um código para <strong>${escapeHtml(user.email)}</strong>
+        e outro para o endereço novo. São códigos diferentes, e a troca só acontece com os dois.
+        Enquanto isso, você continua entrando com o e-mail atual.</p>
+      </form>`,
+      actions: '<button class="atlas-v2-button atlas-v2-button-quiet" type="button" data-action="close-overlay">Cancelar</button>'
+        + '<button class="atlas-v2-button atlas-v2-button-primary" type="submit" form="atlas-v2-trocar-email-form"><i data-lucide="send"></i>Enviar códigos</button>',
+    });
+  }
+
+  async function submitTrocarEmail(form) {
+    const user = currentUser();
+    if (!user || !runtime.authClient) return;
+    const novo = String(new FormData(form).get('novo') || '').trim().toLowerCase();
+    if (!novo) return;
+    if (novo === String(user.email || '').toLowerCase()) {
+      toast('Esse já é o seu e-mail atual.', true);
+      return;
+    }
+
+    const botao = form.ownerDocument?.querySelector('[form="atlas-v2-trocar-email-form"]');
+    if (botao) botao.disabled = true;
+    try {
+      const { error } = await runtime.authClient.auth.updateUser({ email: novo });
+      if (error) throw error;
+      openConfirmarTrocaEmail(user.email, novo);
+    } catch (error) {
+      if (botao) botao.disabled = false;
+      console.error('Atlas V2: falha ao pedir a troca de e-mail.', error);
+      toast(mensagemDeFalhaNaTrocaDeEmail(error), true);
+    }
+  }
+
+  function openConfirmarTrocaEmail(antigo, novo) {
+    const codigo = (nome, rotulo, endereco) =>
+      `<label class="atlas-v2-field is-wide"><span>${rotulo}</span>
+        <input name="${nome}" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]*"
+               maxlength="10" required placeholder="000000">
+        <small class="atlas-v2-field-hint">enviado para ${escapeHtml(endereco)}</small>
+      </label>`;
+    openModal({
+      title: 'Confirmar a troca',
+      subtitle: `${antigo} → ${novo}`,
+      body: `<form id="atlas-v2-confirmar-email-form" class="atlas-v2-form-grid"
+                   data-antigo="${attr(antigo)}" data-novo="${attr(novo)}">
+        ${codigo('codigoAtual', 'Código do e-mail atual', antigo)}
+        ${codigo('codigoNovo', 'Código do e-mail novo', novo)}
+        <p class="atlas-v2-modal-note">Os dois códigos são obrigatórios. Se algum não chegou,
+        feche esta janela e peça a troca de novo — até lá nada muda.</p>
+      </form>`,
+      actions: '<button class="atlas-v2-button atlas-v2-button-quiet" type="button" data-action="close-overlay">Cancelar</button>'
+        + '<button class="atlas-v2-button atlas-v2-button-primary" type="submit" form="atlas-v2-confirmar-email-form"><i data-lucide="check"></i>Confirmar troca</button>',
+    });
+  }
+
+  async function submitConfirmarTrocaEmail(form) {
+    const user = currentUser();
+    if (!user || !runtime.authClient) return;
+    const dados = new FormData(form);
+    const antigo = form.dataset.antigo || '';
+    const novo = form.dataset.novo || '';
+    const soDigitos = (chave) => String(dados.get(chave) || '').replace(/\D/g, '');
+    const codigoAtual = soDigitos('codigoAtual');
+    const codigoNovo = soDigitos('codigoNovo');
+    if (!codigoAtual || !codigoNovo) {
+      toast('Informe os dois códigos.', true);
+      return;
+    }
+
+    const botao = form.ownerDocument?.querySelector('[form="atlas-v2-confirmar-email-form"]');
+    if (botao) botao.disabled = true;
+    try {
+      // Cada codigo pertence a uma caixa: o do endereco atual e conferido
+      // contra o endereco atual, o do novo contra o novo. Trocar a ordem dos
+      // pares faz o servidor recusar os dois, e a mensagem nao explicaria.
+      const verificar = async (endereco, token) => {
+        const { error } = await runtime.authClient.auth.verifyOtp({ email: endereco, token, type: 'email_change' });
+        if (error) throw error;
+      };
+      await verificar(antigo, codigoAtual);
+      await verificar(novo, codigoNovo);
+
+      // O e-mail oficial mudou no servidor. A copia do perfil acompanha por
+      // gatilho (ATLAS_V2_5_0_TROCA_EMAIL.sql); aqui so atualizo a tela para
+      // nao exibir o endereco velho ate a proxima sincronizacao.
+      user.email = novo;
+      if (runtime.authProfile) runtime.authProfile.email = novo;
+      closeOverlay();
+      render();
+      toast('E-mail alterado. O próximo login já usa o endereço novo.');
+    } catch (error) {
+      if (botao) botao.disabled = false;
+      console.error('Atlas V2: falha ao confirmar a troca de e-mail.', error);
+      toast(mensagemDeFalhaNaTrocaDeEmail(error), true);
+    }
+  }
+
   function openMeuPerfil() {
     const user = currentUser();
     if (!user) return;
@@ -5991,8 +6135,13 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
         ${campo('telefone', 'Telefone', user.phone, 'maxlength="40" placeholder="(83) 99999-9999"')}
         <label class="atlas-v2-field is-wide">
           <span>E-mail</span>
-          <input value="${attr(user.email)}" disabled>
-          <small class="atlas-v2-field-hint">O e-mail identifica sua conta no login e n\u00e3o pode ser trocado por aqui. Fale com o Root.</small>
+          <div class="atlas-v2-field-com-acao">
+            <input value="${attr(user.email)}" disabled>
+            ${runtime.remoteMode ? '<button class="atlas-v2-button atlas-v2-button-quiet" type="button" data-action="perfil-trocar-email"><i data-lucide="mail"></i>Alterar</button>' : ''}
+          </div>
+          <small class="atlas-v2-field-hint">${runtime.remoteMode
+            ? 'O e-mail identifica sua conta no login. A troca exige um c\u00f3digo no endere\u00e7o atual <strong>e</strong> um no novo.'
+            : 'Sem o Supabase conectado o e-mail n\u00e3o pode ser trocado: quem guarda o endere\u00e7o de login \u00e9 o servidor.'}</small>
         </label>
         <label class="atlas-v2-field is-wide">
           <span>Perfil de acesso</span>
@@ -13491,6 +13640,7 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
       'user-menu': openUserMenu,
       'open-meu-perfil': openMeuPerfil,
       'perfil-foto-remover': removerFotoPerfil,
+      'perfil-trocar-email': openTrocarEmail,
       'open-administration': () => openAdministration('overview'),
       'admin-tab': () => { void openAdminTab(target.dataset.adminTab || 'overview'); },
       'admin-sync-users': () => syncAuthUsersFromSupabase(),
@@ -13841,6 +13991,8 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
     if (!form.id?.startsWith('atlas-v2-')) return;
     event.preventDefault();
     if (form.id === 'atlas-v2-perfil-form') submitMeuPerfil(form);
+    if (form.id === 'atlas-v2-trocar-email-form') { void submitTrocarEmail(form); }
+    if (form.id === 'atlas-v2-confirmar-email-form') { void submitConfirmarTrocaEmail(form); }
     if (form.id === 'atlas-v2-create-form') submitCreate(form);
     if (form.id === 'atlas-v2-group-form') submitGroup(form);
     if (form.id === 'atlas-v2-column-form') submitColumn(form);

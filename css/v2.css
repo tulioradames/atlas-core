@@ -8728,6 +8728,24 @@ body.atlas-v2-right-dragging * {
   line-height: 1.35;
   opacity: .7;
 }
+
+/* Campo bloqueado com um botao ao lado (e-mail -> "Alterar"). O input cede o
+   espaco; o botao fica do tamanho do proprio texto e nao encolhe. */
+.atlas-v2-field-com-acao {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+}
+
+.atlas-v2-field-com-acao > input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.atlas-v2-field-com-acao > .atlas-v2-button {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
 .atlas-v2-field input[disabled] {
   opacity: .6;
   cursor: not-allowed;
