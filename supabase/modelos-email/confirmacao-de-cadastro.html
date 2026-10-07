@@ -1,0 +1,47 @@
+<!--
+  Atlas - confirmacao de cadastro novo.
+
+  Codigo digitado em vez de link: o link depende de o endereco estar na lista
+  de permitidos do GoTrue e de o SITE_URL apontar para o lugar certo. Sao duas
+  configuracoes de servidor que quebram em silencio, e o sintoma aparece no
+  pior momento - quando alguem esta tentando entrar pela primeira vez.
+
+  Campos: {{ .Email }} = endereco cadastrado, {{ .Token }} = codigo.
+-->
+<!-- MODELO-ATLAS-CONFIRMA-CADASTRO -->
+<!doctype html>
+<html lang="pt-BR">
+<body style="margin:0;padding:24px;background:#f4f5f7;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#1f2937;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;margin:0 auto;background:#ffffff;border-radius:12px;border:1px solid #e5e7eb;">
+    <tr>
+      <td style="padding:28px 28px 8px;">
+        <p style="margin:0 0 4px;font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:#6b7280;">Atlas</p>
+        <h1 style="margin:0;font-size:20px;line-height:1.3;color:#111827;">Confirme seu cadastro no Atlas</h1>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding:12px 28px 0;font-size:15px;line-height:1.6;">
+        <p style="margin:0 0 20px;">Foi solicitado um cadastro no Atlas com o endereço <strong>{{ .Email }}</strong>. Para continuar, confirme que este e-mail é seu.</p>
+
+        <p style="margin:0 0 8px;">Este é o seu código:</p>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding:0 28px;">
+        <div style="margin:0 0 20px;padding:16px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:10px;text-align:center;">
+          <span style="font-size:30px;font-weight:700;letter-spacing:.22em;color:#111827;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;">{{ .Token }}</span>
+        </div>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding:0 28px 28px;font-size:15px;line-height:1.6;">
+        <p style="margin:0 0 16px;">Depois de confirmar, seu cadastro entra na fila de liberação de um administrador. Você ainda não terá acesso ao Atlas até que ele libere.</p>
+        <p style="margin:0;padding:12px 14px;background:#fff7ed;border-left:3px solid #f59e0b;border-radius:6px;font-size:14px;line-height:1.55;color:#7c2d12;"><strong>Se você não pediu este cadastro</strong>, ignore esta mensagem. Sem o código, nenhuma conta é criada com o seu endereço.</p>
+      </td>
+    </tr>
+  </table>
+  <p style="max-width:520px;margin:16px auto 0;font-size:12px;line-height:1.5;color:#9ca3af;text-align:center;">
+    Mensagem automática do Atlas. Não responda a este e-mail.
+  </p>
+</body>
+</html>

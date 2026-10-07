@@ -15,7 +15,7 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
   // pre-cache. tests/static-audit.cjs falha se index.html e ATLAS_BUILD
   // divergirem, que era a causa dos casos de "publiquei mas continua igual".
   // ---------------------------------------------------------------------------
-  const ATLAS_BUILD = '2.5.0-email';
+  const ATLAS_BUILD = '2.5.0-cadastro';
   window.__ATLAS_BUILD__ = ATLAS_BUILD;
 
   // Changelog exibido na tela de Inicio. Toda alteracao funcional ou correcao
@@ -4398,14 +4398,44 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
       </section>`;
     }
 
-    if (mode === 'recovery-sent') {
-      return `<section class="atlas-v2-auth-panel atlas-v2-auth-state-panel is-success">
-        <span class="atlas-v2-auth-state-icon"><i data-lucide="mail-check"></i></span>
+    // Recuperacao e cadastro usam CODIGO digitado, nao link clicado. O link
+    // depende de o endereco estar na lista de permitidos do GoTrue e de o
+    // SITE_URL apontar para o lugar certo - duas configuracoes de servidor que
+    // quebram em silencio e so aparecem na hora em que alguem perdeu a senha.
+    // O codigo nao depende de nenhuma delas, e funciona de outro aparelho.
+    if (mode === 'recovery-code') {
+      return `<section class="atlas-v2-auth-panel">
         <span class="atlas-v2-auth-kicker">RECUPERAÇÃO</span>
-        <h2>Verifique seu e-mail</h2>
-        <p>Enviamos o link seguro para redefinir sua senha.</p>
-        ${authNotice(message, 'success')}
-        <button class="atlas-v2-auth-primary" type="button" data-auth-action="show-login"><i data-lucide="arrow-left"></i>Voltar para entrar</button>
+        <h2>Código enviado</h2>
+        <p>Enviamos um código de 6 dígitos para <strong>${escapeHtml(runtime.authPendente?.email || 'seu e-mail')}</strong>. Informe o código e escolha a nova senha.</p>
+        ${authNotice(message, message ? 'error' : 'info')}
+        <form id="atlas-v2-auth-recovery-code-form" class="atlas-v2-auth-form">
+          <label class="atlas-v2-auth-field"><span>Código</span><div><i data-lucide="shield-check"></i><input name="token" inputmode="numeric" autocomplete="one-time-code" required maxlength="10" placeholder="000000"></div></label>
+          ${authPasswordField('password', 'Nova senha', 'new-password')}
+          ${authPasswordField('passwordConfirm', 'Confirmar nova senha', 'new-password', 'Repita a nova senha')}
+          <button class="atlas-v2-auth-primary" type="submit"><i data-lucide="key-round"></i>Definir nova senha</button>
+        </form>
+        <div class="atlas-v2-auth-switch">
+          <span>Não chegou?</span>
+          <button type="button" data-auth-action="show-forgot">Pedir outro código</button>
+        </div>
+      </section>`;
+    }
+
+    if (mode === 'signup-code') {
+      return `<section class="atlas-v2-auth-panel">
+        <span class="atlas-v2-auth-kicker">CONFIRMAR E-MAIL</span>
+        <h2>Confirme seu e-mail</h2>
+        <p>Enviamos um código de 6 dígitos para <strong>${escapeHtml(runtime.authPendente?.email || 'seu e-mail')}</strong>. Depois de confirmar, seu cadastro vai para a fila de liberação de um administrador.</p>
+        ${authNotice(message, message ? 'error' : 'info')}
+        <form id="atlas-v2-auth-signup-code-form" class="atlas-v2-auth-form">
+          <label class="atlas-v2-auth-field"><span>Código</span><div><i data-lucide="shield-check"></i><input name="token" inputmode="numeric" autocomplete="one-time-code" required maxlength="10" placeholder="000000"></div></label>
+          <button class="atlas-v2-auth-primary" type="submit"><i data-lucide="check"></i>Confirmar e-mail</button>
+        </form>
+        <div class="atlas-v2-auth-switch">
+          <span>Já confirmou antes?</span>
+          <button type="button" data-auth-action="show-login">Entrar</button>
+        </div>
       </section>`;
     }
 
@@ -4414,7 +4444,7 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
         <span class="atlas-v2-auth-state-icon"><i data-lucide="user-round-check"></i></span>
         <span class="atlas-v2-auth-kicker">CADASTRO CRIADO</span>
         <h2>Solicitação registrada</h2>
-        <p>Seu cadastro aguarda somente a liberação de um administrador. Não é necessário confirmar o e-mail.</p>
+        <p>Seu cadastro aguarda somente a liberação de um administrador.</p>
         ${authNotice(message, 'success')}
         <button class="atlas-v2-auth-primary" type="button" data-auth-action="show-login"><i data-lucide="log-in"></i>Ir para o login</button>
       </section>`;
@@ -4439,14 +4469,14 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
     return `<section class="atlas-v2-auth-panel">
       <span class="atlas-v2-auth-kicker">${signup ? 'NOVO ACESSO' : forgot ? 'RECUPERAR CONTA' : 'ACESSO SEGURO'}</span>
       <h2>${signup ? 'Solicitar acesso' : forgot ? 'Recuperar senha' : 'Entrar no Atlas'}</h2>
-      <p>${signup ? 'O cadastro começa como Visualizador e depende da liberação de um administrador.' : forgot ? 'Informe seu e-mail para receber o link de redefinição.' : 'Use suas credenciais corporativas para continuar.'}</p>
+      <p>${signup ? 'Você confirma o e-mail por código e o cadastro fica aguardando a liberação de um administrador.' : forgot ? 'Informe seu e-mail para receber um código de redefinição.' : 'Use suas credenciais corporativas para continuar.'}</p>
       ${authNotice(message, 'error')}
       <form id="atlas-v2-auth-${signup ? 'signup' : forgot ? 'forgot' : 'login'}-form" class="atlas-v2-auth-form">
         ${signup ? '<label class="atlas-v2-auth-field"><span>Nome</span><div><i data-lucide="user-round"></i><input name="name" autocomplete="name" required maxlength="80" placeholder="Seu nome completo"></div></label>' : ''}
         <label class="atlas-v2-auth-field"><span>E-mail</span><div><i data-lucide="mail"></i><input name="email" type="email" autocomplete="email" required placeholder="nome@empresa.com"></div></label>
         ${forgot ? '' : authPasswordField('password', 'Senha', signup ? 'new-password' : 'current-password')}
         ${!signup && !forgot ? '<button class="atlas-v2-auth-link" type="button" data-auth-action="show-forgot">Esqueci minha senha</button>' : ''}
-        <button class="atlas-v2-auth-primary" type="submit"><i data-lucide="${signup ? 'user-plus' : forgot ? 'send' : 'log-in'}"></i>${signup ? 'Criar solicitação' : forgot ? 'Enviar link seguro' : 'Entrar'}</button>
+        <button class="atlas-v2-auth-primary" type="submit"><i data-lucide="${signup ? 'user-plus' : forgot ? 'send' : 'log-in'}"></i>${signup ? 'Criar solicitação' : forgot ? 'Enviar código' : 'Entrar'}</button>
       </form>
       <div class="atlas-v2-auth-switch">
         <span>${signup ? 'Já possui acesso?' : forgot ? 'Lembrou sua senha?' : 'Primeiro acesso?'}</span>
@@ -4495,8 +4525,26 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
     const message = String(error?.message || error || '').trim();
     const normalized = message.toLowerCase();
     if (normalized.includes('invalid login credentials')) return 'E-mail ou senha incorretos.';
-    if (normalized.includes('email not confirmed')) return 'Seu acesso ainda aguarda liberação do administrador.';
+    // Com a confirmacao de e-mail ligada, este erro significa que a pessoa
+    // ainda NAO confirmou - e nao que o administrador nao liberou. A traducao
+    // antiga mandava ela esperar um administrador que nunca veria o cadastro,
+    // porque sem confirmacao o perfil nem chega na Central de Administracao.
+    if (normalized.includes('email not confirmed')) {
+      return 'Seu e-mail ainda não foi confirmado. Procure a mensagem com o código de 6 dígitos — '
+        + 'ou use "Solicitar cadastro" de novo com o mesmo e-mail para receber outro.';
+    }
     if (normalized.includes('user already registered')) return 'Este e-mail já possui cadastro.';
+    // Sem SMTP configurado o servidor devolve isto. Sem traducao, a pessoa
+    // procura o defeito no proprio e-mail.
+    if (normalized.includes('error sending') || normalized.includes('unexpected_failure')) {
+      return 'O servidor não conseguiu enviar o e-mail: este ambiente ainda não tem servidor de e-mail configurado. Fale com o administrador.';
+    }
+    if (normalized.includes('otp_expired') || normalized.includes('token has expired') || normalized.includes('expired')) {
+      return 'O código venceu. Peça um código novo.';
+    }
+    if (normalized.includes('invalid') && (normalized.includes('token') || normalized.includes('otp'))) {
+      return 'Código incorreto. Confira os 6 dígitos da mensagem.';
+    }
     if (normalized.includes('password should be') || normalized.includes('weak password')) return 'A senha precisa ter pelo menos 8 caracteres e não pode estar em listas de senhas vazadas.';
     if (normalized.includes('rate limit')) return 'Muitas tentativas. Aguarde alguns minutos e tente novamente.';
     if (normalized.includes('failed to fetch') || normalized.includes('network')) return 'Não foi possível alcançar o Supabase. A configuração foi carregada, mas a conexão de rede falhou.';
@@ -4817,18 +4865,65 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
       options,
     });
     if (error) return renderAuth('signup', authErrorMessage(error));
+    // Com a confirmacao de e-mail ligada no servidor, o signUp NAO devolve
+    // sessao: a conta so existe de verdade depois do codigo. Se o servidor
+    // estiver com autoconfirmacao ligada, a sessao vem aqui e o codigo nao e
+    // pedido - os dois ambientes continuam funcionando sem ramificar a tela.
     if (data?.session) return applyAuthSession(data.session);
-    renderAuth('signup-sent', 'O administrador verá sua solicitação na Central de Administração.');
+    runtime.authPendente = { email: String(form.elements.email.value || '').trim() };
+    renderAuth('signup-code');
+  }
+
+  async function submitAuthSignupCode(form) {
+    const email = runtime.authPendente?.email || '';
+    const token = String(form.elements.token.value || '').replace(/\D/g, '');
+    if (!email) return renderAuth('signup', 'Comece o cadastro novamente.');
+    if (!token) return renderAuth('signup-code', 'Informe o código que chegou no e-mail.');
+    renderAuth('loading');
+    const { data, error } = await runtime.authClient.auth.verifyOtp({ email, token, type: 'signup' });
+    if (error) return renderAuth('signup-code', authErrorMessage(error));
+    runtime.authPendente = null;
+    // Confirmado, a pessoa ja tem sessao - mas o perfil nasce 'pendente' e a
+    // tela de espera por liberacao e quem assume daqui.
+    if (data?.session) return applyAuthSession(data.session);
+    renderAuth('signup-sent', 'E-mail confirmado.');
   }
 
   async function submitAuthForgot(form) {
     renderAuth('loading');
-    const payload = {};
-    const redirectTo = authRedirectUrl();
-    if (redirectTo) payload.redirectTo = redirectTo;
-    const { error } = await runtime.authClient.auth.resetPasswordForEmail(String(form.elements.email.value || '').trim(), payload);
+    const email = String(form.elements.email.value || '').trim();
+    // Sem redirectTo de proposito: o codigo nao usa link, e passar um endereco
+    // que nao esteja na lista de permitidos do GoTrue faz o envio falhar.
+    const { error } = await runtime.authClient.auth.resetPasswordForEmail(email);
     if (error) return renderAuth('forgot', authErrorMessage(error));
-    renderAuth('recovery-sent', 'O link será válido somente durante o período definido no Supabase.');
+    runtime.authPendente = { email };
+    renderAuth('recovery-code');
+  }
+
+  async function submitAuthRecoveryCode(form) {
+    const email = runtime.authPendente?.email || '';
+    const token = String(form.elements.token.value || '').replace(/\D/g, '');
+    const password = String(form.elements.password.value || '');
+    const confirmation = String(form.elements.passwordConfirm.value || '');
+    if (!email) return renderAuth('forgot', 'Peça o código novamente.');
+    if (!token) return renderAuth('recovery-code', 'Informe o código que chegou no e-mail.');
+    if (password !== confirmation) return renderAuth('recovery-code', 'As duas senhas precisam ser iguais.');
+    renderAuth('loading');
+
+    // O codigo abre uma sessao temporaria; e ela que autoriza trocar a senha.
+    const { error: erroCodigo } = await runtime.authClient.auth.verifyOtp({ email, token, type: 'recovery' });
+    if (erroCodigo) return renderAuth('recovery-code', authErrorMessage(erroCodigo));
+
+    const { error: erroSenha } = await runtime.authClient.auth.updateUser({ password });
+    if (erroSenha) {
+      // A sessao de recuperacao ja foi gasta: continuar nela com a senha antiga
+      // deixaria a pessoa dentro do Atlas achando que trocou. Melhor sair.
+      await runtime.authClient.auth.signOut();
+      return renderAuth('forgot', authErrorMessage(erroSenha));
+    }
+    runtime.authPendente = null;
+    await runtime.authClient.auth.signOut();
+    renderAuth('login', 'Senha atualizada. Entre com a nova senha.');
   }
 
   async function submitAuthReset(form) {
@@ -4847,7 +4942,9 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
     const handlers = {
       'atlas-v2-auth-login-form': submitAuthLogin,
       'atlas-v2-auth-signup-form': submitAuthSignup,
+      'atlas-v2-auth-signup-code-form': submitAuthSignupCode,
       'atlas-v2-auth-forgot-form': submitAuthForgot,
+      'atlas-v2-auth-recovery-code-form': submitAuthRecoveryCode,
       'atlas-v2-auth-reset-form': submitAuthReset,
     };
     if (!handlers[form.id]) return;

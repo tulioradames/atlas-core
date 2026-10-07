@@ -261,8 +261,27 @@ assert(/async function ensureBoardViewData[\s\S]*?classList\.remove\('atlas-v2-b
 assert(/function applyPermissionUi[\s\S]*?if \(canCreate && canEdit && canDelete && canConfigure && canShare\) return;/.test(app), 'Administradores ainda varrem todos os controles a cada troca de area.');
 assert(app.includes('function renderBoardRoute(context, options = {})'), 'Renderizacao segmentada de rotas ausente.');
 assert(app.includes("rpc('atlas_admin_update_profile_access'"), 'Liberacao administrativa nao usa a RPC segura.');
-assert(!app.includes('options.emailRedirectTo'), 'Cadastro ainda configura confirmacao por e-mail.');
-assert(app.includes('Não é necessário confirmar o e-mail.'), 'Tela de cadastro ainda exige confirmacao por e-mail.');
+// DECISAO INVERTIDA NA V2.5.0.
+// Ate aqui o cadastro NAO pedia confirmacao de e-mail, e estas duas linhas
+// guardavam isso. O motivo era pratico: nenhum dos ambientes tinha SMTP, entao
+// exigir confirmacao trancaria todo mundo do lado de fora.
+//
+// Com o envio de e-mail funcionando, a conta passa a confirmar o endereco por
+// codigo antes de chegar ao administrador - porque sem e-mail confirmado nao ha
+// recuperacao de senha, e foi exatamente isso que obrigou a resetar a senha do
+// Aron pelo terminal.
+//
+// A trava do redirect continua: a confirmacao e por CODIGO digitado, nao por
+// link. Link depende da lista de enderecos permitidos do GoTrue.
+assert(!app.includes('options.emailRedirectTo'), 'Cadastro voltou a usar link de confirmacao; a decisao foi codigo digitado.');
+assert(
+  app.includes("verifyOtp({ email, token, type: 'signup' })"),
+  'A tela de cadastro nao confirma o e-mail por codigo.',
+);
+assert(
+  !app.includes('Não é necessário confirmar o e-mail.'),
+  'A tela ainda diz que nao e necessario confirmar o e-mail. Isso deixou de ser verdade na V2.5.0.',
+);
 assert(/function postJsonWithUploadProgress[\s\S]*?request\.open\('POST', endpoint, true\)/.test(app), 'Upload nao usa o POST XHR compativel com o Apps Script.');
 assert(/function postJsonWithUploadProgress[\s\S]*?searchParams\.set\('atlasRequest'/.test(app), 'Upload nao evita resposta GET armazenada pelo conector.');
 assert(!/request\.upload\.onprogress/.test(app), 'Monitoramento XHR ainda dispara preflight incompatível com o Apps Script.');
@@ -378,6 +397,7 @@ assert(
     'ATLAS_V2_4_3_CORRIGE_VERSAO_ANEXO.sql',
     'ATLAS_V2_4_3_SLA_NO_SERVIDOR.sql',
     'ATLAS_V2_4_4_LEITURA_EM_CONJUNTO.sql',
+    'ATLAS_V2_5_0_CADASTRO_CONFIRMADO.sql',
     'ATLAS_V2_5_0_FOTO_GUARD_SEM_DONO.sql',
     'ATLAS_V2_5_0_FOTO_PERFIL.sql',
     'ATLAS_V2_5_0_PAPEIS.sql',
