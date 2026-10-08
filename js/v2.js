@@ -15,7 +15,7 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
   // pre-cache. tests/static-audit.cjs falha se index.html e ATLAS_BUILD
   // divergirem, que era a causa dos casos de "publiquei mas continua igual".
   // ---------------------------------------------------------------------------
-  const ATLAS_BUILD = '2.5.0-cadastro';
+  const ATLAS_BUILD = '2.5.0-obras';
   window.__ATLAS_BUILD__ = ATLAS_BUILD;
 
   // Changelog exibido na tela de Inicio. Toda alteracao funcional ou correcao
@@ -525,6 +525,8 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
     savedSearches: [],
     workFilter: '',
     expandedWorkSectors: new Set(),
+    collapsedWorkStatus: new Set(),
+    seededWorkStatusBoards: new Set(),
     ganttZoom: Math.min(5, Math.max(1, Number(localStorage.getItem(GANTT_ZOOM_KEY)) || 1)),
     ganttScale: ['days', 'weeks', 'months'].includes(localStorage.getItem(GANTT_SCALE_KEY)) ? localStorage.getItem(GANTT_SCALE_KEY) : 'weeks',
     drag: null,
@@ -7444,12 +7446,126 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
     render();
   }
 
-  function renderWorkTabs(boardEntry) {
+  // ===========================================================================
+  // A lista de obras (V2.5.0)
+  // ===========================================================================
+  // Antes: uma fita horizontal de abas. Com 24 obras ela virava rolagem lateral
+  // sem fim, sem dizer o que estava concluido, em andamento ou parado, e sem
+  // jeito de procurar. Agora: lista vertical a esquerda, agrupada por situacao.
+  //
+  // O que NAO foi inventado aqui: a situacao vem da coluna de status do proprio
+  // quadro, com os rotulos e a ordem que a equipe configurou. Criar categorias
+  // minhas ("atrasada", "parada") exigiria adivinhar o que cada quadro entende
+  // por isso. A unica reordenacao e empurrar para o fim os status marcados como
+  // "encerra o item" - e so porque essa marca existe no proprio quadro.
+
+  function workProgress(boardEntry, itemEntry) {
+    const registros = visibleSubitems(boardEntry, itemEntry);
+    const total = registros.length;
+    const concluidos = registros.filter((entry) => itemIsCompleted(boardEntry, entry)).length;
+    // Sem registro nenhum o percentual seria 0/0. Mostrar "0%" diria que a obra
+    // nao andou, quando na verdade ela nao tem o que andar.
+    return { total, concluidos, percentual: total ? Math.round((concluidos / total) * 100) : null };
+  }
+
+  function workStatusColumn(boardEntry) {
+    return boardEntry.columns.find((entry) => entry.type === 'status') || null;
+  }
+
+  function groupedWorkEntries(boardEntry) {
+    const works = boardWorkEntries(boardEntry);
+    const statusColumn = workStatusColumn(boardEntry);
+    if (!statusColumn) return [{ key: 'todas', label: '', background: '', done: false, entries: works }];
+
+    const options = normalizeStatusOptions(statusColumn.options || []);
+    const baldes = new Map();
+    options.forEach((option) => {
+      baldes.set(normalizedStatusLabel(option.label), {
+        key: option.label, label: option.label, background: option.background, done: option.done === true, entries: [],
+      });
+    });
+    const semSituacao = { key: '', label: 'Sem situação', background: '', done: false, entries: [] };
+
+    works.forEach((entry) => {
+      const valor = String(entry.item.values?.[statusColumn.id] || '').trim();
+      const balde = valor ? baldes.get(normalizedStatusLabel(valor)) : null;
+      // Status digitado que nao existe mais nas opcoes nao pode sumir da lista:
+      // a obra continua existindo, e esconde-la seria pior do que agrupa-la a
+      // parte.
+      if (balde) balde.entries.push(entry);
+      else if (valor) {
+        const chave = `?${normalizedStatusLabel(valor)}`;
+        if (!baldes.has(chave)) baldes.set(chave, { key: valor, label: valor, background: '', done: false, entries: [] });
+        baldes.get(chave).entries.push(entry);
+      } else semSituacao.entries.push(entry);
+    });
+
+    const todos = [...baldes.values(), semSituacao].filter((balde) => balde.entries.length);
+    // Concluidas por ultimo: nao exigem nada de ninguem. A ordem do resto e a
+    // que a equipe configurou na coluna.
+    return [...todos.filter((balde) => !balde.done), ...todos.filter((balde) => balde.done)];
+  }
+
+  // A busca do quadro ja existe no topo e ja serve para obras. Em vez de um
+  // segundo campo fazendo quase a mesma coisa, a lista usa aquele - mas so
+  // quando o texto casa com alguma obra. Sem essa ressalva, procurar um
+  // registro ("CTO-CG-002") esvaziaria a lista de obras inteira.
+  function workListFilter(boardEntry) {
+    const query = normalizeSearchText(runtime.boardSearch);
+    if (!query) return null;
+    const casa = boardWorkEntries(boardEntry)
+      .filter(({ item: itemEntry }) => normalizeSearchText(itemEntry.name).includes(query));
+    return casa.length ? new Set(casa.map(({ item: itemEntry }) => itemEntry.id)) : null;
+  }
+
+  function renderWorkSidebar(boardEntry) {
     const works = boardWorkEntries(boardEntry);
     if (!works.length) return '';
     const searchMatch = workSearchMatch(boardEntry);
-    const button = (label, value, count, color) => `<button class="atlas-v2-work-tab ${runtime.workFilter === value ? 'is-active' : ''} ${searchMatch?.item.id === value ? 'is-search-match' : ''}" type="button" data-action="filter-work" data-work-id="${attr(value)}" style="--work-color:${attr(color || '#176ead')}" title="${attr(label)}"><span class="atlas-v2-work-dot"></span><strong>${escapeHtml(label)}</strong><small>${count}</small></button>`;
-    return `<nav class="atlas-v2-work-tabs" aria-label="Selecionar obra">${works.map(({ item: itemEntry, group: groupEntry }) => button(itemEntry.name, itemEntry.id, itemEntry.subitems?.length || 0, groupEntry.color)).join('')}<span class="atlas-v2-work-actions"><button class="atlas-v2-work-rename" type="button" data-action="rename-work" title="Renomear obra" aria-label="Renomear obra selecionada"><i data-lucide="pencil"></i></button><button class="atlas-v2-work-delete" type="button" data-action="delete-work" title="Excluir obra" aria-label="Excluir obra selecionada"><i data-lucide="trash-2"></i></button></span></nav>`;
+    const filtro = workListFilter(boardEntry);
+    const grupos = groupedWorkEntries(boardEntry).map((grupo) => ({
+      ...grupo,
+      visiveis: filtro ? grupo.entries.filter(({ item }) => filtro.has(item.id)) : grupo.entries,
+    })).filter((grupo) => grupo.visiveis.length);
+
+    const linha = ({ item: itemEntry, group: groupEntry }) => {
+      const { total, concluidos, percentual } = workProgress(boardEntry, itemEntry);
+      const ativa = runtime.workFilter === itemEntry.id;
+      const largura = percentual === null ? 0 : percentual;
+      return `<li><button class="atlas-v2-work-tab ${ativa ? 'is-active' : ''} ${searchMatch?.item.id === itemEntry.id ? 'is-search-match' : ''}" type="button" data-action="filter-work" data-work-id="${attr(itemEntry.id)}" style="--work-color:${attr(groupEntry.color || '#176ead')}" ${ativa ? 'aria-current="true"' : ''}>
+        <span class="atlas-v2-work-tab-head"><span class="atlas-v2-work-dot"></span><strong title="${attr(itemEntry.name)}">${escapeHtml(itemEntry.name)}</strong><small>${total ? `${concluidos}/${total}` : '—'}</small></span>
+        <span class="atlas-v2-work-bar" role="presentation"><span style="width:${largura}%"></span></span>
+      </button></li>`;
+    };
+
+    const secao = (grupo) => {
+      if (!grupo.label) return `<ul class="atlas-v2-work-list">${grupo.visiveis.map(linha).join('')}</ul>`;
+      const recolhido = runtime.collapsedWorkStatus.has(grupo.key) && !filtro;
+      return `<section class="atlas-v2-work-section ${grupo.done ? 'is-done' : ''}">
+        <button class="atlas-v2-work-section-head" type="button" data-action="toggle-work-status" data-status-key="${attr(grupo.key)}" aria-expanded="${recolhido ? 'false' : 'true'}">
+          <i data-lucide="${recolhido ? 'chevron-right' : 'chevron-down'}"></i>
+          <span class="atlas-v2-work-section-dot" style="--status-bg:${attr(grupo.background || '#8ca7b3')}"></span>
+          <span class="atlas-v2-work-section-name">${escapeHtml(grupo.label)}</span>
+          <span class="atlas-v2-work-section-count">${grupo.visiveis.length}</span>
+        </button>
+        ${recolhido ? '' : `<ul class="atlas-v2-work-list">${grupo.visiveis.map(linha).join('')}</ul>`}
+      </section>`;
+    };
+
+    const vazio = !grupos.length
+      ? '<p class="atlas-v2-work-empty">Nenhuma obra corresponde à busca.</p>'
+      : '';
+
+    return `<aside class="atlas-v2-work-sidebar" aria-label="Obras">
+      <header class="atlas-v2-work-sidebar-head">
+        <span>${works.length} ${works.length === 1 ? 'obra' : 'obras'}</span>
+        <span class="atlas-v2-work-actions">
+          <button class="atlas-v2-work-rename" type="button" data-action="rename-work" title="Renomear obra" aria-label="Renomear obra selecionada"><i data-lucide="pencil"></i></button>
+          <button class="atlas-v2-work-delete" type="button" data-action="delete-work" title="Excluir obra" aria-label="Excluir obra selecionada"><i data-lucide="trash-2"></i></button>
+        </span>
+      </header>
+      ${vazio}${grupos.map(secao).join('')}
+    </aside>`;
   }
 
   function visibleGroups(boardEntry) {
@@ -7468,12 +7584,25 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
       .find(({ item: itemEntry }) => itemEntry.id === runtime.workFilter) || null;
   }
 
+  // Obras concluidas comecam recolhidas: sao as que nao exigem nada de
+  // ninguem, e numa lista de 24 obras sao metade do espaco. SO na primeira vez
+  // que o quadro aparece - depois disso quem manda e quem clicou, senao abrir
+  // o grupo nao adiantaria nada e a tela pareceria quebrada.
+  function seedWorkStatusCollapse(boardEntry) {
+    if (runtime.seededWorkStatusBoards.has(boardEntry.id)) return;
+    runtime.seededWorkStatusBoards.add(boardEntry.id);
+    groupedWorkEntries(boardEntry)
+      .filter((grupo) => grupo.done && grupo.entries.length)
+      .forEach((grupo) => runtime.collapsedWorkStatus.add(grupo.key));
+  }
+
   function ensureWorkSelection(boardEntry) {
     const works = boardWorkEntries(boardEntry);
     if (!works.length) {
       runtime.workFilter = '';
       return null;
     }
+    seedWorkStatusCollapse(boardEntry);
     selectWorkFromContextSearch(boardEntry);
     if (!works.some(({ item: itemEntry }) => itemEntry.id === runtime.workFilter)) {
       runtime.workFilter = works[0].item.id;
@@ -7553,7 +7682,7 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
   function boardScrollerKey(element, index = 0) {
     if (!element) return `scroller:${index}`;
     if (element.id) return `id:${element.id}`;
-    if (element.classList.contains('atlas-v2-work-tabs')) return 'work-tabs';
+    if (element.classList.contains('atlas-v2-work-sidebar')) return 'work-sidebar';
     if (element.classList.contains('atlas-v2-gantt-scroll')) return 'gantt';
     const workSector = element.closest('[data-work-sector]');
     if (workSector) return `work-sector:${workSector.getAttribute('data-work-sector') || index}`;
@@ -7599,7 +7728,7 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
       return pendingState;
     }
     if (!boardScroll || !root) return runtime.boardUiStates.get(boardId) || null;
-    const scrollers = [...root.querySelectorAll('.atlas-v2-table-wrap, .atlas-v2-work-tabs, .atlas-v2-gantt-scroll')]
+    const scrollers = [...root.querySelectorAll('.atlas-v2-table-wrap, .atlas-v2-work-sidebar, .atlas-v2-gantt-scroll')]
       .map((element, index) => ({
         key: boardScrollerKey(element, index),
         left: element.scrollLeft,
@@ -7625,7 +7754,7 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
       if (!boardScroll || !root) return;
       boardScroll.scrollLeft = Number(state.boardLeft || 0);
       boardScroll.scrollTop = Number(state.boardTop || 0);
-      const candidates = [...root.querySelectorAll('.atlas-v2-table-wrap, .atlas-v2-work-tabs, .atlas-v2-gantt-scroll')];
+      const candidates = [...root.querySelectorAll('.atlas-v2-table-wrap, .atlas-v2-work-sidebar, .atlas-v2-gantt-scroll')];
       (state.scrollers || []).forEach((saved) => {
         const element = candidates.find((candidate, index) => boardScrollerKey(candidate, index) === saved.key);
         if (!element) return;
@@ -7685,7 +7814,10 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
         const content = boardEntry.settings?.works_mode === 'sectorized'
           ? renderSectorizedWorks(boardEntry)
           : (visibleGroups(boardEntry).map((groupEntry, groupIndex) => renderGroupTable(boardEntry, groupEntry, groupIndex)).join('') || renderEmptyBoard());
-        root.innerHTML = renderWorkTabs(boardEntry) + content;
+        const sidebar = renderWorkSidebar(boardEntry);
+        root.innerHTML = sidebar
+          ? `<div class="atlas-v2-works-layout">${sidebar}<div class="atlas-v2-works-main">${content}</div></div>`
+          : content;
       }
       revealContextSearchWork(boardEntry, false);
     } else if (boardEntry.activeView === 'gantt') {
@@ -13661,6 +13793,15 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
       },
       'add-group': () => openGroupModal(true),
       'add-column': () => openColumnModal(),
+      'toggle-work-status': () => {
+        const chave = target.dataset.statusKey || '';
+        if (runtime.collapsedWorkStatus.has(chave)) runtime.collapsedWorkStatus.delete(chave);
+        else runtime.collapsedWorkStatus.add(chave);
+        const atual = findBoard();
+        if (!atual) return;
+        renderBoardContent(atual.board);
+        refreshIcons(document.getElementById('atlas-v2-board-content'));
+      },
       'toggle-group': () => {
         const groupEntry = context.board.groups.find((entry) => entry.id === target.dataset.groupId);
         if (groupEntry) { groupEntry.collapsed = !groupEntry.collapsed; saveData('', { remote: false, audit: false, revision: false }); render(); }
@@ -14115,7 +14256,7 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
     if (form.id === 'atlas-v2-automation-run-form') submitAutomationRun(form);
   }
 
-  const HORIZONTAL_DRAG_SCROLL_SELECTOR = '.atlas-v2-table-wrap, .atlas-v2-work-tabs, .atlas-v2-gantt-scroll';
+  const HORIZONTAL_DRAG_SCROLL_SELECTOR = '.atlas-v2-table-wrap, .atlas-v2-gantt-scroll';
 
   function horizontalDragContainer(target) {
     if (window.innerWidth <= 820) return null;

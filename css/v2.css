@@ -884,34 +884,140 @@ body.atlas-v2-board-loading .atlas-v2-board-content {
   transition: opacity 140ms ease;
 }
 
-.atlas-v2-work-tabs {
+/* ===========================================================================
+   Lista de obras (V2.5.0)
+   ===========================================================================
+   Era uma fita horizontal de abas, que com muitas obras virava rolagem lateral
+   sem fim. Agora e uma coluna a esquerda, agrupada por situacao, rolando junto
+   com a tela. A classe .atlas-v2-work-tab continua existindo porque e ela que
+   o restante do codigo usa para achar a obra selecionada e rolar ate ela. */
+
+.atlas-v2-works-layout {
   display: flex;
-  align-items: center;
-  gap: 4px;
-  width: max-content;
-  max-width: 100%;
-  margin-bottom: 14px;
-  padding: 4px;
-  overflow-x: auto;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 18px;
+}
+
+.atlas-v2-works-main {
+  flex: 999 1 560px;
+  min-width: 0;
+}
+
+.atlas-v2-work-sidebar {
+  flex: 1 1 248px;
+  min-width: 224px;
+  max-width: 300px;
+  box-sizing: border-box;
+  padding: 8px;
   border: 1px solid var(--v2-line-strong);
   border-radius: 5px;
   background: var(--v2-surface-alt);
-  scrollbar-width: none;
+  /* Com 24 obras a lista passa de 800px e empurrava a pagina inteira: rolar
+     ate uma obra fazia os registros sairem da tela, que era justamente o que
+     esta visualizacao deveria evitar. Agora a lista rola por conta propria e
+     fica no lugar enquanto se trabalha na obra escolhida. */
+  position: sticky;
+  top: 0;
+  max-height: calc(100vh - 210px);
+  min-height: 160px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
-.atlas-v2-work-tabs::-webkit-scrollbar {
-  display: none;
+.atlas-v2-work-sidebar-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 2px 4px 8px;
+  color: var(--v2-muted);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.atlas-v2-work-empty {
+  margin: 4px;
+  color: var(--v2-muted);
+  font-size: 11px;
+}
+
+.atlas-v2-work-section + .atlas-v2-work-section {
+  margin-top: 6px;
+}
+
+.atlas-v2-work-section-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 5px 4px;
+  color: var(--v2-muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+}
+
+.atlas-v2-work-section-head:hover {
+  color: var(--v2-text);
+}
+
+.atlas-v2-work-section-head i {
+  width: 13px;
+  height: 13px;
+  flex: none;
+}
+
+.atlas-v2-work-section-dot {
+  width: 7px;
+  height: 7px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--status-bg);
+}
+
+.atlas-v2-work-section-name {
+  flex: 1;
+  overflow: hidden;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.atlas-v2-work-section-count {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+}
+
+/* A situacao que encerra o item fica discreta: nao exige nada de ninguem. */
+.atlas-v2-work-section.is-done .atlas-v2-work-section-head {
+  opacity: .72;
+}
+
+.atlas-v2-work-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
 
 .atlas-v2-work-tab {
   --work-color: var(--v2-blue);
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  min-height: 32px;
-  padding: 0 10px;
-  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  width: 100%;
+  padding: 6px 8px;
   color: var(--v2-muted);
+  text-align: left;
   border: 1px solid transparent;
   border-radius: 3px;
   background: transparent;
@@ -927,7 +1033,14 @@ body.atlas-v2-board-loading .atlas-v2-board-content {
   color: var(--work-color);
   border-color: color-mix(in srgb, var(--work-color) 52%, var(--v2-line));
   background: color-mix(in srgb, var(--work-color) 12%, var(--v2-surface));
-  box-shadow: inset 0 -2px 0 var(--work-color);
+  box-shadow: inset 2px 0 0 var(--work-color);
+}
+
+.atlas-v2-work-tab-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
 }
 
 .atlas-v2-work-dot {
@@ -939,22 +1052,38 @@ body.atlas-v2-board-loading .atlas-v2-board-content {
 }
 
 .atlas-v2-work-tab strong {
+  flex: 1;
+  overflow: hidden;
   font-size: 11px;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .atlas-v2-work-tab small {
-  display: grid;
-  min-width: 18px;
-  height: 18px;
-  padding: 0 5px;
-  place-items: center;
+  flex: none;
   color: currentColor;
   font-size: 9px;
-  border: 1px solid color-mix(in srgb, currentColor 28%, var(--v2-line));
-  border-radius: 999px;
-  background: var(--v2-surface);
+  font-variant-numeric: tabular-nums;
+  opacity: .85;
 }
+
+/* Barra de progresso: quantos registros da obra ja estao concluidos. */
+.atlas-v2-work-bar {
+  display: block;
+  width: 100%;
+  height: 3px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--v2-line) 70%, transparent);
+}
+
+.atlas-v2-work-bar > span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--work-color);
+}
+
 
 .atlas-v2-work-rename {
   position: sticky;
@@ -3350,14 +3479,14 @@ a:focus-visible {
   background: color-mix(in srgb, var(--v2-atlas) 7%, var(--v2-surface));
 }
 
-.atlas-v2-work-tabs {
+.atlas-v2-work-sidebar {
   border-color: color-mix(in srgb, var(--v2-atlas) 38%, var(--v2-line));
   border-radius: 2px;
   box-shadow: inset 0 0 16px color-mix(in srgb, var(--v2-atlas) 5%, transparent);
 }
 
 .atlas-v2-work-tab.is-active {
-  box-shadow: inset 0 -2px 0 var(--work-color), 0 0 12px color-mix(in srgb, var(--work-color) 14%, transparent);
+  box-shadow: inset 2px 0 0 var(--work-color), 0 0 12px color-mix(in srgb, var(--work-color) 14%, transparent);
 }
 
 .atlas-v2-work-actions {
@@ -6185,14 +6314,12 @@ body.atlas-v2-auth-locked {
 
 /* Arraste horizontal com botão direito e cores de status. */
 .atlas-v2-table-wrap,
-.atlas-v2-work-tabs,
 .atlas-v2-gantt-scroll {
   overscroll-behavior-x: contain;
   touch-action: pan-y;
 }
 
 .atlas-v2-table-wrap.is-right-dragging,
-.atlas-v2-work-tabs.is-right-dragging,
 .atlas-v2-gantt-scroll.is-right-dragging,
 body.atlas-v2-right-dragging,
 body.atlas-v2-right-dragging * {
@@ -7847,31 +7974,10 @@ body.atlas-v2-right-dragging * {
     grid-column: 1 / -1;
   }
 
-  .atlas-v2-work-tabs {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 5px;
-    width: 100%;
+  .atlas-v2-work-sidebar {
+    flex: 1 1 100%;
     max-width: 100%;
     margin-bottom: 10px;
-    overflow: visible;
-  }
-
-  .atlas-v2-work-tab {
-    width: 100%;
-    min-width: 0;
-    justify-content: flex-start;
-  }
-
-  .atlas-v2-work-tab strong {
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .atlas-v2-work-tab small {
-    margin-left: auto;
   }
 
   .atlas-v2-work-actions {
