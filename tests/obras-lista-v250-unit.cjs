@@ -144,3 +144,21 @@ assert(
 );
 
 console.log('Lista de obras V2.5.0: agrupada pelo status do quadro, nenhuma obra some, busca não esvazia, rolagem própria.');
+
+// ---------------------------------------------------------------------------
+// 8. Setor recém-criado não pode sumir
+// ---------------------------------------------------------------------------
+// Em Obras, o Atlas mostra só os setores da obra selecionada. Um setor novo
+// nasce vazio, não pertence a obra nenhuma, e era filtrado para fora na mesma
+// hora em que a pessoa o criava: o botão "Novo grupo" parecia quebrado, e o
+// setor só reaparecia na Tabela.
+const visiveis = app.match(/function visibleGroups\([\s\S]*?\n  \}/);
+assert(visiveis, 'Não encontrei visibleGroups.');
+assert(
+  /if \(!itens\.length\) return true;/.test(visiveis[0]),
+  'Setor vazio precisa continuar visível em Obras: ele não é "de outra obra", é um setor esperando o primeiro registro.',
+);
+assert(
+  /filter\(\(itemEntry\) => !itemEntry\.archived\)/.test(visiveis[0]),
+  'Um setor onde só restam itens arquivados precisa contar como vazio - senão ele some e ninguém entende por quê.',
+);

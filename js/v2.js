@@ -15,7 +15,7 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
   // pre-cache. tests/static-audit.cjs falha se index.html e ATLAS_BUILD
   // divergirem, que era a causa dos casos de "publiquei mas continua igual".
   // ---------------------------------------------------------------------------
-  const ATLAS_BUILD = '2.5.0-obras';
+  const ATLAS_BUILD = '2.5.0-obras-r2';
   window.__ATLAS_BUILD__ = ATLAS_BUILD;
 
   // Changelog exibido na tela de Inicio. Toda alteracao funcional ou correcao
@@ -7571,7 +7571,18 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
   function visibleGroups(boardEntry) {
     let groups = boardEntry.groups;
     if (boardEntry.activeView === 'works' && runtime.workFilter) {
-      groups = groups.filter((groupEntry) => groupEntry.items.some((itemEntry) => itemEntry.id === runtime.workFilter));
+      // Em Obras so aparecem os setores da obra selecionada - os outros sao de
+      // outras obras e poluiriam a tela.
+      //
+      // MAS setor VAZIO tambem aparece. Ele nao pertence a obra nenhuma: e um
+      // setor recem-criado, esperando o primeiro registro. Filtra-lo fazia o
+      // botao "Novo grupo" parecer quebrado - voce criava o setor e ele sumia
+      // na mesma hora, sem explicacao, e so reaparecia na Tabela.
+      groups = groups.filter((groupEntry) => {
+        const itens = groupEntry.items.filter((itemEntry) => !itemEntry.archived);
+        if (!itens.length) return true;
+        return itens.some((itemEntry) => itemEntry.id === runtime.workFilter);
+      });
     }
     const query = contextualItemSearch(boardEntry);
     if (!query) return groups;
