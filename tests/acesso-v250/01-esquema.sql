@@ -70,18 +70,27 @@ create table public.atlas_profiles (
   constraint atlas_profiles_status_chk check (status in ('ativo','pendente','bloqueado'))
 );
 
+-- NUCLEO. A tabela continua se chamando workspaces (renomear tabela e risco
+-- a parte, sem ganho aqui); o nome na TELA passa a ser Nucleo em todo lugar,
+-- porque hoje o cabecalho diz "Nucleo operacional" e a administracao diz
+-- "Area" para a mesma coisa.
 create table public.atlas_v2_workspaces (
   id uuid primary key default gen_random_uuid(),
   nome text not null,
   ativo boolean not null default true,
-  criado_por uuid default auth.uid()
+  criado_por uuid default auth.uid(),
+  tipo_acesso text not null default 'aberto',
+  constraint atlas_v2_workspaces_tipo_acesso_chk check (tipo_acesso in ('aberto','restrito'))
 );
 
 create table public.atlas_v2_modules (
   id uuid primary key default gen_random_uuid(),
   workspace_id uuid not null references public.atlas_v2_workspaces(id) on delete cascade,
   nome text not null,
-  ativo boolean not null default true
+  ativo boolean not null default true,
+  criado_por uuid default auth.uid(),
+  tipo_acesso text not null default 'aberto',
+  constraint atlas_v2_modules_tipo_acesso_chk check (tipo_acesso in ('aberto','restrito'))
 );
 
 create table public.atlas_v2_boards (
@@ -98,8 +107,9 @@ create table public.atlas_v2_groups (
   id uuid primary key default gen_random_uuid(),
   board_id uuid not null references public.atlas_v2_boards(id) on delete cascade,
   nome text not null,
-  criado_por uuid default auth.uid(),
-  restrito boolean not null default false
+  criado_por uuid default auth.uid()
+  -- SEM tipo_acesso, SEM lista: setor nao tem acesso proprio. Quem ve o
+  -- quadro ve todos os setores dele.
 );
 
 create table public.atlas_v2_items (
@@ -111,11 +121,32 @@ create table public.atlas_v2_items (
 );
 
 -- =============================================================================
--- As duas listas de acesso. É só isto.
+-- As três listas de acesso. É só isto.
 -- =============================================================================
--- Sem nível, sem coluna, sem item. Uma linha aqui responde UMA pergunta: esta
--- pessoa enxerga este quadro / este setor. O que ela PODE FAZER lá dentro vem
--- do papel, e de mais lugar nenhum.
+-- Uma por nível estrutural: núcleo, módulo, quadro. Sem nível de permissão,
+-- sem setor, sem coluna, sem item. Uma linha responde UMA pergunta: esta
+-- pessoa enxerga isto. O que ela PODE FAZER vem do papel, e de mais lugar
+-- nenhum.
+--
+-- Três tabelas em vez de uma com três colunas opcionais: foi exatamente a
+-- tabela única com seis escopos opcionais que acabou com DUAS restrições
+-- contraditórias no banco de produção, uma permitindo escopo de setor e a
+-- outra proibindo.
+create table public.atlas_v2_workspace_access (
+  workspace_id uuid not null references public.atlas_v2_workspaces(id) on delete cascade,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  concedido_por uuid references auth.users(id) on delete set null,
+  created_at timestamptz not null default now(),
+  primary key (workspace_id, user_id)
+);
+
+create table public.atlas_v2_module_access (
+  module_id uuid not null references public.atlas_v2_modules(id) on delete cascade,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  concedido_por uuid references auth.users(id) on delete set null,
+  created_at timestamptz not null default now(),
+  primary key (module_id, user_id)
+);
 create table public.atlas_v2_board_access (
   board_id uuid not null references public.atlas_v2_boards(id) on delete cascade,
   user_id uuid not null references auth.users(id) on delete cascade,
@@ -124,12 +155,5 @@ create table public.atlas_v2_board_access (
   primary key (board_id, user_id)
 );
 
-create table public.atlas_v2_group_access (
-  group_id uuid not null references public.atlas_v2_groups(id) on delete cascade,
-  user_id uuid not null references auth.users(id) on delete cascade,
-  concedido_por uuid references auth.users(id) on delete set null,
-  created_at timestamptz not null default now(),
-  primary key (group_id, user_id)
-);
 
 grant select, insert, update, delete on all tables in schema public to authenticated;

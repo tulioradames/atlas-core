@@ -14,7 +14,8 @@ alter table public.atlas_v2_boards         enable row level security;
 alter table public.atlas_v2_groups         enable row level security;
 alter table public.atlas_v2_items          enable row level security;
 alter table public.atlas_v2_board_access   enable row level security;
-alter table public.atlas_v2_group_access   enable row level security;
+alter table public.atlas_v2_workspace_access enable row level security;
+alter table public.atlas_v2_module_access  enable row level security;
 
 -- Perfis: todo usuário ativo enxerga os colegas (necessário para mencionar e
 -- para montar a lista de quem liberar).
@@ -43,15 +44,14 @@ create policy atlas_v2_groups_select on public.atlas_v2_groups
   for select to authenticated using (public.atlas_v2_can_group(id, 'view'));
 create policy atlas_v2_groups_insert on public.atlas_v2_groups
   for insert to authenticated with check (public.atlas_v2_can_board(board_id, 'configure'));
--- Diferente do sistema antigo: quem configura o SETOR é quem vê o setor e tem
--- a capacidade, não apenas quem configura o quadro inteiro. Antes, um gestor de
--- setor não conseguia configurar o próprio setor.
+-- Setor nao tem acesso proprio: quem configura o setor e quem configura o
+-- quadro. can_group responde pelo quadro de qualquer forma.
 create policy atlas_v2_groups_update on public.atlas_v2_groups
   for update to authenticated
-  using (public.atlas_v2_can_group(id, 'configure'))
-  with check (public.atlas_v2_can_group(id, 'configure'));
+  using (public.atlas_v2_can_board(board_id, 'configure'))
+  with check (public.atlas_v2_can_board(board_id, 'configure'));
 create policy atlas_v2_groups_delete on public.atlas_v2_groups
-  for delete to authenticated using (public.atlas_v2_can_group(id, 'configure'));
+  for delete to authenticated using (public.atlas_v2_can_board(board_id, 'configure'));
 
 create policy atlas_v2_items_select on public.atlas_v2_items
   for select to authenticated using (public.atlas_v2_can_item_scope(id, group_id, board_id, 'view'));
@@ -73,9 +73,16 @@ create policy atlas_v2_board_access_write on public.atlas_v2_board_access
   using (public.atlas_v2_can_board(board_id, 'share'))
   with check (public.atlas_v2_can_board(board_id, 'share'));
 
-create policy atlas_v2_group_access_select on public.atlas_v2_group_access
-  for select to authenticated using (public.atlas_v2_can_group(group_id, 'view'));
-create policy atlas_v2_group_access_write on public.atlas_v2_group_access
+create policy atlas_v2_workspace_access_select on public.atlas_v2_workspace_access
+  for select to authenticated using (public.atlas_v2_can_view_workspace(workspace_id));
+create policy atlas_v2_workspace_access_write on public.atlas_v2_workspace_access
   for all to authenticated
-  using (public.atlas_v2_can_group(group_id, 'share'))
-  with check (public.atlas_v2_can_group(group_id, 'share'));
+  using (public.atlas_v2_can_workspace(workspace_id, 'share'))
+  with check (public.atlas_v2_can_workspace(workspace_id, 'share'));
+
+create policy atlas_v2_module_access_select on public.atlas_v2_module_access
+  for select to authenticated using (public.atlas_v2_can_module(module_id, 'view'));
+create policy atlas_v2_module_access_write on public.atlas_v2_module_access
+  for all to authenticated
+  using (public.atlas_v2_can_module(module_id, 'share'))
+  with check (public.atlas_v2_can_module(module_id, 'share'));
