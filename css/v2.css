@@ -345,6 +345,57 @@ button {
   color: #aeb7c5;
 }
 
+/* A linha do quadro passa a ter um botao de configuracao ao lado. Ele fica
+   POSICIONADO SOBRE a ultima coluna do grid da linha, que ja existia e antes
+   era ocupada por um icone decorativo. Dessa forma o realce de hover e de
+   quadro ativo continuam pertencendo ao botao da linha, e nenhum dos tres
+   blocos de tema que estilizam .atlas-v2-board-row precisou mudar. */
+.atlas-v2-board-row-wrap {
+  position: relative;
+  display: block;
+}
+
+.atlas-v2-board-config {
+  position: absolute;
+  top: 50%;
+  right: 5px;
+  display: grid;
+  width: 22px;
+  height: 22px;
+  transform: translateY(-50%);
+  place-items: center;
+  padding: 0;
+  color: inherit;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  cursor: pointer;
+  opacity: .45;
+}
+
+.atlas-v2-board-config i {
+  width: 15px;
+  height: 15px;
+}
+
+.atlas-v2-board-row-wrap:hover .atlas-v2-board-config,
+.atlas-v2-board-config:focus-visible {
+  opacity: 1;
+}
+
+.atlas-v2-board-config:hover {
+  opacity: 1;
+  background: rgba(255, 255, 255, 0.14);
+}
+
+/* Toque: 22px e pequeno demais para o dedo, mas aumentar o quadrado visivel
+   desalinharia a lista. A area clicavel cresce sem o desenho crescer. */
+.atlas-v2-board-config::after {
+  position: absolute;
+  content: "";
+  inset: -8px -4px;
+}
+
 .atlas-v2-module-row:hover,
 .atlas-v2-board-row:hover {
   color: #fff;

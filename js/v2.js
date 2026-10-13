@@ -15,7 +15,7 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
   // pre-cache. tests/static-audit.cjs falha se index.html e ATLAS_BUILD
   // divergirem, que era a causa dos casos de "publiquei mas continua igual".
   // ---------------------------------------------------------------------------
-  const ATLAS_BUILD = '2.5.0-nucleo';
+  const ATLAS_BUILD = '2.5.0-quadro-config';
   window.__ATLAS_BUILD__ = ATLAS_BUILD;
 
   // Changelog exibido na tela de Inicio. Toda alteracao funcional ou correcao
@@ -7235,11 +7235,28 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
           <i data-lucide="grip-vertical"></i>
         </button>
         <div class="atlas-v2-board-list" ${module.open || query ? '' : 'hidden'}>
-          ${visibleBoards.map((boardEntry) => `<button class="atlas-v2-board-row ${boardEntry.id === runtime.data.activeBoardId ? 'is-active' : ''}" type="button" data-action="open-board" data-board-id="${attr(boardEntry.id)}" title="${attr(boardEntry.name)}">
-            <i data-lucide="${attr(boardEntry.icon || 'table-2')}"></i>
-            <span>${escapeHtml(boardEntry.name)}</span>
-            ${boardEntry.official ? '<i data-lucide="badge-check"></i>' : '<i data-lucide="more-horizontal"></i>'}
-          </button>`).join('')}
+          ${visibleBoards.map((boardEntry) => {
+            // O selo de "quadro oficial" saiu: todo quadro e criado por alguem,
+            // entao a distincao nao dizia nada util - e o `oficial` do banco nao
+            // influencia acesso, permissao nem exclusao, so escolhia este icone.
+            //
+            // Os tres pontos viram BOTAO DE VERDADE. Antes eram um <i> decorativo
+            // dentro do proprio botao da linha: clicar neles abria o quadro, como
+            // clicar em qualquer outro lugar. Tres pontos significam "mais opcoes"
+            // em toda interface - prometer isso e nao cumprir e a mesma mentira
+            // que a V2.4.3 corrigiu no rodape do visualizador.
+            //
+            // Ele so aparece para quem pode configurar: botao que recusa a propria
+            // acao e pior do que botao ausente.
+            const podeConfigurar = hasPermission('configure', { workspace, module, board: boardEntry });
+            return `<div class="atlas-v2-board-row-wrap">
+              <button class="atlas-v2-board-row ${boardEntry.id === runtime.data.activeBoardId ? 'is-active' : ''}" type="button" data-action="open-board" data-board-id="${attr(boardEntry.id)}" title="${attr(boardEntry.name)}">
+                <i data-lucide="${attr(boardEntry.icon || 'table-2')}"></i>
+                <span>${escapeHtml(boardEntry.name)}</span>
+              </button>
+              ${podeConfigurar ? `<button class="atlas-v2-board-config" type="button" data-action="board-config" data-board-id="${attr(boardEntry.id)}" title="Configurar ${attr(boardEntry.name)}" aria-label="Configurar o quadro ${attr(boardEntry.name)}"><i data-lucide="more-horizontal"></i></button>` : ''}
+            </div>`;
+          }).join('')}
           ${matchingChildren.join('')}
         </div>
       </section>`;
@@ -13664,7 +13681,7 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
       'bulk-move': 'edit', 'bulk-move-board': 'edit', 'item-move-board': 'edit', 'bulk-edit': 'edit', sort: 'edit', 'rename-work': 'edit',
       'delete-item': 'delete', 'bulk-delete': 'delete', 'delete-work': 'delete', 'confirm-delete-work': 'delete', 'confirm-delete-items': 'delete', 'confirm-delete-group': 'delete',
       'add-group': 'configure', 'add-column': 'configure', 'group-menu': 'configure', 'edit-group': 'configure', 'duplicate-group': 'configure', 'delete-group': 'configure',
-      'board-settings': 'configure', 'edit-column': 'configure', 'edit-status-colors': 'configure', 'move-column': 'configure', 'delete-column': 'configure', 'edit-workspace': 'configure', automations: 'configure', 'automation-new': 'configure', 'automation-edit': 'configure', 'automation-toggle': 'configure', 'automation-delete': 'configure', 'automation-confirm-delete': 'configure', 'automation-templates': 'configure', 'automation-use-template': 'configure', 'automation-run': 'configure', 'automation-history': 'configure',
+      'board-settings': 'configure', 'board-config': 'configure', 'edit-column': 'configure', 'edit-status-colors': 'configure', 'move-column': 'configure', 'delete-column': 'configure', 'edit-workspace': 'configure', automations: 'configure', 'automation-new': 'configure', 'automation-edit': 'configure', 'automation-toggle': 'configure', 'automation-delete': 'configure', 'automation-confirm-delete': 'configure', 'automation-templates': 'configure', 'automation-use-template': 'configure', 'automation-run': 'configure', 'automation-history': 'configure',
     };
     if (protectedActions[action] && !requirePermission(protectedActions[action], context, 'executar esta ação')) return;
 
@@ -13741,6 +13758,15 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
       'workspace-menu': openWorkspaceMenu,
       'edit-workspace': () => openRenameWorkspaceModal(target.dataset.workspaceId),
       'open-board': () => openBoard(target.dataset.boardId),
+      'board-config': () => {
+        // openBoard SEMPRE, sem a condicao "se ja nao for o ativo". O quadro
+        // pode ja estar marcado como ativo enquanto a tela mostra o Inicio -
+        // e e assim que o Atlas comeca. Com a condicao, a pessoa configurava o
+        // quadro, fechava a janela e continuava no Inicio, com a lista ao lado
+        // dizendo que o quadro estava aberto. openBoard e idempotente.
+        openBoard(target.dataset.boardId);
+        openBoardSettings();
+      },
       'search-open-board': () => { closeOverlay(); openBoard(target.dataset.boardId); },
       'toggle-module': () => {
         const workspace = currentWorkspace();
