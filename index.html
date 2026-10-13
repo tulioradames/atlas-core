@@ -15,7 +15,7 @@
   <link rel="icon" href="assets/icons/favicon.ico">
   <!-- A querystring ?v= abaixo deve ser sempre igual a ATLAS_BUILD em js/v2.js.
        tests/static-audit.cjs falha se divergirem. -->
-  <link rel="stylesheet" href="css/v2.css?v=2.5.0-quadro-config">
+  <link rel="stylesheet" href="css/v2.css?v=2.5.0-filtro-coluna">
 </head>
 <body class="atlas-v2-auth-locked">
   <div class="atlas-v2-auth-root" id="atlas-v2-auth-root" aria-live="polite"></div>
@@ -120,7 +120,10 @@
             <i data-lucide="search"></i>
             <input id="atlas-v2-board-search" type="search" placeholder="Filtrar itens" autocomplete="off">
           </label>
-          <button class="atlas-v2-icon-button atlas-v2-toolbar-icon-command" type="button" data-action="filter" title="Filtrar registros" aria-label="Filtrar registros"><i data-lucide="list-filter"></i></button>
+          <!-- Aparece SO quando ha filtro de coluna ligado em algum setor. Um
+               botao de limpar sempre visivel nao diria nada; este, aceso, e o
+               aviso de que a tabela esta escondendo linhas. -->
+          <button class="atlas-v2-icon-button atlas-v2-toolbar-icon-command atlas-v2-filter-indicator" type="button" id="atlas-v2-clear-filters" data-action="clear-board-filters" title="Limpar os filtros das colunas" aria-label="Limpar os filtros das colunas" hidden><i data-lucide="filter-x"></i><b></b></button>
           <button class="atlas-v2-icon-button atlas-v2-toolbar-icon-command" type="button" data-action="sort" title="Ordenar registros" aria-label="Ordenar registros"><i data-lucide="arrow-up-down"></i></button>
         </div>
         <div class="atlas-v2-toolbar-secondary">
@@ -156,9 +159,9 @@
   </div>
   <div class="atlas-v2-toast-region" id="atlas-v2-toast-region" aria-live="polite"></div>
 
-  <script src="config/config.js?v=2.5.0-quadro-config"></script>
+  <script src="config/config.js?v=2.5.0-filtro-coluna"></script>
   <script src="assets/vendor/supabase.min.js"></script>
   <script src="assets/vendor/lucide.min.js"></script>
-  <script src="js/v2.js?v=2.5.0-quadro-config"></script>
+  <script src="js/v2.js?v=2.5.0-filtro-coluna"></script>
 </body>
 </html>

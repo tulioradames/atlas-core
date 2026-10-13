@@ -424,4 +424,36 @@ localReferences.forEach((entry) => {
   assert(fs.existsSync(path.join(root, entry)), `Referencia local ausente: ${entry}`);
 });
 
+// ---------------------------------------------------------------------------
+// Todo data-lucide escrito a mao tem de existir no pacote de icones
+// ---------------------------------------------------------------------------
+// Um nome inexistente nao quebra nada: o lucide simplesmente nao desenha, e
+// sobra um buraco do tamanho do icone. Foi assim que `funnel-x` entrou na
+// V2.5.0 e passou pelo teste, pelo navegador e por uma captura de tela antes de
+// alguem reparar. O pacote e a fonte da verdade - nao a memoria de quem escreve.
+const lucideBundle = read('assets/vendor/lucide.min.js');
+const nomesDoPacote = new Set();
+for (const achado of lucideBundle.matchAll(/([A-Z][A-Za-z0-9]*):[A-Za-z$_][A-Za-z0-9$_]{0,3}[,}]/g)) {
+  nomesDoPacote.add(achado[1]);
+}
+assert(nomesDoPacote.size > 1500, `So extrai ${nomesDoPacote.size} nomes do pacote lucide; a leitura do pacote quebrou.`);
+
+const paraPascal = (nome) => nome.split('-').map((parte) => parte[0].toUpperCase() + parte.slice(1)).join('');
+const iconesUsados = new Set();
+['js/v2.js', 'index.html', 'manual.html', 'v2.html'].forEach((arquivo) => {
+  let fonteDoArquivo;
+  try {
+    fonteDoArquivo = read(arquivo);
+  } catch {
+    return;
+  }
+  for (const achado of fonteDoArquivo.matchAll(/data-lucide="([a-z0-9-]+)"/g)) iconesUsados.add(achado[1]);
+});
+assert(iconesUsados.size > 50, 'Quase nenhum data-lucide literal encontrado; a varredura quebrou.');
+const iconesInexistentes = [...iconesUsados].filter((nome) => !nomesDoPacote.has(paraPascal(nome)));
+assert(
+  iconesInexistentes.length === 0,
+  `Icone que nao existe no pacote lucide (desenha um buraco, sem erro): ${iconesInexistentes.join(', ')}`,
+);
+
 console.log('Atlas V2.4.0: auditoria estatica aprovada.');

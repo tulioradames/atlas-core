@@ -15,7 +15,7 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
   // pre-cache. tests/static-audit.cjs falha se index.html e ATLAS_BUILD
   // divergirem, que era a causa dos casos de "publiquei mas continua igual".
   // ---------------------------------------------------------------------------
-  const ATLAS_BUILD = '2.5.0-quadro-config';
+  const ATLAS_BUILD = '2.5.0-filtro-coluna';
   window.__ATLAS_BUILD__ = ATLAS_BUILD;
 
   // Changelog exibido na tela de Inicio. Toda alteracao funcional ou correcao
@@ -256,7 +256,6 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
   const GANTT_SCALE_KEY = 'atlas-v2-gantt-scale';
   const GANTT_ZOOM_KEY = 'atlas-v2-gantt-zoom';
   const FIELD_MODE_KEY = 'atlas-v2-field-mode';
-  const SAVED_SEARCHES_KEY = 'atlas-v2-saved-searches';
   const BOOTSTRAP_CACHE_DB = 'atlas-v2-bootstrap-cache';
   const BOOTSTRAP_CACHE_STORE = 'snapshots';
   // v2 acrescentou o store de previas de imagem. Mesmo banco, outro store: a
@@ -521,8 +520,12 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
     selectedItems: new Set(),
     boardSearch: '',
     navSearch: '',
-    searchFilters: {},
-    savedSearches: [],
+    // Filtro por coluna (V2.5.0): { [escopo]: { [columnId]: regra } }. Escopo e
+    // o grupo da visao Tabela ou o setor da obra - cada cabecalho manda no seu.
+    // Nada disso vai para o banco: filtrar e um jeito de olhar.
+    columnFilters: {},
+    columnSort: {},
+    columnMenu: null,
     workFilter: '',
     expandedWorkSectors: new Set(),
     collapsedWorkStatus: new Set(),
@@ -7369,99 +7372,420 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
     });
   }
 
-  function filteredItems(boardEntry, groupEntry) {
+  // `aplicarFiltroDeColuna = false` devolve o que a BUSCA deixou passar, antes
+  // do funil. E o "de quantos" do selo "3 de 18" no cabecalho do setor: sem
+  // esse numero o selo nao diz nada.
+  function filteredItems(boardEntry, groupEntry, aplicarFiltroDeColuna = true) {
     const query = contextualItemSearch(boardEntry);
     const sectorMatches = query && contextualSectorMatch(groupEntry.name, query);
-    return groupEntry.items.filter((entry) => {
+    const porBusca = groupEntry.items.filter((entry) => {
       // Itens arquivados ficam fora das visualizacoes, mas continuam nos dados
       // (e no Supabase, com arquivado=true), portanto sao recuperaveis.
       if (entry.archived) return false;
       if (boardEntry.activeView === 'works' && runtime.workFilter && entry.id !== runtime.workFilter) return false;
-      if (!itemMatchesAdvancedFilters(boardEntry, groupEntry, entry)) return false;
       const children = visibleSubitems(boardEntry, entry);
       if (!query || sectorMatches) return true;
       const ownText = normalizeSearchText(`${entry.name} ${Object.values(entry.values || {}).join(' ')}`);
       const subitemText = normalizeSearchText(children.map((subitem) => `${subitem.name} ${Object.values(subitem.values || {}).join(' ')}`).join(' '));
       return `${ownText} ${subitemText}`.includes(query);
     });
+    if (!aplicarFiltroDeColuna) return porBusca;
+    const escopo = groupFilterScope(boardEntry, groupEntry);
+    const permitidos = allowedRowIds(boardEntry, escopo, porBusca);
+    const sobraram = permitidos ? porBusca.filter((entry) => permitidos.has(entry.id)) : porBusca;
+    return sortRowsByColumn(boardEntry, escopo, sobraram);
   }
 
-  function itemMatchesAdvancedFilters(boardEntry, groupEntry, itemEntry) {
-    const filters = runtime.searchFilters?.[boardEntry.id] || {};
-    if (filters.groupId && groupEntry.id !== filters.groupId) return false;
-    if (filters.columnId && filters.value && String(itemEntry.values?.[filters.columnId] || '') !== String(filters.value)) return false;
-    if (filters.attachmentsOnly) {
-      const hasAttachment = boardEntry.columns.some((columnEntry) => ['image', 'file'].includes(columnEntry.type) && normalizeImageEntries(itemEntry.values?.[columnEntry.id]).length);
-      if (!hasAttachment) return false;
-    }
-    if (filters.dateColumnId && (filters.dateFrom || filters.dateTo)) {
-      const value = String(itemEntry.values?.[filters.dateColumnId] || '');
-      if (!value || (filters.dateFrom && value < filters.dateFrom) || (filters.dateTo && value > filters.dateTo)) return false;
-    }
-    return true;
+  // ===========================================================================
+  // Filtro por coluna (V2.5.0) - o funil do cabecalho, como na planilha
+  // ===========================================================================
+  // O filtro mora no CABECALHO da coluna, nao numa gaveta separada: e ali que a
+  // pessoa esta olhando quando decide esconder alguma coisa, e e ali que o
+  // funil marcado explica depois por que um registro sumiu. A gaveta "Filtros
+  // avancados" fazia o contrario - escondia linhas de dentro de uma tela que
+  // ninguem reabria.
+  //
+  // O filtro vale POR SETOR. Cada setor tem cabecalho proprio na tela, entao
+  // cada cabecalho manda no seu. E guardado so na sessao (`runtime`), some ao
+  // recarregar e nunca vai para o banco: filtrar e um jeito de olhar, nao uma
+  // mudanca no quadro, e ninguem filtra a tela do colega sem querer.
+
+  // Datas e numeros nao viram lista de valores - 300 datas distintas numa lista
+  // de caixinhas nao ajudam ninguem. Esses pedem "de / ate".
+  const COLUNAS_DE_FAIXA = ['number', 'currency', 'percentage', 'date', 'period'];
+
+  function columnFilterKind(columnEntry) {
+    return COLUNAS_DE_FAIXA.includes(columnEntry?.type) ? 'faixa' : 'lista';
   }
 
-  function openAdvancedFilters() {
-    const context = findBoard();
-    if (!context) return;
-    const filters = runtime.searchFilters?.[context.board.id] || {};
-    const filterColumns = context.board.columns.filter((entry) => ['status', 'select', 'person'].includes(entry.type));
-    const selectedColumn = context.board.columns.find((entry) => entry.id === filters.columnId);
-    const values = selectedColumn?.options?.map((entry) => typeof entry === 'string' ? entry : entry.label) || [];
-    const saved = context.board.settings?.savedSearches || [];
-    openDrawer({
-      title: 'Filtros avançados',
-      subtitle: 'Combine critérios e salve consultas frequentes.',
-      body: `<form id="atlas-v2-filter-form" class="atlas-v2-form-grid"><label class="atlas-v2-field"><span>Grupo</span><select name="groupId"><option value="">Todos</option>${context.board.groups.map((entry) => `<option value="${attr(entry.id)}" ${filters.groupId === entry.id ? 'selected' : ''}>${escapeHtml(entry.name)}</option>`).join('')}</select></label><label class="atlas-v2-field"><span>Campo</span><select name="columnId"><option value="">Qualquer campo</option>${filterColumns.map((entry) => `<option value="${attr(entry.id)}" ${filters.columnId === entry.id ? 'selected' : ''}>${escapeHtml(entry.name)}</option>`).join('')}</select></label><label class="atlas-v2-field is-wide"><span>Valor exato</span><input name="value" list="atlas-v2-filter-values" value="${attr(filters.value || '')}" placeholder="Ex.: Em andamento"><datalist id="atlas-v2-filter-values">${values.map((entry) => `<option value="${attr(entry)}"></option>`).join('')}</datalist></label><label class="atlas-v2-field"><span>Coluna de data</span><select name="dateColumnId"><option value="">Sem período</option>${context.board.columns.filter((entry) => entry.type === 'date').map((entry) => `<option value="${attr(entry.id)}" ${filters.dateColumnId === entry.id ? 'selected' : ''}>${escapeHtml(entry.name)}</option>`).join('')}</select></label><label class="atlas-v2-field"><span>Data inicial</span><input name="dateFrom" type="date" value="${attr(filters.dateFrom || '')}"></label><label class="atlas-v2-field"><span>Data final</span><input name="dateTo" type="date" value="${attr(filters.dateTo || '')}"></label><label class="atlas-v2-check-row"><input name="attachmentsOnly" type="checkbox" ${filters.attachmentsOnly ? 'checked' : ''}><span><strong>Somente com anexos</strong><small>Imagens ou arquivos.</small></span></label><label class="atlas-v2-field is-wide"><span>Salvar esta pesquisa como</span><input name="saveName" maxlength="60" placeholder="Ex.: Atrasados com evidências"></label></form><div class="atlas-v2-saved-searches">${saved.map((entry) => `<button type="button" data-action="filter-use-saved" data-search-id="${attr(entry.id)}"><i data-lucide="bookmark"></i><span>${escapeHtml(entry.name)}</span><b>${escapeHtml(entry.query || '')}</b></button>`).join('') || '<p>Nenhuma pesquisa salva neste quadro.</p>'}</div>`,
-      actions: `<button class="atlas-v2-button atlas-v2-button-quiet" type="button" data-action="filter-clear"><i data-lucide="filter-x"></i>Limpar</button><button class="atlas-v2-button atlas-v2-button-primary" type="submit" form="atlas-v2-filter-form"><i data-lucide="list-filter"></i>Aplicar filtros</button>`,
+  function groupFilterScope(boardEntry, groupEntry) {
+    return `${String(boardEntry?.id || '')}::g::${String(groupEntry?.id || '')}`;
+  }
+
+  function sectorFilterScope(boardEntry, workItem, sectorName) {
+    return `${String(boardEntry?.id || '')}::s::${String(workItem?.id || '')}::${String(sectorName || '')}`;
+  }
+
+  // A chave que a caixinha representa. Precisa ser a MESMA coisa que a lista
+  // mostra e que a comparacao usa - se a lista mostrasse "Sim" e a comparacao
+  // olhasse `true`, marcar a caixinha esconderia tudo.
+  function columnFilterValue(boardEntry, columnEntry, itemEntry) {
+    if (!columnEntry) return '';
+    if (columnEntry.type === 'formula') {
+      return String(formulaColumnValue(boardEntry, itemEntry, columnEntry) ?? '').trim();
+    }
+    const bruto = itemEntry?.values?.[columnEntry.id];
+    if (columnEntry.type === 'checkbox') return bruto ? 'Marcado' : 'Não marcado';
+    if (['file', 'image'].includes(columnEntry.type)) {
+      return normalizeImageEntries(bruto).length ? 'Com anexo' : 'Sem anexo';
+    }
+    if (bruto && typeof bruto === 'object') return String(JSON.stringify(bruto));
+    return String(bruto ?? '').trim();
+  }
+
+  function columnFilterLabel(chave) {
+    return chave === '' ? '(vazias)' : chave;
+  }
+
+  // Todos os valores distintos que aparecem NAQUELE setor, em qualquer
+  // profundidade. De proposito ignora os filtros das outras colunas: a lista
+  // encolher sozinha enquanto a pessoa escolhe e o jeito mais rapido de ela
+  // ficar sem nenhuma opcao para marcar e sem entender o motivo.
+  function columnFilterOptions(boardEntry, raizes, columnEntry) {
+    const chaves = new Set();
+    const visita = (entry) => {
+      chaves.add(columnFilterValue(boardEntry, columnEntry, entry));
+      visibleSubitems(boardEntry, entry).forEach(visita);
+    };
+    (raizes || []).forEach(visita);
+    return [...chaves].sort((a, b) => {
+      if (a === '') return 1;
+      if (b === '') return -1;
+      return a.localeCompare(b, 'pt-BR', { numeric: true, sensitivity: 'base' });
     });
   }
 
-  function submitAdvancedFilters(form) {
-    const context = findBoard();
-    if (!context) return;
-    const data = new FormData(form);
-    const filters = {
-      groupId: String(data.get('groupId') || ''),
-      columnId: String(data.get('columnId') || ''),
-      value: String(data.get('value') || '').trim(),
-      dateColumnId: String(data.get('dateColumnId') || ''),
-      dateFrom: String(data.get('dateFrom') || ''),
-      dateTo: String(data.get('dateTo') || ''),
-      attachmentsOnly: Boolean(data.get('attachmentsOnly')),
-    };
-    runtime.searchFilters[context.board.id] = filters;
-    const saveName = String(data.get('saveName') || '').trim();
-    if (saveName) {
-      context.board.settings = context.board.settings || {};
-      context.board.settings.savedSearches = context.board.settings.savedSearches || [];
-      context.board.settings.savedSearches.push({ id: id('search'), name: saveName, query: runtime.boardSearch, filters: deepClone(filters) });
-      saveData('Pesquisa salva');
+  function valueInsideRange(columnEntry, itemEntry, regra) {
+    const de = String(regra?.de ?? '').trim();
+    const ate = String(regra?.ate ?? '').trim();
+    if (!de && !ate) return true;
+    const bruto = itemEntry?.values?.[columnEntry.id];
+    if (columnEntry.type === 'period') {
+      const faixa = parseTimelinePeriod(bruto);
+      if (!faixa) return false;
+      const inicio = faixa.start.toISOString().slice(0, 10);
+      const fim = faixa.end.toISOString().slice(0, 10);
+      // Um periodo entra quando ENCOSTA na faixa pedida. Exigir que ele caiba
+      // inteiro esconderia justamente a obra que atravessa o mes perguntado.
+      if (de && fim < de) return false;
+      if (ate && inicio > ate) return false;
+      return true;
     }
-    closeOverlay();
+    const texto = String(bruto ?? '').trim();
+    // Celula vazia nao esta dentro de faixa nenhuma. Quem quer as vazias filtra
+    // pela lista, nao por "de / ate".
+    if (!texto) return false;
+    if (columnEntry.type === 'date') {
+      if (de && texto < de) return false;
+      if (ate && texto > ate) return false;
+      return true;
+    }
+    const numero = Number(texto.replace(',', '.'));
+    if (!Number.isFinite(numero)) return false;
+    if (de && numero < Number(de)) return false;
+    if (ate && numero > Number(ate)) return false;
+    return true;
+  }
+
+  function rowPassesColumnFilters(boardEntry, regras, itemEntry) {
+    return Object.entries(regras || {}).every(([columnId, regra]) => {
+      const columnEntry = boardEntry.columns.find((entry) => entry.id === columnId);
+      // Coluna apagada depois do filtro: a regra orfa nao esconde nada. Caso
+      // contrario o quadro ficaria vazio sem nenhum funil marcado na tela para
+      // explicar o porque.
+      if (!columnEntry) return true;
+      if (regra?.tipo === 'faixa') return valueInsideRange(columnEntry, itemEntry, regra);
+      const chave = columnFilterValue(boardEntry, columnEntry, itemEntry);
+      return (regra?.valores || []).includes(chave);
+    });
+  }
+
+  // Devolve os ids que sobrevivem, em qualquer profundidade - ou `null` quando
+  // nao ha filtro, para o desenho seguir o caminho de sempre. Uma linha fica
+  // quando ELA passa ou quando algum descendente passa; sem isso, um subitem
+  // que casa com o filtro nao teria por onde aparecer.
+  function allowedRowIds(boardEntry, escopo, raizes) {
+    const regras = runtime.columnFilters?.[escopo];
+    if (!regras || !Object.keys(regras).length) return null;
+    const permitidos = new Set();
+    const visita = (entry) => {
+      // `map` e nao `some`: `some` para no primeiro filho que passa e deixaria
+      // os irmaos seguintes fora do conjunto, sumindo da tela.
+      const filhos = visibleSubitems(boardEntry, entry).map(visita);
+      const passa = rowPassesColumnFilters(boardEntry, regras, entry);
+      if (passa || filhos.some(Boolean)) {
+        permitidos.add(entry.id);
+        return true;
+      }
+      return false;
+    };
+    (raizes || []).forEach(visita);
+    return permitidos;
+  }
+
+  function sortRowsByColumn(boardEntry, escopo, linhas) {
+    const ordem = runtime.columnSort?.[escopo];
+    if (!ordem) return linhas;
+    const columnEntry = boardEntry.columns.find((entry) => entry.id === ordem.columnId);
+    if (!columnEntry) return linhas;
+    const numerica = ['number', 'currency', 'percentage'].includes(columnEntry.type);
+    const sinal = ordem.dir === 'desc' ? -1 : 1;
+    return [...linhas].sort((a, b) => {
+      const va = columnFilterValue(boardEntry, columnEntry, a);
+      const vb = columnFilterValue(boardEntry, columnEntry, b);
+      // Vazio vai para o fim nas DUAS direcoes. Inverter a ordem nao deveria
+      // encher o topo da tela de celulas em branco.
+      if (!va && !vb) return 0;
+      if (!va) return 1;
+      if (!vb) return -1;
+      if (numerica) {
+        const na = Number(va.replace(',', '.'));
+        const nb = Number(vb.replace(',', '.'));
+        if (Number.isFinite(na) && Number.isFinite(nb)) return (na - nb) * sinal;
+      }
+      return va.localeCompare(vb, 'pt-BR', { numeric: true, sensitivity: 'base' }) * sinal;
+    });
+  }
+
+  function scopeFilterCount(escopo) {
+    return Object.keys(runtime.columnFilters?.[escopo] || {}).length;
+  }
+
+  function boardFilterCount(boardEntry) {
+    const prefixo = `${String(boardEntry?.id || '')}::`;
+    let total = 0;
+    Object.entries(runtime.columnFilters || {}).forEach(([chave, regras]) => {
+      if (chave.startsWith(prefixo)) total += Object.keys(regras || {}).length;
+    });
+    Object.keys(runtime.columnSort || {}).forEach((chave) => {
+      if (chave.startsWith(prefixo)) total += 1;
+    });
+    return total;
+  }
+
+  function clearBoardColumnFilters(boardEntry) {
+    const prefixo = `${String(boardEntry?.id || '')}::`;
+    Object.keys(runtime.columnFilters || {}).forEach((chave) => {
+      if (chave.startsWith(prefixo)) delete runtime.columnFilters[chave];
+    });
+    Object.keys(runtime.columnSort || {}).forEach((chave) => {
+      if (chave.startsWith(prefixo)) delete runtime.columnSort[chave];
+    });
+  }
+
+  // As linhas do escopo ANTES do filtro de coluna - e delas que sai a lista de
+  // valores do menu. O nome do setor pode ter "::", por isso o resto da chave
+  // volta a ser juntado em vez de usar uma posicao fixa.
+  function scopeRows(boardEntry, escopo) {
+    const partes = String(escopo || '').split('::');
+    if (partes[1] === 'g') {
+      const groupEntry = boardEntry.groups.find((entry) => entry.id === partes[2]);
+      return groupEntry ? filteredItems(boardEntry, groupEntry, false) : [];
+    }
+    if (partes[1] === 's') {
+      const workItem = boardEntry.groups.flatMap((entry) => entry.items).find((entry) => entry.id === partes[2]);
+      const sectorName = partes.slice(3).join('::');
+      return workItem ? sectorizedWorkItems(boardEntry, workItem, sectorName, false) : [];
+    }
+    return [];
+  }
+
+  // ---------------------------------------------------------------------------
+  // O menu ancorado no cabecalho
+  // ---------------------------------------------------------------------------
+  // O Atlas so tinha modal centralizado e gaveta lateral, e as duas ocupam o
+  // #atlas-v2-overlay-root inteiro. Um menu de coluna precisa ficar COLADO na
+  // coluna - um modal no meio da tela perderia a unica coisa que explica o que
+  // ele filtra. Entao esta e uma primitiva nova, com raiz propria.
+  function columnMenuRoot() {
+    let root = document.getElementById('atlas-v2-column-menu');
+    if (!root) {
+      root = document.createElement('div');
+      root.id = 'atlas-v2-column-menu';
+      document.body.appendChild(root);
+    }
+    return root;
+  }
+
+  function closeColumnMenu() {
+    runtime.columnMenu = null;
+    const root = document.getElementById('atlas-v2-column-menu');
+    if (root) {
+      root.innerHTML = '';
+      root.hidden = true;
+    }
+  }
+
+  function columnMenuAnchor() {
+    const estado = runtime.columnMenu;
+    if (!estado) return null;
+    // Procura por comparacao em vez de montar um seletor: a chave de escopo tem
+    // "::" e pode ter o nome do setor dentro, que nao e seguro interpolar num
+    // seletor CSS.
+    return [...document.querySelectorAll('[data-action="column-menu"]')]
+      .find((el) => el.dataset.scope === estado.escopo && el.dataset.columnId === estado.columnId) || null;
+  }
+
+  function positionColumnMenu() {
+    const estado = runtime.columnMenu;
+    const card = document.getElementById('atlas-v2-column-menu')?.firstElementChild;
+    if (!estado || !card) return;
+    const margem = 8;
+    const largura = card.offsetWidth || 260;
+    const altura = card.offsetHeight || 320;
+    // Alinhado pela esquerda da coluna, mas nunca passando da borda da tela -
+    // a ultima coluna da tabela fica justamente na beirada.
+    const esquerda = Math.max(margem, Math.min(estado.rect.left, window.innerWidth - largura - margem));
+    let topo = estado.rect.bottom + 4;
+    if (topo + altura > window.innerHeight - margem) {
+      topo = Math.max(margem, estado.rect.top - altura - 4);
+    }
+    card.style.left = `${Math.round(esquerda)}px`;
+    card.style.top = `${Math.round(topo)}px`;
+  }
+
+  // Chamada depois de cada desenho do quadro. O cabecalho e recriado inteiro a
+  // cada render (inclusive por sincronizacao em tempo real), entao o menu
+  // precisa reencontrar sua coluna - senao ele fica flutuando apontando para o
+  // lugar errado, ou pior, para outra coluna que passou a ocupar aquele ponto.
+  function syncColumnMenuAnchor() {
+    if (!runtime.columnMenu) return;
+    const anchor = columnMenuAnchor();
+    if (!anchor) {
+      closeColumnMenu();
+      return;
+    }
+    runtime.columnMenu.rect = anchor.getBoundingClientRect();
+    positionColumnMenu();
+  }
+
+  function openColumnMenu(escopo, columnId, anchor) {
+    const context = findBoard();
+    const columnEntry = context?.board.columns.find((entry) => entry.id === columnId);
+    if (!context || !columnEntry || !anchor) return;
+    const regra = runtime.columnFilters?.[escopo]?.[columnId];
+    const tipo = columnFilterKind(columnEntry);
+    const opcoes = tipo === 'lista'
+      ? columnFilterOptions(context.board, scopeRows(context.board, escopo), columnEntry)
+      : [];
+    runtime.columnMenu = {
+      escopo,
+      columnId,
+      tipo,
+      opcoes,
+      // Rascunho: a escolha so vale no Aplicar. Aplicar a cada caixinha
+      // redesenharia o quadro e fecharia o proprio menu no primeiro clique.
+      // Sem regra ainda, tudo vem marcado - e o estado "nao estou filtrando".
+      marcados: new Set(regra?.tipo === 'lista' ? regra.valores : opcoes),
+      de: regra?.tipo === 'faixa' ? (regra.de || '') : '',
+      ate: regra?.tipo === 'faixa' ? (regra.ate || '') : '',
+      rect: anchor.getBoundingClientRect(),
+    };
+    renderColumnMenu();
+  }
+
+  function renderColumnMenu() {
+    const estado = runtime.columnMenu;
+    if (!estado) return;
+    const context = findBoard();
+    const columnEntry = context?.board.columns.find((entry) => entry.id === estado.columnId);
+    if (!columnEntry) {
+      closeColumnMenu();
+      return;
+    }
+    const root = columnMenuRoot();
+    const ordem = runtime.columnSort?.[estado.escopo];
+    const ordenadaPor = (dir) => ordem?.columnId === estado.columnId && ordem.dir === dir;
+    const temRegra = Boolean(runtime.columnFilters?.[estado.escopo]?.[estado.columnId]);
+    const todosMarcados = estado.tipo === 'lista' && estado.marcados.size === estado.opcoes.length;
+    const entrada = ['date', 'period'].includes(columnEntry.type) ? 'date' : 'number';
+    const corpo = estado.tipo === 'faixa'
+      ? `<div class="atlas-v2-column-menu-range">
+          <label><span>De</span><input type="${entrada}" data-column-menu-field="de" value="${attr(estado.de)}"></label>
+          <label><span>Até</span><input type="${entrada}" data-column-menu-field="ate" value="${attr(estado.ate)}"></label>
+          <small>${columnEntry.type === 'period' ? 'Entra todo período que encosta na faixa, mesmo sem caber inteiro dentro dela.' : 'Deixe um dos dois em branco para abrir o lado.'}</small>
+        </div>`
+      : `<div class="atlas-v2-column-menu-list">
+          <button type="button" class="atlas-v2-column-menu-all ${todosMarcados ? 'is-checked' : ''}" data-action="column-menu-all" aria-pressed="${todosMarcados}"><i data-lucide="${todosMarcados ? 'check-square' : 'square'}"></i><span>(Selecionar tudo)</span></button>
+          ${estado.opcoes.map((chave) => {
+            const marcado = estado.marcados.has(chave);
+            return `<button type="button" class="${marcado ? 'is-checked' : ''}" data-action="column-menu-toggle" data-valor="${attr(chave)}" aria-pressed="${marcado}"><i data-lucide="${marcado ? 'check-square' : 'square'}"></i><span>${escapeHtml(columnFilterLabel(chave))}</span></button>`;
+          }).join('') || '<p class="atlas-v2-column-menu-vazio">Esta tabela não tem nenhuma linha para listar.</p>'}
+        </div>`;
+    root.hidden = false;
+    root.innerHTML = `<div class="atlas-v2-column-menu-card" role="dialog" aria-label="Filtrar por ${attr(columnEntry.name)}">
+      <header>
+        <i data-lucide="${attr(COLUMN_TYPES[columnEntry.type]?.icon || 'type')}"></i>
+        <strong>${escapeHtml(columnEntry.name)}</strong>
+        <button type="button" data-action="column-menu-close" title="Fechar" aria-label="Fechar o menu da coluna"><i data-lucide="x"></i></button>
+      </header>
+      <div class="atlas-v2-column-menu-sort">
+        <button type="button" class="${ordenadaPor('asc') ? 'is-active' : ''}" data-action="column-menu-sort" data-dir="asc"><i data-lucide="arrow-up-narrow-wide"></i><span>Ordenar A → Z</span></button>
+        <button type="button" class="${ordenadaPor('desc') ? 'is-active' : ''}" data-action="column-menu-sort" data-dir="desc"><i data-lucide="arrow-down-wide-narrow"></i><span>Ordenar Z → A</span></button>
+      </div>
+      ${corpo}
+      <footer>
+        <div class="atlas-v2-column-menu-acoes">
+          ${temRegra ? '<button type="button" class="atlas-v2-column-menu-quiet" data-action="column-menu-clear-column">Limpar esta coluna</button>' : ''}
+          <button type="button" class="atlas-v2-column-menu-apply" data-action="column-menu-apply"><i data-lucide="check"></i><span>Aplicar</span></button>
+        </div>
+        ${boardFilterCount(context.board) ? `<button type="button" class="atlas-v2-column-menu-tudo" data-action="column-menu-clear-board"><i data-lucide="filter-x"></i><span>Limpar todos os filtros deste quadro (${boardFilterCount(context.board)})</span></button>` : ''}
+      </footer>
+    </div>`;
+    positionColumnMenu();
+    refreshIcons(root);
+  }
+
+  function applyColumnMenu() {
+    const estado = runtime.columnMenu;
+    const context = findBoard();
+    if (!estado || !context) return;
+    const root = document.getElementById('atlas-v2-column-menu');
+    const regras = runtime.columnFilters[estado.escopo] || {};
+    if (estado.tipo === 'faixa') {
+      const de = String(root?.querySelector('[data-column-menu-field="de"]')?.value || '').trim();
+      const ate = String(root?.querySelector('[data-column-menu-field="ate"]')?.value || '').trim();
+      if (de && ate && de > ate) {
+        toast('O início da faixa é maior que o fim; nenhuma linha passaria.', true);
+        return;
+      }
+      if (!de && !ate) delete regras[estado.columnId];
+      else regras[estado.columnId] = { tipo: 'faixa', de, ate };
+    } else {
+      if (!estado.marcados.size) {
+        toast('Marque ao menos um valor: desmarcar tudo esvaziaria a tabela.', true);
+        return;
+      }
+      // Tudo marcado e o mesmo que nao filtrar. Guardar a regra assim mesmo
+      // deixaria o funil aceso e o selo "18 de 18" na tela sem nada escondido.
+      if (estado.marcados.size === estado.opcoes.length) delete regras[estado.columnId];
+      else regras[estado.columnId] = { tipo: 'lista', valores: [...estado.marcados] };
+    }
+    if (Object.keys(regras).length) runtime.columnFilters[estado.escopo] = regras;
+    else delete runtime.columnFilters[estado.escopo];
+    closeColumnMenu();
     render();
   }
 
-  function clearAdvancedFilters() {
-    const context = findBoard();
-    if (!context) return;
-    delete runtime.searchFilters[context.board.id];
-    runtime.boardSearch = '';
-    const input = document.getElementById('atlas-v2-board-search');
-    if (input) input.value = '';
-    closeOverlay();
-    render();
-  }
-
-  function useSavedSearch(searchId) {
-    const context = findBoard();
-    const saved = context?.board.settings?.savedSearches?.find((entry) => entry.id === searchId);
-    if (!context || !saved) return;
-    runtime.searchFilters[context.board.id] = deepClone(saved.filters || {});
-    runtime.boardSearch = saved.query || '';
-    closeOverlay();
-    render();
-  }
+  // A gaveta "Filtros avancados" saiu na V2.5.0. Ela filtrava o quadro inteiro
+  // a partir de uma tela que, depois de fechada, nao deixava NENHUM sinal na
+  // tabela: linhas sumiam e nada na tela dizia por que. O filtro agora mora no
+  // cabecalho da coluna, onde o funil marcado e o selo do setor respondem essa
+  // pergunta sozinhos.
+  //
+  // As pesquisas salvas (board.settings.savedSearches) continuam GRAVADAS no
+  // banco. Tirar a tela nao e motivo para destruir o que as pessoas salvaram;
+  // se voltarem a fazer falta, o dado esta la.
 
   // ===========================================================================
   // A lista de obras (V2.5.0)
@@ -7638,32 +7962,75 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
     return selectedWork(boardEntry);
   }
 
-  function sectorizedWorkItems(boardEntry, workItem, sectorName) {
+  function sectorizedWorkItems(boardEntry, workItem, sectorName, aplicarFiltroDeColuna = true) {
     const columnId = boardEntry.settings?.works_sector_column_id;
     const query = contextualItemSearch(boardEntry);
     const sectorMatches = query && contextualSectorMatch(sectorName, query);
-    return visibleSubitems(boardEntry, workItem).filter((entry) => {
+    const porBusca = visibleSubitems(boardEntry, workItem).filter((entry) => {
       if (String(entry.values?.[columnId] || '').trim() !== sectorName) return false;
       if (!query || sectorMatches) return true;
       const ownText = normalizeSearchText(`${entry.name} ${Object.values(entry.values || {}).join(' ')}`);
       const childrenText = normalizeSearchText(visibleSubitems(boardEntry, entry).map((child) => `${child.name} ${Object.values(child.values || {}).join(' ')}`).join(' '));
       return `${ownText} ${childrenText}`.includes(query);
     });
+    if (!aplicarFiltroDeColuna) return porBusca;
+    // O setor da obra tem cabecalho proprio, entao tem filtro proprio - igual
+    // ao grupo da visao Tabela.
+    const escopo = sectorFilterScope(boardEntry, workItem, sectorName);
+    const permitidos = allowedRowIds(boardEntry, escopo, porBusca);
+    const sobraram = permitidos ? porBusca.filter((entry) => permitidos.has(entry.id)) : porBusca;
+    return sortRowsByColumn(boardEntry, escopo, sobraram);
   }
 
   function workSectorStateKey(boardId, workId, sectorName) {
     return `${String(boardId || '')}::${String(workId || '')}::${String(sectorName || '')}`;
   }
 
+  // O cabecalho de coluna e o MESMO nas duas tabelas (visao Tabela e setor da
+  // Obras). Ele morava duplicado em dois trechos que ja tinham divergido - um
+  // tinha data-column-id, o outro nao. Uma funcao so, para o funil nao nascer
+  // de novo em apenas metade da tela.
+  function renderColumnHead(boardEntry, columnEntry, escopo, arrastavel) {
+    const largura = Number(columnEntry.width || 160);
+    const regra = runtime.columnFilters?.[escopo]?.[columnEntry.id];
+    const ordem = runtime.columnSort?.[escopo];
+    const ordenada = ordem?.columnId === columnEntry.id;
+    const icone = ordenada
+      ? (ordem.dir === 'desc' ? 'arrow-down-wide-narrow' : 'arrow-up-narrow-wide')
+      : 'list-filter';
+    const titulo = regra
+      ? `${columnEntry.name}: filtro ativo`
+      : `Filtrar ou ordenar por ${columnEntry.name}`;
+    return `<th style="width:${largura}px;min-width:${largura}px" ${arrastavel ? 'draggable="true"' : ''} data-column-id="${attr(columnEntry.id)}">
+      <div class="atlas-v2-column-head">
+        <i data-lucide="${attr(COLUMN_TYPES[columnEntry.type]?.icon || 'type')}"></i>
+        <span>${escapeHtml(columnEntry.name)}</span>
+        <button class="atlas-v2-column-filter ${regra || ordenada ? 'is-active' : ''}" type="button" data-action="column-menu" data-column-id="${attr(columnEntry.id)}" data-scope="${attr(escopo)}" title="${attr(titulo)}" aria-label="${attr(titulo)}" aria-haspopup="dialog"><i data-lucide="${attr(icone)}"></i></button>
+      </div>
+    </th>`;
+  }
+
+  // O selo que aparece no cabecalho do setor quando ha filtro. Sem ele, linhas
+  // somem e a unica pista fica num funil de 14px la em cima - foi assim que o
+  // filtro avancado antigo conseguiu esconder registros sem ninguem perceber.
+  function renderScopeFilterChip(escopo, visiveis, total) {
+    if (!scopeFilterCount(escopo)) return '';
+    return `<button class="atlas-v2-scope-filter-chip" type="button" data-action="clear-scope-filters" data-scope="${attr(escopo)}" title="Limpar o filtro deste setor"><i data-lucide="filter-x"></i><span>${visiveis} de ${total}</span></button>`;
+  }
+
   function renderWorkSectorTable(boardEntry, workItem, sectorName, sectorIndex) {
+    const escopo = sectorFilterScope(boardEntry, workItem, sectorName);
     const items = sectorizedWorkItems(boardEntry, workItem, sectorName);
-    const subitemCount = items.reduce((total, entry) => total + visibleSubitems(boardEntry, entry).length, 0);
+    const totalSemFiltro = sectorizedWorkItems(boardEntry, workItem, sectorName, false).length;
+    const permitidos = allowedRowIds(boardEntry, escopo, items);
+    const subitemCount = items.reduce((total, entry) => total
+      + visibleSubitems(boardEntry, entry).filter((filho) => !permitidos || permitidos.has(filho.id)).length, 0);
     const columnsWidth = boardEntry.columns.reduce((total, entry) => total + Number(entry.width || 160), 0);
     const tableWidth = 40 + 500 + columnsWidth + 42;
     const tableHead = `<thead><tr>
       <th class="atlas-v2-select-cell"></th>
       <th class="atlas-v2-item-cell"><div class="atlas-v2-column-head"><i data-lucide="scan-line"></i><span>Registro</span></div></th>
-      ${boardEntry.columns.map((columnEntry) => `<th style="width:${Number(columnEntry.width || 160)}px;min-width:${Number(columnEntry.width || 160)}px"><div class="atlas-v2-column-head"><i data-lucide="${attr(COLUMN_TYPES[columnEntry.type]?.icon || 'type')}"></i><span>${escapeHtml(columnEntry.name)}</span></div></th>`).join('')}
+      ${boardEntry.columns.map((columnEntry) => renderColumnHead(boardEntry, columnEntry, escopo, false)).join('')}
       <th class="atlas-v2-end-spacer" aria-hidden="true"></th>
     </tr></thead>`;
     const sectorColors = boardEntry.settings?.works_sector_colors || {};
@@ -7675,14 +8042,14 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
         <span class="atlas-v2-group-index">${String(sectorIndex + 1).padStart(2, '0')}</span>
         <button type="button" data-action="toggle-work-sector" data-work-id="${attr(workItem.id)}" data-work-sector="${attr(sectorName)}" title="${expanded ? 'Recolher setor' : 'Expandir setor'}" aria-expanded="${expanded}"><i data-lucide="${expanded ? 'chevron-down' : 'chevron-right'}"></i></button>
         <div class="atlas-v2-group-title"><span>${escapeHtml(sectorName)}</span></div>
-        <span class="atlas-v2-group-count">${items.length} ${items.length === 1 ? 'elemento' : 'elementos'}${subitemCount ? ` · ${subitemCount} ${subitemCount === 1 ? 'subelemento' : 'subelementos'}` : ''}</span>
+        <div class="atlas-v2-group-meta"><span class="atlas-v2-group-count">${items.length} ${items.length === 1 ? 'elemento' : 'elementos'}${subitemCount ? ` · ${subitemCount} ${subitemCount === 1 ? 'subelemento' : 'subelementos'}` : ''}</span>${renderScopeFilterChip(escopo, items.length, totalSemFiltro)}</div>
         <span class="atlas-v2-group-head-spacer" aria-hidden="true"></span>
       </header>
       ${expanded ? `<div class="atlas-v2-table-sticky-head" data-sticky-work-sector="${attr(sectorName)}">
         <table class="atlas-v2-table" style="width:${tableWidth}px;min-width:${tableWidth}px">${tableHead}</table>
       </div><div class="atlas-v2-table-wrap">
         <table class="atlas-v2-table" style="width:${tableWidth}px;min-width:${tableWidth}px">
-          <tbody>${items.map((itemEntry) => renderItemRows(boardEntry, itemEntry)).join('') || `<tr><td colspan="${boardEntry.columns.length + 3}" class="atlas-v2-empty-cell">Nenhum registro em ${escapeHtml(sectorName)}.</td></tr>`}</tbody>
+          <tbody>${items.map((itemEntry) => renderItemRows(boardEntry, itemEntry, null, 0, permitidos)).join('') || `<tr><td colspan="${boardEntry.columns.length + 3}" class="atlas-v2-empty-cell">${scopeFilterCount(escopo) ? `Nenhum registro em ${escapeHtml(sectorName)} passa no filtro desta tabela.` : `Nenhum registro em ${escapeHtml(sectorName)}.`}</td></tr>`}</tbody>
         </table>
         <button class="atlas-v2-add-row" type="button" data-action="add-work-element" data-item-id="${attr(workItem.id)}" data-work-sector="${attr(sectorName)}"><i data-lucide="plus"></i><span>Adicionar elemento em ${escapeHtml(sectorName)}</span></button>
       </div>` : ''}
@@ -7868,7 +8235,24 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
       root.innerHTML = visibleGroups(boardEntry).map((groupEntry) => renderGroupTable(boardEntry, groupEntry, boardEntry.groups.indexOf(groupEntry))).join('') || `<div class="atlas-v2-empty-view"><div><i data-lucide="search-x"></i><strong>Nenhum setor, item ou subitem encontrado</strong></div></div>`;
     }
     restoreBoardUiState(uiState, restoreToken);
+    syncBoardFilterIndicator(boardEntry);
+    // O cabecalho acabou de ser recriado: o menu aberto precisa reencontrar a
+    // coluna dele ou fechar. Sem isto ele fica apontando para o vazio depois de
+    // uma sincronizacao em tempo real.
+    syncColumnMenuAnchor();
     void ensureBoardViewData(boardEntry);
+  }
+
+  // O botao da barra de ferramentas so existe enquanto ha filtro. Aceso, ele e
+  // a resposta de longe para "cade meus registros"; apagado, nao ocupa espaco
+  // nem promete uma tela que nao existe mais.
+  function syncBoardFilterIndicator(boardEntry) {
+    const botao = document.getElementById('atlas-v2-clear-filters');
+    if (!botao) return;
+    const total = boardFilterCount(boardEntry);
+    botao.hidden = !total;
+    const marca = botao.querySelector('b');
+    if (marca) marca.textContent = total > 1 ? String(total) : '';
   }
 
   function renderEmptyBoard() {
@@ -7880,18 +8264,22 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
   }
 
   function renderGroupTable(boardEntry, groupEntry, groupIndex = 0) {
+    const escopo = groupFilterScope(boardEntry, groupEntry);
     const items = filteredItems(boardEntry, groupEntry);
+    const totalSemFiltro = filteredItems(boardEntry, groupEntry, false).length;
+    const permitidos = allowedRowIds(boardEntry, escopo, items);
     const searchOpensSector = contextualSectorMatch(groupEntry.name, contextualItemSearch(boardEntry));
     const groupCollapsed = groupEntry.collapsed && !searchOpensSector;
     const selectableIds = items.flatMap((entry) => itemTreeIds(entry, []));
     const allSelected = selectableIds.length > 0 && selectableIds.every((itemId) => runtime.selectedItems.has(itemId));
-    const subitemCount = items.reduce((total, entry) => total + visibleSubitems(boardEntry, entry).length, 0);
+    const subitemCount = items.reduce((total, entry) => total
+      + visibleSubitems(boardEntry, entry).filter((filho) => !permitidos || permitidos.has(filho.id)).length, 0);
     const columnsWidth = boardEntry.columns.reduce((total, entry) => total + Number(entry.width || 160), 0);
     const tableWidth = 40 + 500 + columnsWidth + 42;
     const tableHead = `<thead><tr>
       <th class="atlas-v2-select-cell"><input class="atlas-v2-checkbox" type="checkbox" data-action="select-group" data-group-id="${attr(groupEntry.id)}" ${allSelected ? 'checked' : ''} aria-label="Selecionar grupo"></th>
       <th class="atlas-v2-item-cell"><div class="atlas-v2-column-head"><i data-lucide="scan-line"></i><span>Registro</span></div></th>
-      ${boardEntry.columns.map((columnEntry) => `<th style="width:${Number(columnEntry.width || 160)}px;min-width:${Number(columnEntry.width || 160)}px" draggable="true" data-column-id="${attr(columnEntry.id)}"><div class="atlas-v2-column-head"><i data-lucide="${attr(COLUMN_TYPES[columnEntry.type]?.icon || 'type')}"></i><span>${escapeHtml(columnEntry.name)}</span></div></th>`).join('')}
+      ${boardEntry.columns.map((columnEntry) => renderColumnHead(boardEntry, columnEntry, escopo, true)).join('')}
       <th class="atlas-v2-end-spacer" aria-hidden="true"></th>
     </tr></thead>`;
     return `<section class="atlas-v2-group" style="--group-color:${attr(groupEntry.color || '#0f6cbd')}" data-group-id="${attr(groupEntry.id)}" draggable="true">
@@ -7899,7 +8287,7 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
         <span class="atlas-v2-group-index">${String(groupIndex + 1).padStart(2, '0')}</span>
         <button type="button" data-action="toggle-group" data-group-id="${attr(groupEntry.id)}" title="${groupCollapsed ? 'Expandir grupo' : 'Recolher grupo'}"><i data-lucide="${groupCollapsed ? 'chevron-right' : 'chevron-down'}"></i></button>
         <div class="atlas-v2-group-title"><span>${escapeHtml(groupEntry.name)}</span></div>
-        <span class="atlas-v2-group-count">${items.length} ${items.length === 1 ? 'item' : 'itens'}${subitemCount ? ` · ${subitemCount} ${subitemCount === 1 ? 'subitem' : 'subitens'}` : ''}</span>
+        <div class="atlas-v2-group-meta"><span class="atlas-v2-group-count">${items.length} ${items.length === 1 ? 'item' : 'itens'}${subitemCount ? ` · ${subitemCount} ${subitemCount === 1 ? 'subitem' : 'subitens'}` : ''}</span>${renderScopeFilterChip(escopo, items.length, totalSemFiltro)}</div>
         <button type="button" data-action="group-menu" data-group-id="${attr(groupEntry.id)}" title="Opções do grupo"><i data-lucide="more-horizontal"></i></button>
       </header>
       ${groupCollapsed ? '' : `<div class="atlas-v2-table-sticky-head" data-sticky-group="${attr(groupEntry.id)}">
@@ -7907,7 +8295,8 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
       </div><div class="atlas-v2-table-wrap" data-drop-group="${attr(groupEntry.id)}">
         <table class="atlas-v2-table" style="width:${tableWidth}px;min-width:${tableWidth}px">
           <tbody>
-            ${items.map((itemEntry) => renderItemRows(boardEntry, itemEntry)).join('')}
+            ${items.map((itemEntry) => renderItemRows(boardEntry, itemEntry, null, 0, permitidos)).join('')}
+            ${!items.length && scopeFilterCount(escopo) ? `<tr><td colspan="${boardEntry.columns.length + 3}" class="atlas-v2-empty-cell">Nenhum registro deste grupo passa no filtro das colunas.</td></tr>` : ''}
           </tbody>
         </table>
         <button class="atlas-v2-add-row" type="button" data-action="add-item-to-group" data-group-id="${attr(groupEntry.id)}"><i data-lucide="plus"></i><span>Adicionar item</span></button>
@@ -7915,12 +8304,16 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
     </section>`;
   }
 
-  function renderItemRows(boardEntry, itemEntry, parentItem = null, depth = 0) {
+  function renderItemRows(boardEntry, itemEntry, parentItem = null, depth = 0, permitidos = null) {
     const expanded = itemEntry.subitemsExpanded !== false;
     const mainRow = renderItemRow(boardEntry, itemEntry, parentItem, expanded, depth);
-    const subitems = visibleSubitems(boardEntry, itemEntry);
+    // `permitidos` e o conjunto que sobreviveu ao filtro de coluna. Ele vale em
+    // qualquer profundidade: filtrar so a primeira linha deixaria subitens que
+    // nao casam com o filtro desenhados logo abaixo dela.
+    const subitems = visibleSubitems(boardEntry, itemEntry)
+      .filter((subitem) => !permitidos || permitidos.has(subitem.id));
     if (!expanded || !subitems.length) return mainRow;
-    return mainRow + subitems.map((subitem) => renderItemRows(boardEntry, subitem, itemEntry, depth + 1)).join('');
+    return mainRow + subitems.map((subitem) => renderItemRows(boardEntry, subitem, itemEntry, depth + 1, permitidos)).join('');
   }
 
   function renderItemRow(boardEntry, itemEntry, parentItem = null, expanded = true, depth = 0) {
@@ -10294,7 +10687,7 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
   function boardViewItemIds(boardEntry) {
     if (!boardEntry) return [];
     const allIds = () => flatBoardItems(boardEntry).map(({ item }) => item.id);
-    if (Object.keys(runtime.searchFilters?.[boardEntry.id] || {}).length) return allIds();
+    if (boardFilterCount(boardEntry)) return allIds();
     // Sem os valores dos subitens recolhidos, uma formula de agregacao
     // calcularia 0 silenciosamente (subitem.values vazio vira 0), mostrando um
     // numero plausivel e ERRADO - por isso esses quadros carregam a arvore
@@ -10549,7 +10942,12 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
   }
 
   function renderMobileWorks(boardEntry) {
-    const tabs = renderWorkTabs(boardEntry);
+    // DEFEITO corrigido aqui: a remodelagem da lista de obras trocou
+    // renderWorkTabs por renderWorkSidebar e esta chamada ficou para tras. No
+    // celular, abrir a visao Obras lancava "renderWorkTabs is not defined" e a
+    // tela inteira ficava em branco - nao so a lista. O smoke em navegador
+    // pegava isso; ele e que nao tinha rodado.
+    const tabs = renderWorkSidebar(boardEntry);
     const selected = selectedWork(boardEntry);
     if (!selected) return tabs + renderEmptyBoard();
     const rows = [];
@@ -13671,6 +14069,14 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
 
 
   function handleClick(event) {
+    // O menu da coluna fecha em qualquer clique que nao seja nele nem no funil
+    // que o abriu. Vem antes do `return` de quem nao tem data-action: clicar no
+    // meio da tabela tambem tem de fechar.
+    if (runtime.columnMenu
+      && !event.target.closest('#atlas-v2-column-menu')
+      && !event.target.closest('[data-action="column-menu"]')) {
+      closeColumnMenu();
+    }
     const target = event.target.closest('[data-action]');
     if (!target) return;
     const action = target.dataset.action;
@@ -13899,12 +14305,68 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
         openNotificationsDrawer();
       },
       'notifications-read-all': markAllNotificationsRead,
-      'filter': () => {
-        if (runtime.fieldMode && window.innerWidth <= 820) document.getElementById('atlas-v2-board-search')?.focus();
-        else openAdvancedFilters();
+      'column-menu': () => {
+        // Clicar de novo no mesmo funil fecha, como qualquer menu.
+        const mesmo = runtime.columnMenu?.escopo === target.dataset.scope
+          && runtime.columnMenu?.columnId === target.dataset.columnId;
+        if (mesmo) closeColumnMenu();
+        else openColumnMenu(target.dataset.scope, target.dataset.columnId, target);
       },
-      'filter-clear': clearAdvancedFilters,
-      'filter-use-saved': () => useSavedSearch(target.dataset.searchId),
+      'column-menu-close': closeColumnMenu,
+      'column-menu-toggle': () => {
+        const estado = runtime.columnMenu;
+        if (!estado) return;
+        const valor = target.dataset.valor ?? '';
+        if (estado.marcados.has(valor)) estado.marcados.delete(valor);
+        else estado.marcados.add(valor);
+        renderColumnMenu();
+      },
+      'column-menu-all': () => {
+        const estado = runtime.columnMenu;
+        if (!estado) return;
+        if (estado.marcados.size === estado.opcoes.length) estado.marcados.clear();
+        else estado.opcoes.forEach((chave) => estado.marcados.add(chave));
+        renderColumnMenu();
+      },
+      'column-menu-sort': () => {
+        const estado = runtime.columnMenu;
+        if (!estado) return;
+        const dir = target.dataset.dir === 'desc' ? 'desc' : 'asc';
+        const atual = runtime.columnSort[estado.escopo];
+        // Clicar na ordem que ja esta ativa desfaz: e o unico jeito de voltar a
+        // ordem original do setor sem recarregar a pagina.
+        if (atual?.columnId === estado.columnId && atual.dir === dir) delete runtime.columnSort[estado.escopo];
+        else runtime.columnSort[estado.escopo] = { columnId: estado.columnId, dir };
+        closeColumnMenu();
+        render();
+      },
+      'column-menu-apply': applyColumnMenu,
+      'column-menu-clear-column': () => {
+        const estado = runtime.columnMenu;
+        if (!estado) return;
+        delete runtime.columnFilters[estado.escopo]?.[estado.columnId];
+        if (!Object.keys(runtime.columnFilters[estado.escopo] || {}).length) delete runtime.columnFilters[estado.escopo];
+        closeColumnMenu();
+        render();
+      },
+      'column-menu-clear-board': () => {
+        if (!context) return;
+        clearBoardColumnFilters(context.board);
+        closeColumnMenu();
+        render();
+      },
+      'clear-scope-filters': () => {
+        delete runtime.columnFilters[target.dataset.scope];
+        delete runtime.columnSort[target.dataset.scope];
+        closeColumnMenu();
+        render();
+      },
+      'clear-board-filters': () => {
+        if (!context) return;
+        clearBoardColumnFilters(context.board);
+        closeColumnMenu();
+        render();
+      },
       'sort': () => {
         context.board.groups.forEach((groupEntry) => groupEntry.items.sort((a, b) => a.name.localeCompare(b.name, 'pt-BR')));
         saveData('Itens ordenados'); render();
@@ -14278,7 +14740,6 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
     if (form.id === 'atlas-v2-bulk-edit-form') submitBulkEdit(form);
     if (form.id === 'atlas-v2-cross-board-move-form') { void submitCrossBoardMove(form); }
     if (form.id === 'atlas-v2-dashboard-widget-form') submitDashboardWidget(form);
-    if (form.id === 'atlas-v2-filter-form') submitAdvancedFilters(form);
     if (form.id === 'atlas-v2-rename-work-form') submitRenameWork(form);
     if (form.id === 'atlas-v2-version-label-form') { void submitVersionLabel(form); }
     if (form.id === 'atlas-v2-chat-form') { void submitItemChat(form); }
@@ -14473,6 +14934,15 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
 
   function handleKeydown(event) {
     if (document.body.classList.contains('atlas-v2-auth-locked')) return;
+    // O menu da coluna e a camada mais de cima: Escape fecha ele primeiro, sem
+    // mexer no modal que porventura esteja atras.
+    if (runtime.columnMenu && event.key === 'Escape') {
+      event.preventDefault();
+      const anchor = columnMenuAnchor();
+      closeColumnMenu();
+      anchor?.focus();
+      return;
+    }
     if (runtime.imageViewer && event.key === 'ArrowLeft') {
       event.preventDefault();
       moveImageViewer(-1);
@@ -14540,6 +15010,8 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
   }
 
   function handleResize() {
+    // A tela mudou de tamanho: as contas de posicao do menu nao valem mais.
+    if (runtime.columnMenu) closeColumnMenu();
     clearTimeout(runtime.resizeTimer);
     runtime.resizeTimer = setTimeout(() => {
       const context = findBoard();
@@ -14574,6 +15046,10 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
   function handleBoardTableScroll(event) {
     const table = event.target?.matches?.('.atlas-v2-table-wrap') ? event.target : null;
     if (table) syncBoardTableHeader(table);
+    // Qualquer rolagem move a coluna debaixo do menu. Reposicionar e melhor que
+    // fechar: a pessoa costuma rolar justamente para ver o efeito do que
+    // acabou de marcar.
+    if (runtime.columnMenu) syncColumnMenuAnchor();
   }
 
   window.__ATLAS_REALTIME_STATUS__ = () => ({
