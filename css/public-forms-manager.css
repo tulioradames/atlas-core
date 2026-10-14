@@ -1,0 +1,25 @@
+.atlas-form-list-row { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 18px 0; border-bottom: 1px solid var(--v2-line); }
+.atlas-form-list-row strong, .atlas-form-list-row small { display: block; overflow-wrap: anywhere; }
+.atlas-form-list-row small { margin-top: 6px; color: var(--v2-muted); }
+.atlas-form-row-actions { display: flex; gap: 8px; flex-wrap: wrap; flex-shrink: 0; }
+.atlas-forms-editor .is-wide { grid-column: 1 / -1; }
+.atlas-form-publication-status { border-left: 3px solid var(--v2-cyan); padding: 10px 12px; color: var(--v2-text); background: var(--v2-bg); overflow-wrap: anywhere; }
+.atlas-form-publish-toggle { margin-bottom: 8px; }
+#atlas-v2-overlay-root .atlas-v2-drawer-foot:has([form="atlas-public-form-editor"]) { flex-wrap: wrap; }
+.atlas-form-question-row { border-top: 1px solid var(--v2-line); padding: 20px 0; }
+.atlas-form-question-row header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.atlas-form-question-row header small { color: var(--v2-muted); overflow-wrap: anywhere; }
+.atlas-form-question-row header > div { display: flex; gap: 8px; }
+.atlas-form-question-row .atlas-v2-field { margin-bottom: 12px; }
+.atlas-form-toggle { display: flex; gap: 10px; align-items: center; font-size: 14px; }
+.atlas-form-toggle input { width: 20px; height: 20px; flex-shrink: 0; accent-color: var(--v2-cyan,var(--v2-blue)); }
+.atlas-forms-add, .atlas-forms-link { display: flex; gap: 10px; align-items: center; min-width: 0; }
+.atlas-forms-add select, .atlas-forms-link input { flex: 1; min-width: 0; padding: 10px; font: inherit; color: var(--v2-text); background: var(--v2-surface); border: 1px solid var(--v2-line); }
+.atlas-forms-preview > p { white-space: pre-line; color: var(--v2-muted); }
+.atlas-forms-preview .form-question { display: flex; flex-direction: column; gap: 8px; margin: 20px 0; }
+.atlas-forms-preview .form-question input, .atlas-forms-preview .form-question select, .atlas-forms-preview .form-question textarea { width: 100%; min-width: 0; min-height: 44px; padding: 10px; font: inherit; color: var(--v2-text); background: var(--v2-surface); border: 1px solid var(--v2-line); }
+.atlas-forms-preview .form-checkbox { flex-direction: row; flex-wrap: wrap; align-items: center; }
+.atlas-forms-preview .form-checkbox input { width: 22px; min-height: 22px; }
+.atlas-forms-preview .form-question small { color: var(--v2-muted); }
+.atlas-forms-preview .form-period { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media(max-width:600px) { .atlas-form-list-row { flex-direction: column; align-items: stretch; } .atlas-form-row-actions { justify-content: flex-start; } .atlas-form-question-row header { align-items: flex-start; } .atlas-forms-preview .form-period { grid-template-columns: 1fr; } }

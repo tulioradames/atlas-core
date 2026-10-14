@@ -18,6 +18,9 @@ const ATLAS_VERSIONED = [
   `./css/v2.css?v=${ATLAS_BUILD}`,
   `./js/v2.js?v=${ATLAS_BUILD}`,
   `./config/config.js?v=${ATLAS_BUILD}`,
+  `./css/public-forms-manager.css?v=${ATLAS_BUILD}`,
+  `./js/public-forms-manager.js?v=${ATLAS_BUILD}`,
+  `./public-forms/form-core.js?v=${ATLAS_BUILD}`,
 ];
 
 // Arquivos estaveis: nao mudam entre versoes do Atlas.
@@ -39,7 +42,7 @@ const ATLAS_SHELL = [...ATLAS_STATIC, ...ATLAS_VERSIONED];
 // Codigo proprio do Atlas: precisa aparecer atualizado ja no primeiro
 // carregamento depois de uma publicacao. Por isso vai por rede primeiro, com o
 // cache apenas como reserva para uso offline.
-const APP_CODE_PATTERN = /\/(?:css\/v2\.css|js\/v2\.js|config\/config\.js)$/;
+const APP_CODE_PATTERN = /\/(?:css\/(?:v2|public-forms-manager)\.css|js\/(?:v2|public-forms-manager)\.js|public-forms\/form-core\.js|config\/config\.js)$/;
 
 self.addEventListener('install', (event) => {
   event.waitUntil(

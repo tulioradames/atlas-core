@@ -1,4 +1,20 @@
-# Atlas V2.4.4 Oficial
+# Atlas V2.4.5 Oficial
+
+## Novidades da V2.4.5
+
+Baseada na V2.4.4 oficial. A V2.5 permanece separada. Esta edicao foi validada
+em homologacao antes da promocao para producao.
+
+- Crie formularios pela aba **Formularios** do quadro com acesso de configuracao.
+- Escolha as colunas, perguntas, ordem, obrigatoriedade e setor de destino.
+- Publique e copie o link. O preenchimento nao exige conta no Atlas.
+- Cada envio cria um elemento com os valores correspondentes no quadro.
+- Pause, defina validade ou gere um novo link sem apagar os registros recebidos.
+
+Detalhes de instalacao, limites e seguranca em
+`docs/V2_4_5_FORMULARIOS.md`. Execute `pnpm install --frozen-lockfile` e
+`pnpm test:forms` antes de aplicar o SQL. A chave de servico fica exclusivamente
+no backend; nunca em `config/config.js`.
 
 ## Edição pública
 

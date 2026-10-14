@@ -1,0 +1,70 @@
+'use strict';
+const assert=require('node:assert/strict');
+const {randomUUID}=require('node:crypto');
+const {formsDatabase}=require('./helpers/forms-database.cjs');
+(async()=>{
+  const {db,ids,rpc,save,config}=await formsDatabase();
+  let checks=0;
+  const reject=async(fn,pattern)=>{await assert.rejects(fn,pattern);checks++;};
+  try {
+    const form=await save(); checks++;
+    assert.match(form.token,/^[a-f0-9]{64}$/);
+    const definition=await rpc('atlas_v2_public_form_definition',{p_token:form.token});
+    assert.equal(definition.nameLabel,'Cidade');assert.equal(definition.boardId,undefined);
+    assert.deepEqual(definition.fields.find(q=>q.columnId===ids.select).options,['Aberto']);checks++;
+    for(const role of ['anon','authenticated']) {
+      await reject(()=>rpc('atlas_v2_public_form_definition',{p_token:form.token},role,ids.reader),/permission denied/);
+      await reject(()=>rpc('atlas_v2_submit_public_form',{p_token:form.token,p_request_id:randomUUID(),p_answers:{}},role,ids.reader),/permission denied/);
+    }
+    await reject(()=>save({},null,ids.reader),/permissao/);
+    await reject(()=>save({groupId:ids.otherGroup}),/setor deste quadro/);
+    await reject(()=>save({fields:[]}),/obrigatorias/);
+    await reject(()=>save({fields:[config.fields[0],config.fields[0]]}),/repetida/);
+    await reject(()=>rpc('atlas_v2_save_public_form',{p_board_id:ids.board,p_form_id:null,p_config:{}},'authenticated',ids.manager),/Configuracao/);
+    const answers={__name__:'Campina Grande', [ids.text]:'Visita tecnica',[ids.number]:42.5,[ids.select]:'Aberto',[ids.date]:'2026-10-13',[ids.checkbox]:false,[ids.period]:{start:'2026-10-13',end:'2026-10-14'},[ids.email]:'teste@example.test',[ids.link]:'https://example.test'};
+    const submit=(values=answers,requestId=randomUUID())=>rpc('atlas_v2_submit_public_form',{p_token:form.token,p_request_id:requestId,p_answers:values});
+    await db.query('update atlas_v2_columns set obrigatorio=true where id=$1',[ids.checkbox]);
+    await reject(()=>submit(),/Confira o campo/);
+    await db.query('update atlas_v2_columns set obrigatorio=false where id=$1',[ids.checkbox]);
+    await reject(()=>submit(null),/Resposta invalida/);
+    await reject(()=>submit({...answers,[ids.otherGroup]:'intruso'}),/nao foi publicado/);
+    await reject(()=>submit({...answers,[ids.number]:'42'}),/numero/);
+    await reject(()=>submit({...answers,[ids.date]:'2026-02-31'}),/Data invalida/);
+    await reject(()=>submit({...answers,[ids.select]:'Aprovado'}),/opcao valida/);
+    await reject(()=>submit({...answers,[ids.text]:' '}),/Preencha/);
+    await reject(()=>submit({...answers,[ids.period]:{start:'2026-10-14',end:'2026-10-13'}}),/fim deve/);
+    await reject(()=>submit({...answers,[ids.email]:'sem-email'}),/E-mail invalido/);
+    await reject(()=>submit({...answers,[ids.link]:'javascript:alert(1)'}),/HTTP/);
+    const countBefore=Number((await db.query('select count(*) n from atlas_v2_items')).rows[0].n);
+    assert.equal(countBefore,0);checks++;
+    const request=randomUUID(); const result=await submit(answers,request); assert.equal(result.success,true);
+    const repeat=await submit(answers,request);assert.equal(repeat.receipt,result.receipt);checks++;
+    await reject(()=>submit({...answers,__name__:'Diferente'},request),/nova resposta/);
+    const items=(await db.query('select * from atlas_v2_items')).rows;
+    assert.equal(items.length,1);assert.equal(items[0].nome,'Campina Grande');assert.equal(items[0].board_id,ids.board);assert.equal(items[0].group_id,ids.group);assert.equal(items[0].ordem,0);assert.equal(items[0].criado_por,null);checks++;
+    assert.equal((await db.query('select value_count from forms_test_events')).rows[0].value_count,8);checks++;
+    const counts=await rpc('atlas_v2_public_form_counts',{p_board_id:ids.board},'authenticated',ids.manager);
+    assert.equal(counts[form.id],1);checks++;
+    assert.deepEqual(await rpc('atlas_v2_public_form_counts',{p_board_id:ids.board},'authenticated',ids.reader),{});checks++;
+    // Revoking manager access also disables the anonymous link immediately.
+    await db.query('insert into atlas_v2_access_rules(id,user_id,board_id,nivel) values($1,$2,$3,$4)',[randomUUID(),ids.manager,ids.board,'viewer']);
+    await reject(()=>submit(),/indisponivel/);
+    await db.query('delete from atlas_v2_access_rules where user_id=$1',[ids.manager]);
+    await db.query("update atlas_profiles set status='bloqueado' where id=$1",[ids.manager]);
+    await reject(()=>submit(),/indisponivel/);
+    await db.query("update atlas_profiles set status='ativo' where id=$1",[ids.manager]);
+    await save({expiresAt:'2020-01-01T00:00:00Z'},form.id);
+    await reject(()=>submit(),/indisponivel/);
+    await save({expiresAt:null},form.id);
+    const rotated=await rpc('atlas_v2_close_public_form',{p_form_id:form.id,p_delete:false,p_rotate:true},'authenticated',ids.manager);
+    assert.notEqual(rotated.token,form.token);checks++;
+    await reject(()=>submit(),/indisponivel/);
+    await rpc('atlas_v2_close_public_form',{p_form_id:form.id,p_delete:true,p_rotate:false},'authenticated',ids.manager);
+    await reject(()=>rpc('atlas_v2_public_form_definition',{p_token:rotated.token}),/indisponivel/);
+    assert.equal(Number((await db.query('select count(*) n from atlas_v2_items')).rows[0].n),1);checks++;
+    const limited=await save();await db.query('update atlas_v2_public_forms set hourly_limit=1 where id=$1',[limited.id]);
+    const submitLimited=()=>rpc('atlas_v2_submit_public_form',{p_token:limited.token,p_request_id:randomUUID(),p_answers:answers});
+    await submitLimited();await reject(submitLimited,/limite temporario/);
+    console.log(`PASS public forms PostgreSQL: ${checks} checks; migration applied twice, real permissions and table definitions`);
+  }finally{await db.close();}
+})().catch(error=>{console.error(error.message,error.code||'',error.where||'',error.position||'');process.exitCode=1;});

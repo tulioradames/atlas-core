@@ -1,7 +1,7 @@
 (function atlasV2Official() {
   'use strict';
 
-window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
+window.__ATLAS_VERSION__ = '2.4.5 OFICIAL';
 
   // ---------------------------------------------------------------------------
   // VERSAO DOS ARQUIVOS WEB - fonte unica.
@@ -15,13 +15,27 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
   // pre-cache. tests/static-audit.cjs falha se index.html e ATLAS_BUILD
   // divergirem, que era a causa dos casos de "publiquei mas continua igual".
   // ---------------------------------------------------------------------------
-  const ATLAS_BUILD = '2.5.0-filtro-coluna';
+  const ATLAS_BUILD = '2.4.5-formularios-oficial-r1';
   window.__ATLAS_BUILD__ = ATLAS_BUILD;
 
   // Changelog exibido na tela de Inicio. Toda alteracao funcional ou correcao
   // publicada precisa ser registrada aqui antes do deploy.
   // Ordem: mais recente primeiro.
   const CHANGELOG = [
+    {
+      version: 'V2.4.5 Oficial',
+      date: '2026-10-13',
+      notes: [
+        'Formularios: crie perguntas a partir das colunas do quadro, escolha o setor de destino e personalize titulo, descricoes e campos obrigatorios.',
+        'Formularios: compartilhe um link no servidor proprio; qualquer pessoa com o link pode responder sem ter conta no Atlas.',
+        'Formularios: cada resposta cria um elemento com seus campos preenchidos, mantendo a ordem do setor e o historico da origem.',
+        'Formularios: visualize a previa, copie o link, limite o recebimento por data, pause o formulario ou gere um novo link.',
+        'Formularios: as respostas sao validadas no servidor e um reenvio da mesma tentativa nao cria registros duplicados.',
+        'Formularios: a publicacao respeita os perfis e permissoes atuais do servidor, inclusive Root e Gestor, sem alterar os usuarios existentes.',
+        'Formularios: novos registros chegam em tempo real aos quadros que estiverem abertos.',
+        'Formularios: salvar rascunho e publicar agora sao acoes distintas; a situacao do link aparece no topo e links pausados nao podem ser abertos ou copiados pelos botoes.',
+      ],
+    },
     {
       version: 'V2.4.4 Oficial',
       date: '2026-09-30',
@@ -187,6 +201,11 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
 
   const CHANGELOG_TOPICS = [
     {
+      id: 'forms', title: 'Formularios publicos', icon: 'clipboard-list',
+      summary: 'Recebimento de respostas pelo link, diretamente nos quadros.',
+      prefixes: ['Formularios:'],
+    },
+    {
       id: 'files',
       title: 'Arquivos e versões',
       icon: 'files',
@@ -256,6 +275,7 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
   const GANTT_SCALE_KEY = 'atlas-v2-gantt-scale';
   const GANTT_ZOOM_KEY = 'atlas-v2-gantt-zoom';
   const FIELD_MODE_KEY = 'atlas-v2-field-mode';
+  const SAVED_SEARCHES_KEY = 'atlas-v2-saved-searches';
   const BOOTSTRAP_CACHE_DB = 'atlas-v2-bootstrap-cache';
   const BOOTSTRAP_CACHE_STORE = 'snapshots';
   // v2 acrescentou o store de previas de imagem. Mesmo banco, outro store: a
@@ -280,28 +300,16 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
     shareable: { label: 'Compartilhável', icon: 'users' },
   };
 
-  // V2.5.0: os papeis espelham exatamente a funcao atlas_v2_role_allows do banco.
-  // Se divergirem, a tela promete o que o servidor recusa - foi assim que
-  // nasceram varias telas que "salvavam" e nao salvavam.
   const ROLE_DEFINITIONS = {
-    root:      { label: 'Root',      description: 'Controle total, inclusive de usuários. Um só no Atlas.', permissions: ['view', 'create', 'edit', 'delete', 'share', 'configure', 'admin'] },
-    gestor:    { label: 'Gestor',    description: 'Cria, edita, exclui, compartilha e configura.', permissions: ['view', 'create', 'edit', 'delete', 'share', 'configure'] },
-    analista:  { label: 'Analista',  description: 'Cria, edita e exclui registros.', permissions: ['view', 'create', 'edit', 'delete'] },
-    visitante: { label: 'Visitante', description: 'Consulta sem alterar nada.', permissions: ['view'] },
+    admin: { label: 'Admin', description: 'Controle total do Atlas.', permissions: ['view', 'create', 'edit', 'delete', 'share', 'configure', 'admin'] },
+    supervisor: { label: 'Supervisor', description: 'Gestão operacional e exclusão de registros.', permissions: ['view', 'create', 'edit', 'delete', 'share'] },
+    operador: { label: 'Operador', description: 'Operação diária, criação e edição.', permissions: ['view', 'create', 'edit'] },
+    visualizador: { label: 'Visualizador', description: 'Consulta sem alteração de dados.', permissions: ['view'] },
+    root: { label: 'Root', description: 'Controle total do Atlas.', permissions: ['view', 'create', 'edit', 'delete', 'share', 'configure', 'admin'] },
+    gestor: { label: 'Gestor', description: 'Gestão e configuração operacional.', permissions: ['view', 'create', 'edit', 'delete', 'share', 'configure'] },
+    analista: { label: 'Analista', description: 'Operação e organização dos registros.', permissions: ['view', 'create', 'edit', 'delete'] },
+    visitante: { label: 'Visitante', description: 'Consulta sem alteração de dados.', permissions: ['view'] },
   };
-
-  const PAPEL_PADRAO = 'visitante';
-
-  function isRootUser(user) {
-    return user?.role === 'root';
-  }
-
-  // "Enxerga todos os quadros" e SEPARADO do papel: no banco e a coluna
-  // ve_todos_os_quadros. Enxergar nao da poder - as capacidades continuam
-  // vindo do papel (ver atlas_v2_can_board apos a V2.5.0).
-  function enxergaTodosOsQuadros(user) {
-    return isRootUser(user) || Boolean(user?.seesAllBoards);
-  }
 
   const ACCESS_LEVELS = {
     viewer: { label: 'Visualização', permissions: ['view'] },
@@ -520,16 +528,10 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
     selectedItems: new Set(),
     boardSearch: '',
     navSearch: '',
-    // Filtro por coluna (V2.5.0): { [escopo]: { [columnId]: regra } }. Escopo e
-    // o grupo da visao Tabela ou o setor da obra - cada cabecalho manda no seu.
-    // Nada disso vai para o banco: filtrar e um jeito de olhar.
-    columnFilters: {},
-    columnSort: {},
-    columnMenu: null,
+    searchFilters: {},
+    savedSearches: [],
     workFilter: '',
     expandedWorkSectors: new Set(),
-    collapsedWorkStatus: new Set(),
-    seededWorkStatusBoards: new Set(),
     ganttZoom: Math.min(5, Math.max(1, Number(localStorage.getItem(GANTT_ZOOM_KEY)) || 1)),
     ganttScale: ['days', 'weeks', 'months'].includes(localStorage.getItem(GANTT_SCALE_KEY)) ? localStorage.getItem(GANTT_SCALE_KEY) : 'weeks',
     drag: null,
@@ -1048,9 +1050,9 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
       activeBoardId: 'board-rede-status',
       currentUserId: 'user-admin',
       users: [
-        { id: 'user-admin', name: 'Túlio Radamés', email: 'admin@atlas.local', role: 'root', status: 'active', title: 'Administrador do sistema', seesAllBoards: true, lastActivity: new Date().toISOString() },
-        { id: 'user-supervisor', name: 'Equipe de Gestão', email: 'gestor@atlas.local', role: 'gestor', status: 'active', title: 'Gestão operacional', lastActivity: '2026-07-19T16:30:00.000Z' },
-        { id: 'user-pending', name: 'Novo acesso', email: 'novo.usuario@atlas.local', role: 'visitante', status: 'pending', title: '', lastActivity: null },
+        { id: 'user-admin', name: 'Túlio Radamés', email: 'admin@atlas.local', role: 'admin', status: 'active', title: 'Administrador do sistema', lastActivity: new Date().toISOString() },
+        { id: 'user-supervisor', name: 'Equipe Supervisora', email: 'supervisor@atlas.local', role: 'supervisor', status: 'active', title: 'Supervisão operacional', lastActivity: '2026-07-19T16:30:00.000Z' },
+        { id: 'user-pending', name: 'Novo acesso', email: 'novo.usuario@atlas.local', role: 'visualizador', status: 'pending', title: '', lastActivity: null },
       ],
       accessRules: [],
       boardMembers: [],
@@ -2323,7 +2325,7 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
       runtime.realtimeRefreshFull = runtime.realtimeRefreshFull || ['atlas_v2_field_templates', 'atlas_v2_integrations'].includes(table);
     }
     if (table === 'atlas_v2_notifications') refreshNotifications();
-    if (table === 'atlas_profiles') {
+    if (table === 'atlas_profiles' && ['admin', 'root'].includes(runtime.authProfile?.role)) {
       syncAuthUsersFromSupabase({ renderAfter: false, notify: false });
     }
     clearTimeout(runtime.realtimeRefreshTimer);
@@ -3462,7 +3464,7 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
         return true;
       });
     });
-    if (runtime.authProfile?.role !== 'root') {
+    if (runtime.authProfile?.role !== 'admin') {
       ['atlas_v2_storage_connections', 'atlas_v2_access_rules', 'atlas_v2_board_members', 'atlas_v2_field_templates'].forEach((table) => {
         changes[table] = [];
         removals[table] = [];
@@ -3795,7 +3797,7 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
   function chatMessageMarkup(entry) {
     const autor = chatUserName(entry.autorId);
     const proprio = entry.autorId === runtime.authSession?.user?.id;
-    const podeApagar = proprio || runtime.authProfile?.role === 'root';
+    const podeApagar = proprio || ['admin', 'root'].includes(runtime.authProfile?.role);
     const texto = chatTextMarkup(entry);
     const anexos = (entry.anexos || []).map((anexo) => `<button class="atlas-v2-chat-file" type="button" data-action="chat-open-file" data-path="${attr(anexo.path)}" title="Abrir ${attr(anexo.nome)}"><i data-lucide="paperclip"></i>${escapeHtml(anexo.nome || 'arquivo')}</button>`).join('');
     // V2.4.2: apagar mensagem era imediato e definitivo (nao vai para a lixeira,
@@ -3917,7 +3919,7 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
     const normalize = (value) => String(value || '').toLocaleLowerCase('pt-BR').normalize('NFD').replace(/[\u0300-\u036f]/g, '');
     const query = normalize(context.query);
     const users = chatUsers().filter((user) => chatMentionAliases(user).some((alias) => normalize(alias).includes(query))).slice(0, 6);
-    root.innerHTML = users.map((user) => `<button type="button" data-action="chat-mention-select" data-user-id="${attr(user.id)}">${avatarMarkup(user)}<span><strong>${escapeHtml(user.name || user.email)}</strong><small>${escapeHtml(user.email || '')}</small></span></button>`).join('') || '<p>Nenhum usuário com acesso a este elemento.</p>';
+    root.innerHTML = users.map((user) => `<button type="button" data-action="chat-mention-select" data-user-id="${attr(user.id)}"><span class="atlas-v2-avatar">${escapeHtml((user.name || user.email || 'U').split(/\s+/).slice(0, 2).map((part) => part[0]).join('').toUpperCase())}</span><span><strong>${escapeHtml(user.name || user.email)}</strong><small>${escapeHtml(user.email || '')}</small></span></button>`).join('') || '<p>Nenhum usuário com acesso a este elemento.</p>';
     root.hidden = false;
   }
 
@@ -4166,7 +4168,7 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
   }
 
   function roleLabel(role) {
-    return ROLE_DEFINITIONS[role]?.label || ROLE_DEFINITIONS[PAPEL_PADRAO].label;
+    return ROLE_DEFINITIONS[role]?.label || ROLE_DEFINITIONS.visualizador.label;
   }
 
   function scopeMatches(rule, context) {
@@ -4201,15 +4203,8 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
   function hasPermission(permission, context = findBoard()) {
     const user = currentUser();
     if (!user || user.status !== 'active') return false;
-    // Espelha o banco depois da V2.5.0: o Root passa direto; quem enxerga todos
-    // os quadros pula o ESCOPO, mas continua limitado ao que o papel permite.
-    // Antes daqui sair um `return true` para qualquer capacidade, um Visitante
-    // com essa permissao ganhava excluir em tudo.
-    if (isRootUser(user)) return true;
+    if (['admin', 'root'].includes(user.role)) return true;
     if (permission === 'admin') return false;
-    if (enxergaTodosOsQuadros(user)) {
-      return (ROLE_DEFINITIONS[user.role]?.permissions || []).includes(permission);
-    }
 
     const rule = permissionRule(user.id, context);
     if (rule) return (ACCESS_LEVELS[rule.level]?.permissions || []).includes(permission);
@@ -4218,7 +4213,7 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
     if (member) return (ACCESS_LEVELS[membershipLevel(member.role)]?.permissions || []).includes(permission);
 
     if (context?.board && context.board.access !== 'main') return false;
-    return (ROLE_DEFINITIONS[user.role]?.permissions || ROLE_DEFINITIONS[PAPEL_PADRAO].permissions).includes(permission);
+    return (ROLE_DEFINITIONS[user.role]?.permissions || ROLE_DEFINITIONS.visualizador.permissions).includes(permission);
   }
 
   function requirePermission(permission, context = findBoard(), label = 'executar esta ação') {
@@ -4233,79 +4228,16 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
   function renderIdentity() {
     const user = currentUser();
     if (!user) return;
+    const initials = user.name.split(/\s+/).filter(Boolean).slice(0, 2).map((entry) => entry[0]).join('').toUpperCase() || 'AT';
     const avatar = document.getElementById('atlas-v2-user-avatar');
     const name = document.getElementById('atlas-v2-user-name');
     const role = document.getElementById('atlas-v2-user-role');
-    if (avatar) {
-      const url = user.photoPath ? fotoUrl(user.photoPath) : '';
-      if (url) {
-        avatar.classList.add('tem-foto');
-        avatar.innerHTML = `<img src="${attr(url)}" alt="${attr(user.name || 'Foto')}">`;
-      } else {
-        avatar.classList.remove('tem-foto');
-        avatar.textContent = iniciaisDe(user.name);
-      }
-    }
+    if (avatar) avatar.textContent = initials;
     if (name) name.textContent = user.name || user.email;
     if (role) role.textContent = roleLabel(user.role);
     const footerVersion = document.getElementById('atlas-v2-footer-version');
     if (footerVersion) footerVersion.textContent = window.ATNX_CONFIG?.V2_VERSION || ATLAS_BUILD;
     renderNotificationDot();
-  }
-
-  // ---------------------------------------------------------------------------
-  // Foto de perfil
-  // ---------------------------------------------------------------------------
-  // O bucket e PRIVADO, como os anexos do chat: foto de funcionario e dado
-  // pessoal e nao vai ficar acessivel a quem tiver o endereco. O preco e este
-  // cache: a foto aparece no cabecalho, nas listas e nas mencoes, e assinar uma
-  // URL a cada desenho seria uma chamada de rede por avatar por render.
-  //
-  // Guardo a URL e o instante em que ela expira, com margem de 60s. Quem pede
-  // uma foto ainda nao assinada recebe as iniciais agora e a foto no proximo
-  // desenho - preferivel a segurar a tela esperando rede.
-  const fotoCache = new Map();   // caminho -> { url, expiraEm }
-  const fotoPedindo = new Set();
-  const FOTO_VALIDADE = 3600;    // segundos pedidos ao Supabase
-  const FOTO_MARGEM = 60000;     // ms de folga antes de considerar vencida
-
-  function fotoUrl(caminho) {
-    if (!caminho || !runtime.authClient) return '';
-    const guardada = fotoCache.get(caminho);
-    if (guardada && guardada.expiraEm - FOTO_MARGEM > Date.now()) return guardada.url;
-    if (!fotoPedindo.has(caminho)) {
-      fotoPedindo.add(caminho);
-      runtime.authClient.storage.from('atlas-avatares').createSignedUrl(caminho, FOTO_VALIDADE)
-        .then(({ data, error }) => {
-          if (error || !data?.signedUrl) throw error || new Error('sem URL');
-          fotoCache.set(caminho, { url: data.signedUrl, expiraEm: Date.now() + FOTO_VALIDADE * 1000 });
-          renderSoon();
-        })
-        .catch((error) => {
-          // Falhar aqui nao pode quebrar a tela: o avatar volta a ser as
-          // iniciais, que e exatamente o estado de quem nao tem foto.
-          console.error('Atlas V2: nao consegui assinar a foto de perfil.', error);
-          fotoCache.set(caminho, { url: '', expiraEm: Date.now() + 30000 });
-        })
-        .finally(() => fotoPedindo.delete(caminho));
-    }
-    return guardada?.url || '';
-  }
-
-  function iniciaisDe(nome) {
-    return String(nome || '').split(/\s+/).filter(Boolean).slice(0, 2)
-      .map((parte) => parte[0]).join('').toUpperCase() || 'AT';
-  }
-
-  // Um unico lugar que decide foto-ou-iniciais. Antes da V2.5.0 as iniciais
-  // eram remontadas em cinco pontos diferentes, cada um com sua variacao.
-  function avatarMarkup(user, extraClasse = '') {
-    const classe = `atlas-v2-avatar${extraClasse ? ' ' + extraClasse : ''}`;
-    const url = user?.photoPath ? fotoUrl(user.photoPath) : '';
-    if (url) {
-      return `<span class="${classe} tem-foto"><img src="${attr(url)}" alt="${attr(user.name || 'Foto')}" loading="lazy"></span>`;
-    }
-    return `<span class="${classe}">${escapeHtml(iniciaisDe(user?.name))}</span>`;
   }
 
   function refreshIcons(root = document) {
@@ -4321,11 +4253,12 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
   }
 
   function authVersion() {
-    return window.ATNX_CONFIG?.V2_VERSION || 'V2.4.4 Oficial';
+    return window.ATNX_CONFIG?.V2_VERSION || 'V2.4.5 Oficial';
   }
 
   function authFeatureList() {
     return [
+      ['clipboard-list', 'Formularios por link', 'Perguntas configuraveis e respostas que viram registros no quadro.'],
       ['layout-dashboard', 'Painéis configuráveis', 'Indicadores, totais, médias e distribuições criados pela própria equipe.'],
       ['calendar-days', 'Calendário e SLA', 'Prazos organizados por mês, alertas preventivos e registros vencidos.'],
       ['sigma', 'Fórmulas operacionais', 'Colunas calculadas automaticamente a partir dos dados do quadro.'],
@@ -4348,7 +4281,7 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
       <div class="atlas-v2-auth-intro-copy">
         <span class="atlas-v2-auth-kicker">SMART FIELD MANAGEMENT</span>
         <h1>Controle operacional.<br><em>Do seu jeito.</em></h1>
-        <p>A nova geração do Atlas transforma núcleos, módulos e rotinas em uma estrutura única, configurável e segura.</p>
+        <p>A nova geração do Atlas transforma áreas, módulos e rotinas em uma estrutura única, configurável e segura.</p>
       </div>
       <div class="atlas-v2-auth-feature-list">
         ${authFeatureList().map(([icon, title, copy]) => `<article><i data-lucide="${icon}"></i><span><strong>${title}</strong><small>${copy}</small></span></article>`).join('')}
@@ -4384,7 +4317,7 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
         <span class="atlas-v2-auth-state-icon"><i data-lucide="${pending ? 'clock-3' : 'shield-x'}"></i></span>
         <span class="atlas-v2-auth-kicker">${pending ? 'SOLICITAÇÃO RECEBIDA' : 'ACESSO BLOQUEADO'}</span>
         <h2>${pending ? 'Aguardando liberação' : 'Seu acesso está bloqueado'}</h2>
-        <p>${pending ? 'Seu cadastro está pronto. Um administrador precisa definir seu perfil e liberar os núcleos autorizados.' : 'Um administrador suspendeu este perfil. Seus dados permanecem protegidos.'}</p>
+        <p>${pending ? 'Seu cadastro está pronto. Um administrador precisa definir seu perfil e liberar as áreas autorizadas.' : 'Um administrador suspendeu este perfil. Seus dados permanecem protegidos.'}</p>
         <div class="atlas-v2-auth-account"><i data-lucide="user-round"></i><span><small>Conta conectada</small><strong>${escapeHtml(runtime.authProfile?.email || runtime.authSession?.user?.email || '')}</strong></span></div>
         ${authNotice(message, pending ? 'info' : 'error')}
         <button class="atlas-v2-auth-secondary" type="button" data-auth-action="logout"><i data-lucide="log-out"></i>Sair desta conta</button>
@@ -4403,44 +4336,14 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
       </section>`;
     }
 
-    // Recuperacao e cadastro usam CODIGO digitado, nao link clicado. O link
-    // depende de o endereco estar na lista de permitidos do GoTrue e de o
-    // SITE_URL apontar para o lugar certo - duas configuracoes de servidor que
-    // quebram em silencio e so aparecem na hora em que alguem perdeu a senha.
-    // O codigo nao depende de nenhuma delas, e funciona de outro aparelho.
-    if (mode === 'recovery-code') {
-      return `<section class="atlas-v2-auth-panel">
+    if (mode === 'recovery-sent') {
+      return `<section class="atlas-v2-auth-panel atlas-v2-auth-state-panel is-success">
+        <span class="atlas-v2-auth-state-icon"><i data-lucide="mail-check"></i></span>
         <span class="atlas-v2-auth-kicker">RECUPERAÇÃO</span>
-        <h2>Código enviado</h2>
-        <p>Enviamos um código de 6 dígitos para <strong>${escapeHtml(runtime.authPendente?.email || 'seu e-mail')}</strong>. Informe o código e escolha a nova senha.</p>
-        ${authNotice(message, message ? 'error' : 'info')}
-        <form id="atlas-v2-auth-recovery-code-form" class="atlas-v2-auth-form">
-          <label class="atlas-v2-auth-field"><span>Código</span><div><i data-lucide="shield-check"></i><input name="token" inputmode="numeric" autocomplete="one-time-code" required maxlength="10" placeholder="000000"></div></label>
-          ${authPasswordField('password', 'Nova senha', 'new-password')}
-          ${authPasswordField('passwordConfirm', 'Confirmar nova senha', 'new-password', 'Repita a nova senha')}
-          <button class="atlas-v2-auth-primary" type="submit"><i data-lucide="key-round"></i>Definir nova senha</button>
-        </form>
-        <div class="atlas-v2-auth-switch">
-          <span>Não chegou?</span>
-          <button type="button" data-auth-action="show-forgot">Pedir outro código</button>
-        </div>
-      </section>`;
-    }
-
-    if (mode === 'signup-code') {
-      return `<section class="atlas-v2-auth-panel">
-        <span class="atlas-v2-auth-kicker">CONFIRMAR E-MAIL</span>
-        <h2>Confirme seu e-mail</h2>
-        <p>Enviamos um código de 6 dígitos para <strong>${escapeHtml(runtime.authPendente?.email || 'seu e-mail')}</strong>. Depois de confirmar, seu cadastro vai para a fila de liberação de um administrador.</p>
-        ${authNotice(message, message ? 'error' : 'info')}
-        <form id="atlas-v2-auth-signup-code-form" class="atlas-v2-auth-form">
-          <label class="atlas-v2-auth-field"><span>Código</span><div><i data-lucide="shield-check"></i><input name="token" inputmode="numeric" autocomplete="one-time-code" required maxlength="10" placeholder="000000"></div></label>
-          <button class="atlas-v2-auth-primary" type="submit"><i data-lucide="check"></i>Confirmar e-mail</button>
-        </form>
-        <div class="atlas-v2-auth-switch">
-          <span>Já confirmou antes?</span>
-          <button type="button" data-auth-action="show-login">Entrar</button>
-        </div>
+        <h2>Verifique seu e-mail</h2>
+        <p>Enviamos o link seguro para redefinir sua senha.</p>
+        ${authNotice(message, 'success')}
+        <button class="atlas-v2-auth-primary" type="button" data-auth-action="show-login"><i data-lucide="arrow-left"></i>Voltar para entrar</button>
       </section>`;
     }
 
@@ -4449,7 +4352,7 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
         <span class="atlas-v2-auth-state-icon"><i data-lucide="user-round-check"></i></span>
         <span class="atlas-v2-auth-kicker">CADASTRO CRIADO</span>
         <h2>Solicitação registrada</h2>
-        <p>Seu cadastro aguarda somente a liberação de um administrador.</p>
+        <p>Seu cadastro aguarda somente a liberação de um administrador. Não é necessário confirmar o e-mail.</p>
         ${authNotice(message, 'success')}
         <button class="atlas-v2-auth-primary" type="button" data-auth-action="show-login"><i data-lucide="log-in"></i>Ir para o login</button>
       </section>`;
@@ -4474,14 +4377,14 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
     return `<section class="atlas-v2-auth-panel">
       <span class="atlas-v2-auth-kicker">${signup ? 'NOVO ACESSO' : forgot ? 'RECUPERAR CONTA' : 'ACESSO SEGURO'}</span>
       <h2>${signup ? 'Solicitar acesso' : forgot ? 'Recuperar senha' : 'Entrar no Atlas'}</h2>
-      <p>${signup ? 'Você confirma o e-mail por código e o cadastro fica aguardando a liberação de um administrador.' : forgot ? 'Informe seu e-mail para receber um código de redefinição.' : 'Use suas credenciais corporativas para continuar.'}</p>
+      <p>${signup ? 'O cadastro começa como Visualizador e depende da liberação de um administrador.' : forgot ? 'Informe seu e-mail para receber o link de redefinição.' : 'Use suas credenciais corporativas para continuar.'}</p>
       ${authNotice(message, 'error')}
       <form id="atlas-v2-auth-${signup ? 'signup' : forgot ? 'forgot' : 'login'}-form" class="atlas-v2-auth-form">
         ${signup ? '<label class="atlas-v2-auth-field"><span>Nome</span><div><i data-lucide="user-round"></i><input name="name" autocomplete="name" required maxlength="80" placeholder="Seu nome completo"></div></label>' : ''}
         <label class="atlas-v2-auth-field"><span>E-mail</span><div><i data-lucide="mail"></i><input name="email" type="email" autocomplete="email" required placeholder="nome@empresa.com"></div></label>
         ${forgot ? '' : authPasswordField('password', 'Senha', signup ? 'new-password' : 'current-password')}
         ${!signup && !forgot ? '<button class="atlas-v2-auth-link" type="button" data-auth-action="show-forgot">Esqueci minha senha</button>' : ''}
-        <button class="atlas-v2-auth-primary" type="submit"><i data-lucide="${signup ? 'user-plus' : forgot ? 'send' : 'log-in'}"></i>${signup ? 'Criar solicitação' : forgot ? 'Enviar código' : 'Entrar'}</button>
+        <button class="atlas-v2-auth-primary" type="submit"><i data-lucide="${signup ? 'user-plus' : forgot ? 'send' : 'log-in'}"></i>${signup ? 'Criar solicitação' : forgot ? 'Enviar link seguro' : 'Entrar'}</button>
       </form>
       <div class="atlas-v2-auth-switch">
         <span>${signup ? 'Já possui acesso?' : forgot ? 'Lembrou sua senha?' : 'Primeiro acesso?'}</span>
@@ -4530,26 +4433,8 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
     const message = String(error?.message || error || '').trim();
     const normalized = message.toLowerCase();
     if (normalized.includes('invalid login credentials')) return 'E-mail ou senha incorretos.';
-    // Com a confirmacao de e-mail ligada, este erro significa que a pessoa
-    // ainda NAO confirmou - e nao que o administrador nao liberou. A traducao
-    // antiga mandava ela esperar um administrador que nunca veria o cadastro,
-    // porque sem confirmacao o perfil nem chega na Central de Administracao.
-    if (normalized.includes('email not confirmed')) {
-      return 'Seu e-mail ainda não foi confirmado. Procure a mensagem com o código de 6 dígitos — '
-        + 'ou use "Solicitar cadastro" de novo com o mesmo e-mail para receber outro.';
-    }
+    if (normalized.includes('email not confirmed')) return 'Seu acesso ainda aguarda liberação do administrador.';
     if (normalized.includes('user already registered')) return 'Este e-mail já possui cadastro.';
-    // Sem SMTP configurado o servidor devolve isto. Sem traducao, a pessoa
-    // procura o defeito no proprio e-mail.
-    if (normalized.includes('error sending') || normalized.includes('unexpected_failure')) {
-      return 'O servidor não conseguiu enviar o e-mail: este ambiente ainda não tem servidor de e-mail configurado. Fale com o administrador.';
-    }
-    if (normalized.includes('otp_expired') || normalized.includes('token has expired') || normalized.includes('expired')) {
-      return 'O código venceu. Peça um código novo.';
-    }
-    if (normalized.includes('invalid') && (normalized.includes('token') || normalized.includes('otp'))) {
-      return 'Código incorreto. Confira os 6 dígitos da mensagem.';
-    }
     if (normalized.includes('password should be') || normalized.includes('weak password')) return 'A senha precisa ter pelo menos 8 caracteres e não pode estar em listas de senhas vazadas.';
     if (normalized.includes('rate limit')) return 'Muitas tentativas. Aguarde alguns minutos e tente novamente.';
     if (normalized.includes('failed to fetch') || normalized.includes('network')) return 'Não foi possível alcançar o Supabase. A configuração foi carregada, mas a conexão de rede falhou.';
@@ -4561,13 +4446,9 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
       id: profile.id,
       name: profile.nome || profile.email || authUser?.email || 'Usuário Atlas',
       email: profile.email || authUser?.email || '',
-      role: ROLE_DEFINITIONS[profile.role] ? profile.role : PAPEL_PADRAO,
+      role: ROLE_DEFINITIONS[profile.role] ? profile.role : 'visualizador',
       status: PROFILE_STATUS_FROM_DATABASE[profile.status] || 'pending',
       title: profile.cargo || '',
-      sector: profile.setor || '',
-      phone: profile.telefone || '',
-      photoPath: profile.foto_path || '',
-      seesAllBoards: Boolean(profile.ve_todos_os_quadros),
       lastActivity: profile.last_sign_in_at || profile.updated_at || null,
     };
   }
@@ -4753,7 +4634,7 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
         render();
         scheduleLocalBackupCompaction();
         refreshRemoteApplication(profile, authUser, { full: false, silent: true });
-        syncAuthUsersFromSupabase({ renderAfter: false, notify: false });
+        if (['admin', 'root'].includes(profile.role)) syncAuthUsersFromSupabase({ renderAfter: false, notify: false });
         startAutomationMonitor();
         refreshNotifications();
         startRealtime();
@@ -4777,7 +4658,7 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
     scheduleLocalBackupCompaction();
     if (profile && !runtime.remoteMode) toast('A estrutura V2 ainda não foi carregada do Supabase. Execute o SQL completo da versão.', true);
     if (profile && runtime.remoteMode) hydrateDeferredRemoteData();
-    if (profile) syncAuthUsersFromSupabase({ renderAfter: false });
+    if (['admin', 'root'].includes(profile?.role)) syncAuthUsersFromSupabase({ renderAfter: false });
     if (profile) { startAutomationMonitor(); refreshNotifications(); startRealtime(); }
   }
 
@@ -4823,8 +4704,7 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
   }
 
   async function syncAuthUsersFromSupabase(options = {}) {
-    if (!runtime.authClient || runtime.authUsersLoading) return;
-    if (runtime.authProfile?.status !== 'ativo') return;
+    if (!runtime.authClient || runtime.authUsersLoading || runtime.authProfile?.role !== 'admin') return;
     runtime.authUsersLoading = true;
     try {
       const { data, error } = await runtime.authClient.from('atlas_profiles').select('*').order('created_at', { ascending: true });
@@ -4870,65 +4750,18 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
       options,
     });
     if (error) return renderAuth('signup', authErrorMessage(error));
-    // Com a confirmacao de e-mail ligada no servidor, o signUp NAO devolve
-    // sessao: a conta so existe de verdade depois do codigo. Se o servidor
-    // estiver com autoconfirmacao ligada, a sessao vem aqui e o codigo nao e
-    // pedido - os dois ambientes continuam funcionando sem ramificar a tela.
     if (data?.session) return applyAuthSession(data.session);
-    runtime.authPendente = { email: String(form.elements.email.value || '').trim() };
-    renderAuth('signup-code');
-  }
-
-  async function submitAuthSignupCode(form) {
-    const email = runtime.authPendente?.email || '';
-    const token = String(form.elements.token.value || '').replace(/\D/g, '');
-    if (!email) return renderAuth('signup', 'Comece o cadastro novamente.');
-    if (!token) return renderAuth('signup-code', 'Informe o código que chegou no e-mail.');
-    renderAuth('loading');
-    const { data, error } = await runtime.authClient.auth.verifyOtp({ email, token, type: 'signup' });
-    if (error) return renderAuth('signup-code', authErrorMessage(error));
-    runtime.authPendente = null;
-    // Confirmado, a pessoa ja tem sessao - mas o perfil nasce 'pendente' e a
-    // tela de espera por liberacao e quem assume daqui.
-    if (data?.session) return applyAuthSession(data.session);
-    renderAuth('signup-sent', 'E-mail confirmado.');
+    renderAuth('signup-sent', 'O administrador verá sua solicitação na Central de Administração.');
   }
 
   async function submitAuthForgot(form) {
     renderAuth('loading');
-    const email = String(form.elements.email.value || '').trim();
-    // Sem redirectTo de proposito: o codigo nao usa link, e passar um endereco
-    // que nao esteja na lista de permitidos do GoTrue faz o envio falhar.
-    const { error } = await runtime.authClient.auth.resetPasswordForEmail(email);
+    const payload = {};
+    const redirectTo = authRedirectUrl();
+    if (redirectTo) payload.redirectTo = redirectTo;
+    const { error } = await runtime.authClient.auth.resetPasswordForEmail(String(form.elements.email.value || '').trim(), payload);
     if (error) return renderAuth('forgot', authErrorMessage(error));
-    runtime.authPendente = { email };
-    renderAuth('recovery-code');
-  }
-
-  async function submitAuthRecoveryCode(form) {
-    const email = runtime.authPendente?.email || '';
-    const token = String(form.elements.token.value || '').replace(/\D/g, '');
-    const password = String(form.elements.password.value || '');
-    const confirmation = String(form.elements.passwordConfirm.value || '');
-    if (!email) return renderAuth('forgot', 'Peça o código novamente.');
-    if (!token) return renderAuth('recovery-code', 'Informe o código que chegou no e-mail.');
-    if (password !== confirmation) return renderAuth('recovery-code', 'As duas senhas precisam ser iguais.');
-    renderAuth('loading');
-
-    // O codigo abre uma sessao temporaria; e ela que autoriza trocar a senha.
-    const { error: erroCodigo } = await runtime.authClient.auth.verifyOtp({ email, token, type: 'recovery' });
-    if (erroCodigo) return renderAuth('recovery-code', authErrorMessage(erroCodigo));
-
-    const { error: erroSenha } = await runtime.authClient.auth.updateUser({ password });
-    if (erroSenha) {
-      // A sessao de recuperacao ja foi gasta: continuar nela com a senha antiga
-      // deixaria a pessoa dentro do Atlas achando que trocou. Melhor sair.
-      await runtime.authClient.auth.signOut();
-      return renderAuth('forgot', authErrorMessage(erroSenha));
-    }
-    runtime.authPendente = null;
-    await runtime.authClient.auth.signOut();
-    renderAuth('login', 'Senha atualizada. Entre com a nova senha.');
+    renderAuth('recovery-sent', 'O link será válido somente durante o período definido no Supabase.');
   }
 
   async function submitAuthReset(form) {
@@ -4947,9 +4780,7 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
     const handlers = {
       'atlas-v2-auth-login-form': submitAuthLogin,
       'atlas-v2-auth-signup-form': submitAuthSignup,
-      'atlas-v2-auth-signup-code-form': submitAuthSignupCode,
       'atlas-v2-auth-forgot-form': submitAuthForgot,
-      'atlas-v2-auth-recovery-code-form': submitAuthRecoveryCode,
       'atlas-v2-auth-reset-form': submitAuthReset,
     };
     if (!handlers[form.id]) return;
@@ -5110,7 +4941,7 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
     }
     if (matchedWorkspace) {
       matchedWorkspace.storageConnectionId = connection.id;
-      return `núcleo ${matchedWorkspace.name}`;
+      return `área ${matchedWorkspace.name}`;
     }
     return '';
   }
@@ -5406,7 +5237,7 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
   function scopeOptions() {
     const options = [];
     runtime.data.workspaces.forEach((workspace) => {
-      options.push({ value: `workspace:${workspace.id}`, label: `Núcleo · ${workspace.name}` });
+      options.push({ value: `workspace:${workspace.id}`, label: `Área · ${workspace.name}` });
       workspace.modules.forEach((module) => {
         options.push({ value: `module:${module.id}`, label: `Módulo · ${module.name}` });
         module.boards.forEach((boardEntry) => {
@@ -5431,7 +5262,7 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
       const found = findItemContextById(scopeId);
       return found ? `${found.board.name} / ${found.found.item.name || 'Sem nome'}` : 'Obra removida';
     }
-    if (scopeType === 'workspace') return runtime.data.workspaces.find((entry) => entry.id === scopeId)?.name || 'Núcleo removido';
+    if (scopeType === 'workspace') return runtime.data.workspaces.find((entry) => entry.id === scopeId)?.name || 'Área removida';
     for (const workspace of runtime.data.workspaces) {
       const module = workspace.modules.find((entry) => entry.id === scopeId);
       if (scopeType === 'module' && module) return module.name;
@@ -5471,7 +5302,7 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
       <header class="atlas-v2-home-hero">
         <span class="atlas-v2-home-kicker">ATLAS</span>
         <h1>${escapeHtml(greeting)}, ${escapeHtml(firstName(user?.name))}</h1>
-        <p>Escolha um núcleo, módulo ou quadro no menu ao lado para começar a trabalhar.</p>
+        <p>Escolha uma área, módulo ou quadro no menu ao lado para começar a trabalhar.</p>
       </header>
       <div class="atlas-v2-home-grid">
         <section class="atlas-v2-home-card atlas-v2-home-version-card">
@@ -5575,12 +5406,12 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
       <div class="atlas-v2-admin-metrics">
         ${adminMetric('Usuários ativos', activeUsers, 'users', '#20d6f2')}
         ${adminMetric('Aguardando liberação', pendingUsers.length, 'user-round-check', '#c6ff32')}
-        ${adminMetric('Núcleos', runtime.data.workspaces.length, 'layout-grid', '#ffb020')}
+        ${adminMetric('Áreas de trabalho', runtime.data.workspaces.length, 'layout-grid', '#ffb020')}
         ${adminMetric('Quadros restritos', restricted, 'lock-keyhole', '#ff4f91')}
       </div>
       <div class="atlas-v2-admin-split">
         <section class="atlas-v2-admin-block"><header><div><span>ENTRADA</span><h3>Solicitações pendentes</h3></div><button type="button" data-action="admin-tab" data-admin-tab="users">Ver usuários</button></header>
-          <div class="atlas-v2-admin-list">${pendingUsers.length ? pendingUsers.map((user) => `<div>${avatarMarkup(user)}<span><strong>${escapeHtml(user.name)}</strong><small>${escapeHtml(user.email)}</small></span><button class="atlas-v2-button atlas-v2-button-primary" type="button" data-action="admin-approve-user" data-user-id="${attr(user.id)}">Liberar</button></div>`).join('') : '<p class="atlas-v2-admin-empty">Nenhum acesso aguardando liberação.</p>'}</div>
+          <div class="atlas-v2-admin-list">${pendingUsers.length ? pendingUsers.map((user) => `<div><span class="atlas-v2-avatar">${escapeHtml(user.name.slice(0, 2).toUpperCase())}</span><span><strong>${escapeHtml(user.name)}</strong><small>${escapeHtml(user.email)}</small></span><button class="atlas-v2-button atlas-v2-button-primary" type="button" data-action="admin-approve-user" data-user-id="${attr(user.id)}">Liberar</button></div>`).join('') : '<p class="atlas-v2-admin-empty">Nenhum acesso aguardando liberação.</p>'}</div>
         </section>
         <section class="atlas-v2-admin-block"><header><div><span>SEGURANÇA</span><h3>Estado do ambiente</h3></div><button type="button" data-action="admin-tab" data-admin-tab="system">Abrir sistema</button></header>
           <div class="atlas-v2-admin-health"><div><i data-lucide="database"></i><span><strong>Base operacional</strong><small>${runtime.remoteMode ? 'Quadros e registros sincronizados com o Supabase.' : 'Modo local; aplique o SQL completo para conectar a base.'}</small></span><b>${runtime.remoteMode ? 'ONLINE' : 'LOCAL'}</b></div><div><i data-lucide="workflow"></i><span><strong>Automações</strong><small>${(runtime.data.automations || []).filter((entry) => entry.active !== false).length} regra(s) ativa(s) nos quadros.</small></span><b>ATIVAS</b></div><div><i data-lucide="scroll-text"></i><span><strong>Auditoria</strong><small>${runtime.data.auditLog.length} atividade(s) registrada(s).</small></span><b>ATIVA</b></div></div>
@@ -5592,58 +5423,15 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
     return `<article class="atlas-v2-admin-metric" style="--metric-color:${color}"><span><i data-lucide="${icon}"></i></span><div><strong>${Number(value)}</strong><small>${escapeHtml(label)}</small></div></article>`;
   }
 
-  // A coluna "vê todos os quadros" existe porque, na V2.5.0, esse poder deixou
-  // de vir junto com o papel. O Root sempre tem e nao pode perder; para os
-  // demais e uma chave que o Root liga e desliga.
-  function enxergaTudoCelula(user) {
-    if (isRootUser(user)) {
-      return '<span class="atlas-v2-admin-flag is-fixo" title="O Root sempre enxerga todos os quadros."><i data-lucide="shield-check"></i>sempre</span>';
-    }
-    const ligado = Boolean(user.seesAllBoards);
-    const podeMexer = isRootUser(currentUser());
-    return `<label class="atlas-v2-admin-flag"><input type="checkbox" data-action="admin-user-ve-tudo" data-user-id="${attr(user.id)}" ${ligado ? 'checked' : ''} ${podeMexer ? '' : 'disabled'}><span>${ligado ? 'sim' : 'não'}</span></label>`;
-  }
-
-  async function definirEnxergaTudo(userId, valor) {
-    const user = runtime.data.users.find((entry) => entry.id === userId);
-    if (!user) return;
-    if (!isRootUser(currentUser())) {
-      toast('Somente o Root concede a visão de todos os quadros.', true);
-      render();
-      return;
-    }
-    const anterior = Boolean(user.seesAllBoards);
-    user.seesAllBoards = valor;
-    render();
-    try {
-      if (runtime.authClient && runtime.authSession) {
-        const { error } = await runtime.authClient.rpc('atlas_admin_set_ve_todos_os_quadros', {
-          p_user_id: userId,
-          p_valor: valor,
-        });
-        if (error) throw error;
-      }
-      toast(valor
-        ? `${user.name} passa a enxergar todos os quadros (sem ganhar permissão além do perfil).`
-        : `${user.name} volta a enxergar apenas o que lhe for concedido.`);
-    } catch (error) {
-      // Devolver o estado anterior importa: sem isso a tela mostraria concedido
-      // e o servidor teria recusado - o tipo de mentira que a V2.4.3 corrigiu
-      // no rodape do visualizador.
-      user.seesAllBoards = anterior;
-      render();
-      console.error('Atlas V2: falha ao alterar a visão de todos os quadros.', error);
-      toast(mensagemDeFalhaNaSincronizacao(error), true);
-    }
-  }
-
   function renderAdminUsers() {
-
+    const activeAdmins = runtime.data.users.filter((entry) => ['admin', 'root'].includes(entry.role) && entry.status === 'active').length;
     const rows = runtime.data.users.map((user) => {
-      const protectedAccount = user.id === runtime.data.currentUserId || contaProtegida(user);
-      return `<tr data-admin-user-row="${attr(user.id)}"><td><div class="atlas-v2-admin-user">${avatarMarkup(user)}<span><strong>${escapeHtml(user.name)}</strong><small>${escapeHtml(user.email)}</small></span></div></td><td>${escapeHtml(user.title || 'Sem cargo')}</td><td><select data-action="admin-user-role" data-user-id="${attr(user.id)}">${Object.entries(ROLE_DEFINITIONS).map(([key, value]) => `<option value="${key}" ${user.role === key ? 'selected' : ''}>${value.label}</option>`).join('')}</select></td><td>${enxergaTudoCelula(user)}</td><td><select data-action="admin-user-status" data-user-id="${attr(user.id)}">${Object.entries(USER_STATUSES).map(([key, label]) => `<option value="${key}" ${user.status === key ? 'selected' : ''}>${label}</option>`).join('')}</select></td><td>${formatDateTime(user.lastActivity)}</td><td><div class="atlas-v2-admin-actions">${user.status !== 'active' ? `<button type="button" data-action="admin-approve-user" data-user-id="${attr(user.id)}" title="Liberar acesso"><i data-lucide="user-check"></i></button>` : ''}<button class="is-danger" type="button" data-action="admin-delete-user" data-user-id="${attr(user.id)}" title="${protectedAccount ? 'Conta protegida' : 'Excluir usuário'}" ${protectedAccount ? 'disabled' : ''}><i data-lucide="trash-2"></i></button></div></td></tr>`;
+      const protectedAccount = user.id === runtime.data.currentUserId || (['admin', 'root'].includes(user.role) && user.status === 'active' && activeAdmins <= 1);
+      const modernRoles = ['root', 'gestor', 'analista', 'visitante'];
+      const roles = Object.entries(ROLE_DEFINITIONS).filter(([key]) => modernRoles.includes(key) === modernRoles.includes(user.role));
+      return `<tr data-admin-user-row="${attr(user.id)}"><td><div class="atlas-v2-admin-user"><span class="atlas-v2-avatar">${escapeHtml(user.name.split(/\s+/).slice(0, 2).map((entry) => entry[0]).join('').toUpperCase())}</span><span><strong>${escapeHtml(user.name)}</strong><small>${escapeHtml(user.email)}</small></span></div></td><td>${escapeHtml(user.title || 'Sem cargo')}</td><td><select data-action="admin-user-role" data-user-id="${attr(user.id)}">${roles.map(([key, value]) => `<option value="${key}" ${user.role === key ? 'selected' : ''}>${value.label}</option>`).join('')}</select></td><td><select data-action="admin-user-status" data-user-id="${attr(user.id)}">${Object.entries(USER_STATUSES).map(([key, label]) => `<option value="${key}" ${user.status === key ? 'selected' : ''}>${label}</option>`).join('')}</select></td><td>${formatDateTime(user.lastActivity)}</td><td><div class="atlas-v2-admin-actions">${user.status !== 'active' ? `<button type="button" data-action="admin-approve-user" data-user-id="${attr(user.id)}" title="Liberar acesso"><i data-lucide="user-check"></i></button>` : ''}<button class="is-danger" type="button" data-action="admin-delete-user" data-user-id="${attr(user.id)}" title="${protectedAccount ? 'Conta protegida' : 'Excluir usuário'}" ${protectedAccount ? 'disabled' : ''}><i data-lucide="trash-2"></i></button></div></td></tr>`;
     }).join('');
-    return `<div class="atlas-v2-admin-section-head"><div><span>IDENTIDADES</span><h2>Usuários e acessos</h2><p>Novos cadastros entram como Visitante e aguardam liberação. Só o Root altera acessos.</p></div><button class="atlas-v2-button atlas-v2-button-primary" type="button" data-action="admin-sync-users"><i data-lucide="refresh-cw"></i>Atualizar usuários</button></div><div class="atlas-v2-admin-table-wrap"><table class="atlas-v2-admin-table"><thead><tr><th>Usuário</th><th>Cargo</th><th>Perfil</th><th title="Enxerga qualquer quadro, mesmo sem regra. Não dá poder: as ações continuam limitadas ao perfil.">Vê todos os quadros</th><th>Status</th><th>Última atividade</th><th>Ações</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+    return `<div class="atlas-v2-admin-section-head"><div><span>IDENTIDADES</span><h2>Usuários e acessos</h2><p>Novos cadastros entram como Visualizador e aguardam liberação.</p></div><button class="atlas-v2-button atlas-v2-button-primary" type="button" data-action="admin-sync-users"><i data-lucide="refresh-cw"></i>Atualizar usuários</button></div><div class="atlas-v2-admin-table-wrap"><table class="atlas-v2-admin-table"><thead><tr><th>Usuário</th><th>Cargo</th><th>Perfil</th><th>Status</th><th>Última atividade</th><th>Ações</th></tr></thead><tbody>${rows}</tbody></table></div>`;
   }
 
   function renderAdminPermissions() {
@@ -5651,8 +5439,8 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
     const matrix = Object.entries(ROLE_DEFINITIONS).map(([key, role]) => `<tr><td><strong>${role.label}</strong><small>${role.description}</small></td>${permissions.map(([permission]) => `<td>${role.permissions.includes(permission) ? '<i class="is-allowed" data-lucide="check"></i>' : '<i class="is-denied" data-lucide="minus"></i>'}</td>`).join('')}</tr>`).join('');
     const userOptions = runtime.data.users.filter((entry) => entry.status !== 'blocked').map((entry) => `<option value="${attr(entry.id)}">${escapeHtml(entry.name)} · ${roleLabel(entry.role)}</option>`).join('');
     const scopes = scopeOptions().map((entry) => `<option value="${attr(entry.value)}">${escapeHtml(entry.label)}</option>`).join('');
-    const rules = runtime.data.accessRules.map((rule) => { const user = runtime.data.users.find((entry) => entry.id === rule.userId); return `<tr><td>${escapeHtml(user?.name || 'Usuário removido')}</td><td>${escapeHtml({ workspace: 'Núcleo', module: 'Módulo', board: 'Quadro', group: 'Grupo', column: 'Coluna', item: 'Obra' }[rule.scopeType] || rule.scopeType)}</td><td>${escapeHtml(scopeName(rule.scopeType, rule.scopeId))}</td><td><span class="atlas-v2-admin-level is-${attr(rule.level)}">${escapeHtml(ACCESS_LEVELS[rule.level]?.label || rule.level)}</span></td><td><button class="atlas-v2-admin-icon-danger" type="button" data-action="admin-delete-rule" data-rule-id="${attr(rule.id)}" title="Remover regra"><i data-lucide="x"></i></button></td></tr>`; }).join('');
-    return `<div class="atlas-v2-admin-section-head"><div><span>AUTORIZAÇÃO</span><h2>Perfis e permissões</h2><p>O perfil define a base; regras específicas ajustam um núcleo, módulo ou quadro.</p></div></div>
+    const rules = runtime.data.accessRules.map((rule) => { const user = runtime.data.users.find((entry) => entry.id === rule.userId); return `<tr><td>${escapeHtml(user?.name || 'Usuário removido')}</td><td>${escapeHtml({ workspace: 'Área', module: 'Módulo', board: 'Quadro', group: 'Grupo', column: 'Coluna', item: 'Obra' }[rule.scopeType] || rule.scopeType)}</td><td>${escapeHtml(scopeName(rule.scopeType, rule.scopeId))}</td><td><span class="atlas-v2-admin-level is-${attr(rule.level)}">${escapeHtml(ACCESS_LEVELS[rule.level]?.label || rule.level)}</span></td><td><button class="atlas-v2-admin-icon-danger" type="button" data-action="admin-delete-rule" data-rule-id="${attr(rule.id)}" title="Remover regra"><i data-lucide="x"></i></button></td></tr>`; }).join('');
+    return `<div class="atlas-v2-admin-section-head"><div><span>AUTORIZAÇÃO</span><h2>Perfis e permissões</h2><p>O perfil define a base; regras específicas ajustam uma área, módulo ou quadro.</p></div></div>
       <section class="atlas-v2-admin-block"><header><div><span>MATRIZ</span><h3>Permissões por perfil</h3></div></header><div class="atlas-v2-admin-table-wrap"><table class="atlas-v2-admin-table atlas-v2-permission-matrix"><thead><tr><th>Perfil</th>${permissions.map(([, label]) => `<th>${label}</th>`).join('')}</tr></thead><tbody>${matrix}</tbody></table></div></section>
       <section class="atlas-v2-admin-block"><header><div><span>EXCEÇÕES</span><h3>Acesso granular</h3></div></header><form id="atlas-v2-admin-permission-form" class="atlas-v2-admin-rule-form"><label><span>Usuário</span><select name="userId">${userOptions}</select></label><label><span>Estrutura</span><select name="scope">${scopes}</select></label><label><span>Nível</span><select name="level">${Object.entries(ACCESS_LEVELS).map(([key, value]) => `<option value="${key}">${value.label}</option>`).join('')}</select></label><button class="atlas-v2-button atlas-v2-button-primary" type="submit"><i data-lucide="plus"></i>Aplicar regra</button></form><div class="atlas-v2-admin-table-wrap"><table class="atlas-v2-admin-table"><thead><tr><th>Usuário</th><th>Escopo</th><th>Destino</th><th>Nível</th><th></th></tr></thead><tbody>${rules || '<tr><td colspan="5">Nenhuma regra específica. Os perfis padrão estão sendo utilizados.</td></tr>'}</tbody></table></div></section>`;
   }
@@ -5670,7 +5458,7 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
       }).join('');
       return `<section class="atlas-v2-admin-workspace"><div class="atlas-v2-admin-structure-row is-workspace"><span class="atlas-v2-workspace-mark" style="background:${attr(workspace.color || '#0f6cbd')}">${escapeHtml(workspace.name.slice(0, 1).toUpperCase())}</span><span><strong>${escapeHtml(workspace.name)}</strong><small>${workspace.modules.length} módulo(s) · ${boardCount} quadro(s) · ${escapeHtml(ACCESS[workspace.access]?.label || 'Organizacional')}</small></span>${structureActions('workspace', workspace.id, workspaceIndex, runtime.data.workspaces.length)}</div>${modules}</section>`;
     }).join('');
-    return `<div class="atlas-v2-admin-section-head"><div><span>ARQUITETURA</span><h2>Núcleos, módulos e quadros</h2><p>Organize a estrutura sem alterar código ou SQL.</p></div><button class="atlas-v2-button atlas-v2-button-primary" type="button" data-action="admin-create-structure"><i data-lucide="plus"></i>Criar estrutura</button></div><div class="atlas-v2-admin-structure">${rows}</div>`;
+    return `<div class="atlas-v2-admin-section-head"><div><span>ARQUITETURA</span><h2>Áreas, módulos e quadros</h2><p>Organize a estrutura sem alterar código ou SQL.</p></div><button class="atlas-v2-button atlas-v2-button-primary" type="button" data-action="admin-create-structure"><i data-lucide="plus"></i>Criar estrutura</button></div><div class="atlas-v2-admin-structure">${rows}</div>`;
   }
 
   function renderAdminContent() {
@@ -5924,375 +5712,9 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
     openModal({
       title: 'Conta',
       subtitle: `${user?.name || 'Usuário'} · ${roleLabel(user?.role)}`,
-      body: `<div class="atlas-v2-settings-list"><button class="atlas-v2-button atlas-v2-button-quiet" type="button" data-action="open-meu-perfil"><i data-lucide="user-round-cog"></i>Meu perfil</button>${hasPermission('admin', null) ? '<button class="atlas-v2-button atlas-v2-button-primary" type="button" data-action="open-administration"><i data-lucide="shield"></i>Central de Administração</button>' : ''}<button class="atlas-v2-button atlas-v2-button-danger" type="button" data-auth-action="logout"><i data-lucide="log-out"></i>Sair do Atlas</button></div>`,
+      body: `<div class="atlas-v2-settings-list">${hasPermission('admin', null) ? '<button class="atlas-v2-button atlas-v2-button-primary" type="button" data-action="open-administration"><i data-lucide="shield"></i>Central de Administração</button>' : ''}<button class="atlas-v2-button atlas-v2-button-danger" type="button" data-auth-action="logout"><i data-lucide="log-out"></i>Sair do Atlas</button></div>`,
       actions: '<button class="atlas-v2-button atlas-v2-button-primary" type="button" data-action="close-overlay">Fechar</button>',
     });
-  }
-
-  // V2.5.0: ate aqui so o administrador editava cadastro, e o cargo aparecia
-  // como "Sem cargo" na lista de quase todo mundo - o campo existia no banco
-  // desde sempre e nao tinha por onde ser preenchido.
-  //
-  // O e-mail fica VISIVEL e BLOQUEADO. Ele identifica a conta no login; troca-lo
-  // sem confirmacao nos dois enderecos tranca a pessoa para fora. O fluxo com os
-  // dois codigos depende de envio de e-mail, que hoje nao existe (o SMTP e o
-  // falso de fabrica), entao a tela diz isso em vez de oferecer um campo que
-  // nao funcionaria.
-  // Reduz no NAVEGADOR antes de enviar. A foto do celular tem 4 ou 5 MB e vai
-  // ser exibida num circulo de 40 pixels: enviar o original custa rede de quem
-  // envia, espaco no servidor e rede de todo mundo que depois a visualiza.
-  // Recorte central para o circulo nao achatar rostos de fotos retangulares.
-  function reduzirImagem(arquivo, lado = 256) {
-    return new Promise((resolve, reject) => {
-      const img = new Image();
-      const url = URL.createObjectURL(arquivo);
-      img.onload = () => {
-        URL.revokeObjectURL(url);
-        const menor = Math.min(img.width, img.height);
-        if (!menor) { reject(new Error('imagem sem dimensoes')); return; }
-        const canvas = document.createElement('canvas');
-        canvas.width = lado;
-        canvas.height = lado;
-        canvas.getContext('2d').drawImage(
-          img, (img.width - menor) / 2, (img.height - menor) / 2, menor, menor, 0, 0, lado, lado,
-        );
-        canvas.toBlob(
-          (blob) => (blob ? resolve(blob) : reject(new Error('nao consegui gerar a imagem'))),
-          'image/jpeg', 0.85,
-        );
-      };
-      img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('arquivo nao e uma imagem valida')); };
-      img.src = url;
-    });
-  }
-
-  // A sincronizacao em lote tem o tradutor dela, que fala em "lote" e em
-  // "alteracoes". Aqui nao ha lote nenhum: e um arquivo. Reaproveitar aquele
-  // tradutor produziu "O servidor recusou o lote e nenhuma alteracao foi
-  // aplicada" quando o que falhou foi o envio de uma foto - mensagem que manda
-  // a pessoa procurar o problema no lugar errado.
-  function mensagemDeFalhaNaFoto(error) {
-    const texto = String(error?.message || error || '').toLowerCase();
-    if (texto.includes('exceeded') || texto.includes('too large') || texto.includes('payload')) {
-      return 'A imagem ficou grande demais para o servidor. Tente uma foto menor.';
-    }
-    if (texto.includes('mime') || texto.includes('formato') || texto.includes('tipo de arquivo')) {
-      return 'Formato nao aceito. Use JPG, PNG ou WEBP.';
-    }
-    if (texto.includes('row-level security') || texto.includes('policy') || texto.includes('42501')) {
-      return 'O servidor recusou a foto: sem permissao para gravar neste lugar.';
-    }
-    if (texto.includes('failed to fetch') || texto.includes('network')) {
-      return 'Nao consegui falar com o servidor para enviar a foto.';
-    }
-    return 'Nao consegui salvar a foto. Detalhe tecnico no console.';
-  }
-
-  async function enviarFotoPerfil(input) {
-    const arquivo = input?.files?.[0];
-    input.value = '';
-    const user = currentUser();
-    if (!arquivo || !user) return;
-    if (!runtime.authClient || !runtime.authSession) {
-      toast('A foto precisa do Atlas conectado ao servidor.', true);
-      return;
-    }
-    if (!/^image\//.test(arquivo.type)) {
-      toast('Escolha uma imagem (JPG, PNG ou WEBP).', true);
-      return;
-    }
-
-    const anterior = user.photoPath;
-    try {
-      const reduzida = await reduzirImagem(arquivo);
-      // Carimbo de tempo no nome: o navegador guarda imagem em cache com
-      // agressividade, e reaproveitar o mesmo nome faria a foto antiga
-      // continuar aparecendo depois da troca.
-      const caminho = `${user.id}/${Date.now()}.jpg`;
-      const { error } = await runtime.authClient.storage
-        .from('atlas-avatares')
-        .upload(caminho, reduzida, { contentType: 'image/jpeg', upsert: false });
-      if (error) throw error;
-
-      const { error: erroPerfil } = await runtime.authClient
-        .from('atlas_profiles').update({ foto_path: caminho }).eq('id', user.id);
-      if (erroPerfil) {
-        // O arquivo subiu mas o perfil nao apontou para ele: sem isto ficaria
-        // lixo no bucket que ninguem mais alcanca.
-        await runtime.authClient.storage.from('atlas-avatares').remove([caminho]).catch(() => {});
-        throw erroPerfil;
-      }
-
-      user.photoPath = caminho;
-      if (runtime.authProfile) runtime.authProfile.foto_path = caminho;
-      if (anterior) {
-        await runtime.authClient.storage.from('atlas-avatares').remove([anterior]).catch(() => {});
-      }
-      render();
-      openMeuPerfil();
-      toast('Foto atualizada.');
-    } catch (error) {
-      console.error('Atlas V2: falha ao enviar a foto.', error);
-      toast(error?.message === 'arquivo nao e uma imagem valida'
-        ? 'Esse arquivo n\u00e3o \u00e9 uma imagem v\u00e1lida.'
-        : mensagemDeFalhaNaFoto(error), true);
-    }
-  }
-
-  async function removerFotoPerfil() {
-    const user = currentUser();
-    if (!user?.photoPath) return;
-    const caminho = user.photoPath;
-    user.photoPath = '';
-    if (runtime.authProfile) runtime.authProfile.foto_path = null;
-    render();
-    openMeuPerfil();
-    if (!runtime.authClient || !runtime.authSession) return;
-    try {
-      const { error } = await runtime.authClient
-        .from('atlas_profiles').update({ foto_path: null }).eq('id', user.id);
-      if (error) throw error;
-      await runtime.authClient.storage.from('atlas-avatares').remove([caminho]).catch(() => {});
-      toast('Foto removida.');
-    } catch (error) {
-      user.photoPath = caminho;
-      if (runtime.authProfile) runtime.authProfile.foto_path = caminho;
-      render();
-      console.error('Atlas V2: falha ao remover a foto.', error);
-      toast(mensagemDeFalhaNaFoto(error), true);
-    }
-  }
-
-  // ===========================================================================
-  // Troca de e-mail
-  // ===========================================================================
-  // Quem faz a troca e o GoTrue, nao o Atlas. Ele ja manda um codigo de 6
-  // digitos para o endereco ATUAL e outro, diferente, para o NOVO, e so troca
-  // quando os dois forem conferidos. Medido na homologacao com envio real.
-  //
-  // O papel da tela e so: pedir o endereco novo, pedir os dois codigos, e
-  // explicar o que esta acontecendo. Nada de logica de seguranca aqui - ela
-  // mora no servidor, que e onde nao da para burlar pelo console do navegador.
-
-  // O erro do servidor chega em ingles e generico. Sem traducao, "Error sending
-  // email change email" manda a pessoa procurar defeito no proprio e-mail -
-  // quando o que falta e SMTP configurado no ambiente.
-  function mensagemDeFalhaNaTrocaDeEmail(error) {
-    const bruto = String(error?.message || error || '');
-    const texto = bruto.toLowerCase();
-    if (texto.includes('error sending') || texto.includes('unexpected_failure') || texto.includes('smtp')) {
-      return 'O Atlas não conseguiu enviar os códigos: este ambiente ainda não tem servidor de e-mail configurado. '
-        + 'Nada foi alterado — seu e-mail continua o mesmo.';
-    }
-    if (texto.includes('already been registered') || texto.includes('already registered') || texto.includes('duplicate')) {
-      return 'Já existe uma conta com esse e-mail.';
-    }
-    if (texto.includes('invalid') && texto.includes('email')) return 'E-mail inválido.';
-    if (texto.includes('token has expired') || texto.includes('expired')) {
-      return 'O código venceu. Peça a troca de novo para receber códigos novos.';
-    }
-    if (texto.includes('token') || texto.includes('otp')) {
-      return 'Código incorreto. Confira os dois códigos — cada caixa recebeu um diferente.';
-    }
-    if (texto.includes('rate limit') || texto.includes('too many')) {
-      return 'Muitas tentativas seguidas. Espere alguns minutos e tente de novo.';
-    }
-    return bruto ? `Não foi possível trocar o e-mail. Detalhe técnico: ${bruto}` : 'Não foi possível trocar o e-mail.';
-  }
-
-  function openTrocarEmail() {
-    const user = currentUser();
-    if (!user || !runtime.remoteMode) return;
-    openModal({
-      title: 'Alterar e-mail',
-      subtitle: user.email,
-      body: `<form id="atlas-v2-trocar-email-form" class="atlas-v2-form-grid">
-        <label class="atlas-v2-field is-wide">
-          <span>Novo e-mail</span>
-          <input name="novo" type="email" required autofocus maxlength="160" placeholder="nome@proxxima.net">
-        </label>
-        <p class="atlas-v2-modal-note">Ao continuar, o Atlas envia um código para <strong>${escapeHtml(user.email)}</strong>
-        e outro para o endereço novo. São códigos diferentes, e a troca só acontece com os dois.
-        Enquanto isso, você continua entrando com o e-mail atual.</p>
-      </form>`,
-      actions: '<button class="atlas-v2-button atlas-v2-button-quiet" type="button" data-action="close-overlay">Cancelar</button>'
-        + '<button class="atlas-v2-button atlas-v2-button-primary" type="submit" form="atlas-v2-trocar-email-form"><i data-lucide="send"></i>Enviar códigos</button>',
-    });
-  }
-
-  async function submitTrocarEmail(form) {
-    const user = currentUser();
-    if (!user || !runtime.authClient) return;
-    const novo = String(new FormData(form).get('novo') || '').trim().toLowerCase();
-    if (!novo) return;
-    if (novo === String(user.email || '').toLowerCase()) {
-      toast('Esse já é o seu e-mail atual.', true);
-      return;
-    }
-
-    const botao = form.ownerDocument?.querySelector('[form="atlas-v2-trocar-email-form"]');
-    if (botao) botao.disabled = true;
-    try {
-      const { error } = await runtime.authClient.auth.updateUser({ email: novo });
-      if (error) throw error;
-      openConfirmarTrocaEmail(user.email, novo);
-    } catch (error) {
-      if (botao) botao.disabled = false;
-      console.error('Atlas V2: falha ao pedir a troca de e-mail.', error);
-      toast(mensagemDeFalhaNaTrocaDeEmail(error), true);
-    }
-  }
-
-  function openConfirmarTrocaEmail(antigo, novo) {
-    const codigo = (nome, rotulo, endereco) =>
-      `<label class="atlas-v2-field is-wide"><span>${rotulo}</span>
-        <input name="${nome}" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]*"
-               maxlength="10" required placeholder="000000">
-        <small class="atlas-v2-field-hint">enviado para ${escapeHtml(endereco)}</small>
-      </label>`;
-    openModal({
-      title: 'Confirmar a troca',
-      subtitle: `${antigo} → ${novo}`,
-      body: `<form id="atlas-v2-confirmar-email-form" class="atlas-v2-form-grid"
-                   data-antigo="${attr(antigo)}" data-novo="${attr(novo)}">
-        ${codigo('codigoAtual', 'Código do e-mail atual', antigo)}
-        ${codigo('codigoNovo', 'Código do e-mail novo', novo)}
-        <p class="atlas-v2-modal-note">Os dois códigos são obrigatórios. Se algum não chegou,
-        feche esta janela e peça a troca de novo — até lá nada muda.</p>
-      </form>`,
-      actions: '<button class="atlas-v2-button atlas-v2-button-quiet" type="button" data-action="close-overlay">Cancelar</button>'
-        + '<button class="atlas-v2-button atlas-v2-button-primary" type="submit" form="atlas-v2-confirmar-email-form"><i data-lucide="check"></i>Confirmar troca</button>',
-    });
-  }
-
-  async function submitConfirmarTrocaEmail(form) {
-    const user = currentUser();
-    if (!user || !runtime.authClient) return;
-    const dados = new FormData(form);
-    const antigo = form.dataset.antigo || '';
-    const novo = form.dataset.novo || '';
-    const soDigitos = (chave) => String(dados.get(chave) || '').replace(/\D/g, '');
-    const codigoAtual = soDigitos('codigoAtual');
-    const codigoNovo = soDigitos('codigoNovo');
-    if (!codigoAtual || !codigoNovo) {
-      toast('Informe os dois códigos.', true);
-      return;
-    }
-
-    const botao = form.ownerDocument?.querySelector('[form="atlas-v2-confirmar-email-form"]');
-    if (botao) botao.disabled = true;
-    try {
-      // Cada codigo pertence a uma caixa: o do endereco atual e conferido
-      // contra o endereco atual, o do novo contra o novo. Trocar a ordem dos
-      // pares faz o servidor recusar os dois, e a mensagem nao explicaria.
-      const verificar = async (endereco, token) => {
-        const { error } = await runtime.authClient.auth.verifyOtp({ email: endereco, token, type: 'email_change' });
-        if (error) throw error;
-      };
-      await verificar(antigo, codigoAtual);
-      await verificar(novo, codigoNovo);
-
-      // O e-mail oficial mudou no servidor. A copia do perfil acompanha por
-      // gatilho (ATLAS_V2_5_0_TROCA_EMAIL.sql); aqui so atualizo a tela para
-      // nao exibir o endereco velho ate a proxima sincronizacao.
-      user.email = novo;
-      if (runtime.authProfile) runtime.authProfile.email = novo;
-      closeOverlay();
-      render();
-      toast('E-mail alterado. O próximo login já usa o endereço novo.');
-    } catch (error) {
-      if (botao) botao.disabled = false;
-      console.error('Atlas V2: falha ao confirmar a troca de e-mail.', error);
-      toast(mensagemDeFalhaNaTrocaDeEmail(error), true);
-    }
-  }
-
-  function openMeuPerfil() {
-    const user = currentUser();
-    if (!user) return;
-    const campo = (nome, rotulo, valor, extra = '') =>
-      `<label class="atlas-v2-field is-wide"><span>${rotulo}</span><input name="${nome}" value="${attr(valor || '')}" ${extra}></label>`;
-
-    openModal({
-      title: 'Meu perfil',
-      subtitle: `${user.email} \u00b7 ${roleLabel(user.role)}`,
-      body: `<div class="atlas-v2-perfil-foto">
-        ${avatarMarkup(user, 'is-grande')}
-        <div>
-          <strong>Foto de perfil</strong>
-          <small>Quadrada, at\u00e9 2 MB. O Atlas reduz para 256\u00d7256 antes de enviar.</small>
-          <div class="atlas-v2-perfil-foto-acoes">
-            <label class="atlas-v2-button atlas-v2-button-quiet">
-              <i data-lucide="image-up"></i>${user.photoPath ? 'Trocar' : 'Escolher'} foto
-              <input type="file" accept="image/jpeg,image/png,image/webp" data-action="perfil-foto" hidden>
-            </label>
-            ${user.photoPath ? '<button class="atlas-v2-button atlas-v2-button-quiet is-danger" type="button" data-action="perfil-foto-remover"><i data-lucide="trash-2"></i>Remover</button>' : ''}
-          </div>
-        </div>
-      </div>
-      <form id="atlas-v2-perfil-form" class="atlas-v2-form-grid">
-        ${campo('nome', 'Nome', user.name, 'required maxlength="120" autofocus placeholder="Como voc\u00ea quer ser chamado"')}
-        ${campo('cargo', 'Cargo', user.title, 'maxlength="120" placeholder="Ex.: Analista de documenta\u00e7\u00e3o"')}
-        ${campo('setor', 'Setor', user.sector, 'maxlength="120" placeholder="Ex.: Documenta\u00e7\u00e3o"')}
-        ${campo('telefone', 'Telefone', user.phone, 'maxlength="40" placeholder="(83) 99999-9999"')}
-        <label class="atlas-v2-field is-wide">
-          <span>E-mail</span>
-          <div class="atlas-v2-field-com-acao">
-            <input value="${attr(user.email)}" disabled>
-            ${runtime.remoteMode ? '<button class="atlas-v2-button atlas-v2-button-quiet" type="button" data-action="perfil-trocar-email"><i data-lucide="mail"></i>Alterar</button>' : ''}
-          </div>
-          <small class="atlas-v2-field-hint">${runtime.remoteMode
-            ? 'O e-mail identifica sua conta no login. A troca exige um c\u00f3digo no endere\u00e7o atual <strong>e</strong> um no novo.'
-            : 'Sem o Supabase conectado o e-mail n\u00e3o pode ser trocado: quem guarda o endere\u00e7o de login \u00e9 o servidor.'}</small>
-        </label>
-        <label class="atlas-v2-field is-wide">
-          <span>Perfil de acesso</span>
-          <input value="${attr(roleLabel(user.role))}" disabled>
-          <small class="atlas-v2-field-hint">Somente o Root altera perfis de acesso.</small>
-        </label>
-      </form>`,
-      actions: '<button class="atlas-v2-button atlas-v2-button-quiet" type="button" data-action="close-overlay">Cancelar</button><button class="atlas-v2-button atlas-v2-button-primary" type="submit" form="atlas-v2-perfil-form"><i data-lucide="save"></i>Salvar</button>',
-    });
-  }
-
-  async function submitMeuPerfil(form) {
-    const user = currentUser();
-    if (!user) return;
-    const dados = new FormData(form);
-    const limpo = (chave, max) => String(dados.get(chave) || '').trim().slice(0, max);
-    const nome = limpo('nome', 120);
-    if (!nome) {
-      toast('O nome n\u00e3o pode ficar em branco.', true);
-      return;
-    }
-    const novo = { nome, cargo: limpo('cargo', 120), setor: limpo('setor', 120), telefone: limpo('telefone', 40) };
-
-    // Guardo o estado anterior para devolver em caso de falha. Tela que mostra
-    // salvo quando o servidor recusou e o defeito que a V2.4.3 corrigiu no
-    // rodape do visualizador - nao vou reintroduzi-lo aqui.
-    const antes = { name: user.name, title: user.title, sector: user.sector, phone: user.phone };
-    Object.assign(user, { name: novo.nome, title: novo.cargo, sector: novo.setor, phone: novo.telefone });
-    closeOverlay();
-    render();
-
-    if (!runtime.authClient || !runtime.authSession) {
-      saveData('Perfil atualizado', { audit: false });
-      return;
-    }
-    try {
-      const { error } = await runtime.authClient
-        .from('atlas_profiles')
-        .update(novo)
-        .eq('id', user.id);
-      if (error) throw error;
-      if (runtime.authProfile) Object.assign(runtime.authProfile, novo);
-      toast('Perfil atualizado.');
-    } catch (error) {
-      Object.assign(user, antes);
-      render();
-      console.error('Atlas V2: falha ao salvar o perfil.', error);
-      toast(mensagemDeFalhaNaSincronizacao(error), true);
-    }
   }
 
   function openAdminUserModal() {
@@ -6332,31 +5754,24 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
       toast('Já existe um usuário com este e-mail', true);
       return;
     }
-    runtime.data.users.push({ id: id('user'), name: String(data.get('name') || '').trim(), email, role: PAPEL_PADRAO, status: 'pending', title: String(data.get('title') || '').trim(), lastActivity: null });
+    runtime.data.users.push({ id: id('user'), name: String(data.get('name') || '').trim(), email, role: 'visualizador', status: 'pending', title: String(data.get('title') || '').trim(), lastActivity: null });
     closeOverlay();
     runtime.adminTab = 'users';
     saveData('Solicitação de acesso criada', { scope: 'system' });
     render();
   }
 
-  // V2.5.0: nao ha mais "ultimo admin" a proteger por contagem. O Root e unico
-  // (indice unico no banco) e nao pode ser rebaixado, bloqueado nem excluido -
-  // as funcoes do servidor recusam, e a tela nem oferece.
-  function contaProtegida(user) {
-    return user?.role === 'root';
+  function activeAdminCount() {
+    return runtime.data.users.filter((entry) => ['admin', 'root'].includes(entry.role) && entry.status === 'active').length;
   }
 
   async function updateAdminUser(userId, field, value) {
     if (!requirePermission('admin', null, 'gerenciar usuários')) return;
     const user = runtime.data.users.find((entry) => entry.id === userId);
     if (!user || !['role', 'status'].includes(field)) return;
-    if (contaProtegida(user)) {
-      toast('O Root não pode ser alterado por aqui. Transfira o Root antes.', true);
-      render();
-      return;
-    }
-    if (field === 'role' && value === 'root') {
-      toast('Já existe um Root. Para transferir, use a transferência de Root.', true);
+    const removesLastAdmin = ['admin', 'root'].includes(user.role) && user.status === 'active' && activeAdminCount() <= 1 && ((field === 'role' && !['admin', 'root'].includes(value)) || (field === 'status' && value !== 'active'));
+    if (removesLastAdmin) {
+      toast('Ative outro Admin antes de alterar o último administrador', true);
       render();
       return;
     }
@@ -6390,7 +5805,7 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
 
   function openDeleteAdminUser(userId) {
     const user = runtime.data.users.find((entry) => entry.id === userId);
-    if (!user || user.id === runtime.data.currentUserId || contaProtegida(user)) return;
+    if (!user || user.id === runtime.data.currentUserId || (['admin', 'root'].includes(user.role) && user.status === 'active' && activeAdminCount() <= 1)) return;
     openModal({
       title: 'Excluir usuário',
       subtitle: user.name,
@@ -6402,7 +5817,7 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
   async function deleteAdminUser(userId) {
     if (!requirePermission('admin', null, 'excluir usuários')) return;
     const user = runtime.data.users.find((entry) => entry.id === userId);
-    if (!user || user.id === runtime.data.currentUserId || contaProtegida(user)) return;
+    if (!user || user.id === runtime.data.currentUserId || (['admin', 'root'].includes(user.role) && user.status === 'active' && activeAdminCount() <= 1)) return;
     try {
       if (runtime.authClient && runtime.authSession) {
         const { error } = await runtime.authClient.rpc('atlas_delete_user', { p_user_id: userId });
@@ -6484,7 +5899,7 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
     const iconPicker = type === 'module'
       ? `<div class="atlas-v2-field is-wide"><span>Ícone do módulo</span><div class="atlas-v2-choice-grid">${MODULE_ICON_CHOICES.map(([iconName, label]) => choice('icon', iconName, iconName, label, (found.entry.icon || 'folder') === iconName)).join('')}</div></div>`
       : '';
-    openModal({ title: `Renomear ${{ workspace: 'núcleo', module: 'módulo', board: 'quadro' }[type] || 'estrutura'}`, subtitle: found.entry.name, body: `<form id="atlas-v2-admin-structure-form" class="atlas-v2-form-grid"><input type="hidden" name="type" value="${attr(type)}"><input type="hidden" name="targetId" value="${attr(targetId)}"><label class="atlas-v2-field"><span>Novo nome</span><input name="name" value="${attr(found.entry.name)}" maxlength="80" required autofocus></label>${iconPicker}</form>`, actions: '<button class="atlas-v2-button atlas-v2-button-quiet" type="button" data-action="close-overlay">Cancelar</button><button class="atlas-v2-button atlas-v2-button-primary" type="submit" form="atlas-v2-admin-structure-form">Salvar</button>' });
+    openModal({ title: `Renomear ${{ workspace: 'área', module: 'módulo', board: 'quadro' }[type] || 'estrutura'}`, subtitle: found.entry.name, body: `<form id="atlas-v2-admin-structure-form" class="atlas-v2-form-grid"><input type="hidden" name="type" value="${attr(type)}"><input type="hidden" name="targetId" value="${attr(targetId)}"><label class="atlas-v2-field"><span>Novo nome</span><input name="name" value="${attr(found.entry.name)}" maxlength="80" required autofocus></label>${iconPicker}</form>`, actions: '<button class="atlas-v2-button atlas-v2-button-quiet" type="button" data-action="close-overlay">Cancelar</button><button class="atlas-v2-button atlas-v2-button-primary" type="submit" form="atlas-v2-admin-structure-form">Salvar</button>' });
   }
 
   function submitRenameStructure(form) {
@@ -6518,7 +5933,7 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
   function openDeleteStructure(type, targetId) {
     const found = findStructure(type, targetId);
     if (!found) return;
-    const labels = { workspace: 'núcleo e todo o seu conteúdo', module: 'módulo e seus quadros', board: 'quadro e seus registros' };
+    const labels = { workspace: 'área e todo o seu conteúdo', module: 'módulo e seus quadros', board: 'quadro e seus registros' };
     openModal({ title: 'Mover para a lixeira', subtitle: found.entry.name, body: `<div class="atlas-v2-confirm-card"><i data-lucide="triangle-alert"></i><div><strong>Esta ${labels[type] || 'estrutura'} será removida.</strong><p>Um Admin poderá restaurá-la pela aba Sistema.</p></div></div>`, actions: `<button class="atlas-v2-button atlas-v2-button-quiet" type="button" data-action="close-overlay">Cancelar</button><button class="atlas-v2-button atlas-v2-button-danger" type="button" data-action="admin-confirm-delete-structure" data-structure-type="${attr(type)}" data-structure-id="${attr(targetId)}"><i data-lucide="trash-2"></i>Mover para lixeira</button>` });
   }
 
@@ -6613,7 +6028,7 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
     if (!requirePermission('admin', null, 'excluir estruturas')) return;
     const found = findStructure(type, targetId);
     if (!found) return;
-    if (type === 'workspace' && runtime.data.workspaces.length <= 1) { toast('O último núcleo não pode ser excluído', true); closeOverlay(); return; }
+    if (type === 'workspace' && runtime.data.workspaces.length <= 1) { toast('A última área de trabalho não pode ser excluída', true); closeOverlay(); return; }
     if (type === 'board' && allBoards().length <= 1) { toast('O último quadro do Atlas não pode ser excluído', true); closeOverlay(); return; }
     const parent = { index: found.index, workspaceId: found.workspace?.id || '', moduleId: found.module?.id || '' };
     const trashEntry = addTrashEntry(type, found.entry.name, found.entry, parent);
@@ -7238,28 +6653,11 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
           <i data-lucide="grip-vertical"></i>
         </button>
         <div class="atlas-v2-board-list" ${module.open || query ? '' : 'hidden'}>
-          ${visibleBoards.map((boardEntry) => {
-            // O selo de "quadro oficial" saiu: todo quadro e criado por alguem,
-            // entao a distincao nao dizia nada util - e o `oficial` do banco nao
-            // influencia acesso, permissao nem exclusao, so escolhia este icone.
-            //
-            // Os tres pontos viram BOTAO DE VERDADE. Antes eram um <i> decorativo
-            // dentro do proprio botao da linha: clicar neles abria o quadro, como
-            // clicar em qualquer outro lugar. Tres pontos significam "mais opcoes"
-            // em toda interface - prometer isso e nao cumprir e a mesma mentira
-            // que a V2.4.3 corrigiu no rodape do visualizador.
-            //
-            // Ele so aparece para quem pode configurar: botao que recusa a propria
-            // acao e pior do que botao ausente.
-            const podeConfigurar = hasPermission('configure', { workspace, module, board: boardEntry });
-            return `<div class="atlas-v2-board-row-wrap">
-              <button class="atlas-v2-board-row ${boardEntry.id === runtime.data.activeBoardId ? 'is-active' : ''}" type="button" data-action="open-board" data-board-id="${attr(boardEntry.id)}" title="${attr(boardEntry.name)}">
-                <i data-lucide="${attr(boardEntry.icon || 'table-2')}"></i>
-                <span>${escapeHtml(boardEntry.name)}</span>
-              </button>
-              ${podeConfigurar ? `<button class="atlas-v2-board-config" type="button" data-action="board-config" data-board-id="${attr(boardEntry.id)}" title="Configurar ${attr(boardEntry.name)}" aria-label="Configurar o quadro ${attr(boardEntry.name)}"><i data-lucide="more-horizontal"></i></button>` : ''}
-            </div>`;
-          }).join('')}
+          ${visibleBoards.map((boardEntry) => `<button class="atlas-v2-board-row ${boardEntry.id === runtime.data.activeBoardId ? 'is-active' : ''}" type="button" data-action="open-board" data-board-id="${attr(boardEntry.id)}" title="${attr(boardEntry.name)}">
+            <i data-lucide="${attr(boardEntry.icon || 'table-2')}"></i>
+            <span>${escapeHtml(boardEntry.name)}</span>
+            ${boardEntry.official ? '<i data-lucide="badge-check"></i>' : '<i data-lucide="more-horizontal"></i>'}
+          </button>`).join('')}
           ${matchingChildren.join('')}
         </div>
       </section>`;
@@ -7297,7 +6695,7 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
       const definition = VIEW_TYPES[view];
       if (!definition) return '';
       return `<button class="atlas-v2-view-tab ${boardEntry.activeView === view ? 'is-active' : ''}" type="button" data-action="change-view" data-view="${attr(view)}"><i data-lucide="${attr(definition.icon)}"></i><span>${escapeHtml(definition.label)}</span></button>`;
-    }).join('') + '<button class="atlas-v2-view-tab" type="button" data-action="add-view" title="Adicionar visualização"><i data-lucide="plus"></i></button>';
+    }).join('') + (hasPermission('configure', findBoard(boardEntry.id)) ? '<button class="atlas-v2-view-tab" type="button" data-action="board-forms" title="Gerenciar formularios"><i data-lucide="clipboard-list"></i><span>Formularios</span></button>' : '') + '<button class="atlas-v2-view-tab" type="button" data-action="add-view" title="Adicionar visualização"><i data-lucide="plus"></i></button>';
   }
 
   function visibleSubitems(boardEntry, itemEntry) {
@@ -7372,558 +6770,112 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
     });
   }
 
-  // `aplicarFiltroDeColuna = false` devolve o que a BUSCA deixou passar, antes
-  // do funil. E o "de quantos" do selo "3 de 18" no cabecalho do setor: sem
-  // esse numero o selo nao diz nada.
-  function filteredItems(boardEntry, groupEntry, aplicarFiltroDeColuna = true) {
+  function filteredItems(boardEntry, groupEntry) {
     const query = contextualItemSearch(boardEntry);
     const sectorMatches = query && contextualSectorMatch(groupEntry.name, query);
-    const porBusca = groupEntry.items.filter((entry) => {
+    return groupEntry.items.filter((entry) => {
       // Itens arquivados ficam fora das visualizacoes, mas continuam nos dados
       // (e no Supabase, com arquivado=true), portanto sao recuperaveis.
       if (entry.archived) return false;
       if (boardEntry.activeView === 'works' && runtime.workFilter && entry.id !== runtime.workFilter) return false;
+      if (!itemMatchesAdvancedFilters(boardEntry, groupEntry, entry)) return false;
       const children = visibleSubitems(boardEntry, entry);
       if (!query || sectorMatches) return true;
       const ownText = normalizeSearchText(`${entry.name} ${Object.values(entry.values || {}).join(' ')}`);
       const subitemText = normalizeSearchText(children.map((subitem) => `${subitem.name} ${Object.values(subitem.values || {}).join(' ')}`).join(' '));
       return `${ownText} ${subitemText}`.includes(query);
     });
-    if (!aplicarFiltroDeColuna) return porBusca;
-    const escopo = groupFilterScope(boardEntry, groupEntry);
-    const permitidos = allowedRowIds(boardEntry, escopo, porBusca);
-    const sobraram = permitidos ? porBusca.filter((entry) => permitidos.has(entry.id)) : porBusca;
-    return sortRowsByColumn(boardEntry, escopo, sobraram);
   }
 
-  // ===========================================================================
-  // Filtro por coluna (V2.5.0) - o funil do cabecalho, como na planilha
-  // ===========================================================================
-  // O filtro mora no CABECALHO da coluna, nao numa gaveta separada: e ali que a
-  // pessoa esta olhando quando decide esconder alguma coisa, e e ali que o
-  // funil marcado explica depois por que um registro sumiu. A gaveta "Filtros
-  // avancados" fazia o contrario - escondia linhas de dentro de uma tela que
-  // ninguem reabria.
-  //
-  // O filtro vale POR SETOR. Cada setor tem cabecalho proprio na tela, entao
-  // cada cabecalho manda no seu. E guardado so na sessao (`runtime`), some ao
-  // recarregar e nunca vai para o banco: filtrar e um jeito de olhar, nao uma
-  // mudanca no quadro, e ninguem filtra a tela do colega sem querer.
-
-  // Datas e numeros nao viram lista de valores - 300 datas distintas numa lista
-  // de caixinhas nao ajudam ninguem. Esses pedem "de / ate".
-  const COLUNAS_DE_FAIXA = ['number', 'currency', 'percentage', 'date', 'period'];
-
-  function columnFilterKind(columnEntry) {
-    return COLUNAS_DE_FAIXA.includes(columnEntry?.type) ? 'faixa' : 'lista';
-  }
-
-  function groupFilterScope(boardEntry, groupEntry) {
-    return `${String(boardEntry?.id || '')}::g::${String(groupEntry?.id || '')}`;
-  }
-
-  function sectorFilterScope(boardEntry, workItem, sectorName) {
-    return `${String(boardEntry?.id || '')}::s::${String(workItem?.id || '')}::${String(sectorName || '')}`;
-  }
-
-  // A chave que a caixinha representa. Precisa ser a MESMA coisa que a lista
-  // mostra e que a comparacao usa - se a lista mostrasse "Sim" e a comparacao
-  // olhasse `true`, marcar a caixinha esconderia tudo.
-  function columnFilterValue(boardEntry, columnEntry, itemEntry) {
-    if (!columnEntry) return '';
-    if (columnEntry.type === 'formula') {
-      return String(formulaColumnValue(boardEntry, itemEntry, columnEntry) ?? '').trim();
+  function itemMatchesAdvancedFilters(boardEntry, groupEntry, itemEntry) {
+    const filters = runtime.searchFilters?.[boardEntry.id] || {};
+    if (filters.groupId && groupEntry.id !== filters.groupId) return false;
+    if (filters.columnId && filters.value && String(itemEntry.values?.[filters.columnId] || '') !== String(filters.value)) return false;
+    if (filters.attachmentsOnly) {
+      const hasAttachment = boardEntry.columns.some((columnEntry) => ['image', 'file'].includes(columnEntry.type) && normalizeImageEntries(itemEntry.values?.[columnEntry.id]).length);
+      if (!hasAttachment) return false;
     }
-    const bruto = itemEntry?.values?.[columnEntry.id];
-    if (columnEntry.type === 'checkbox') return bruto ? 'Marcado' : 'Não marcado';
-    if (['file', 'image'].includes(columnEntry.type)) {
-      return normalizeImageEntries(bruto).length ? 'Com anexo' : 'Sem anexo';
+    if (filters.dateColumnId && (filters.dateFrom || filters.dateTo)) {
+      const value = String(itemEntry.values?.[filters.dateColumnId] || '');
+      if (!value || (filters.dateFrom && value < filters.dateFrom) || (filters.dateTo && value > filters.dateTo)) return false;
     }
-    if (bruto && typeof bruto === 'object') return String(JSON.stringify(bruto));
-    return String(bruto ?? '').trim();
-  }
-
-  function columnFilterLabel(chave) {
-    return chave === '' ? '(vazias)' : chave;
-  }
-
-  // Todos os valores distintos que aparecem NAQUELE setor, em qualquer
-  // profundidade. De proposito ignora os filtros das outras colunas: a lista
-  // encolher sozinha enquanto a pessoa escolhe e o jeito mais rapido de ela
-  // ficar sem nenhuma opcao para marcar e sem entender o motivo.
-  function columnFilterOptions(boardEntry, raizes, columnEntry) {
-    const chaves = new Set();
-    const visita = (entry) => {
-      chaves.add(columnFilterValue(boardEntry, columnEntry, entry));
-      visibleSubitems(boardEntry, entry).forEach(visita);
-    };
-    (raizes || []).forEach(visita);
-    return [...chaves].sort((a, b) => {
-      if (a === '') return 1;
-      if (b === '') return -1;
-      return a.localeCompare(b, 'pt-BR', { numeric: true, sensitivity: 'base' });
-    });
-  }
-
-  function valueInsideRange(columnEntry, itemEntry, regra) {
-    const de = String(regra?.de ?? '').trim();
-    const ate = String(regra?.ate ?? '').trim();
-    if (!de && !ate) return true;
-    const bruto = itemEntry?.values?.[columnEntry.id];
-    if (columnEntry.type === 'period') {
-      const faixa = parseTimelinePeriod(bruto);
-      if (!faixa) return false;
-      const inicio = faixa.start.toISOString().slice(0, 10);
-      const fim = faixa.end.toISOString().slice(0, 10);
-      // Um periodo entra quando ENCOSTA na faixa pedida. Exigir que ele caiba
-      // inteiro esconderia justamente a obra que atravessa o mes perguntado.
-      if (de && fim < de) return false;
-      if (ate && inicio > ate) return false;
-      return true;
-    }
-    const texto = String(bruto ?? '').trim();
-    // Celula vazia nao esta dentro de faixa nenhuma. Quem quer as vazias filtra
-    // pela lista, nao por "de / ate".
-    if (!texto) return false;
-    if (columnEntry.type === 'date') {
-      if (de && texto < de) return false;
-      if (ate && texto > ate) return false;
-      return true;
-    }
-    const numero = Number(texto.replace(',', '.'));
-    if (!Number.isFinite(numero)) return false;
-    if (de && numero < Number(de)) return false;
-    if (ate && numero > Number(ate)) return false;
     return true;
   }
 
-  function rowPassesColumnFilters(boardEntry, regras, itemEntry) {
-    return Object.entries(regras || {}).every(([columnId, regra]) => {
-      const columnEntry = boardEntry.columns.find((entry) => entry.id === columnId);
-      // Coluna apagada depois do filtro: a regra orfa nao esconde nada. Caso
-      // contrario o quadro ficaria vazio sem nenhum funil marcado na tela para
-      // explicar o porque.
-      if (!columnEntry) return true;
-      if (regra?.tipo === 'faixa') return valueInsideRange(columnEntry, itemEntry, regra);
-      const chave = columnFilterValue(boardEntry, columnEntry, itemEntry);
-      return (regra?.valores || []).includes(chave);
+  function openAdvancedFilters() {
+    const context = findBoard();
+    if (!context) return;
+    const filters = runtime.searchFilters?.[context.board.id] || {};
+    const filterColumns = context.board.columns.filter((entry) => ['status', 'select', 'person'].includes(entry.type));
+    const selectedColumn = context.board.columns.find((entry) => entry.id === filters.columnId);
+    const values = selectedColumn?.options?.map((entry) => typeof entry === 'string' ? entry : entry.label) || [];
+    const saved = context.board.settings?.savedSearches || [];
+    openDrawer({
+      title: 'Filtros avançados',
+      subtitle: 'Combine critérios e salve consultas frequentes.',
+      body: `<form id="atlas-v2-filter-form" class="atlas-v2-form-grid"><label class="atlas-v2-field"><span>Grupo</span><select name="groupId"><option value="">Todos</option>${context.board.groups.map((entry) => `<option value="${attr(entry.id)}" ${filters.groupId === entry.id ? 'selected' : ''}>${escapeHtml(entry.name)}</option>`).join('')}</select></label><label class="atlas-v2-field"><span>Campo</span><select name="columnId"><option value="">Qualquer campo</option>${filterColumns.map((entry) => `<option value="${attr(entry.id)}" ${filters.columnId === entry.id ? 'selected' : ''}>${escapeHtml(entry.name)}</option>`).join('')}</select></label><label class="atlas-v2-field is-wide"><span>Valor exato</span><input name="value" list="atlas-v2-filter-values" value="${attr(filters.value || '')}" placeholder="Ex.: Em andamento"><datalist id="atlas-v2-filter-values">${values.map((entry) => `<option value="${attr(entry)}"></option>`).join('')}</datalist></label><label class="atlas-v2-field"><span>Coluna de data</span><select name="dateColumnId"><option value="">Sem período</option>${context.board.columns.filter((entry) => entry.type === 'date').map((entry) => `<option value="${attr(entry.id)}" ${filters.dateColumnId === entry.id ? 'selected' : ''}>${escapeHtml(entry.name)}</option>`).join('')}</select></label><label class="atlas-v2-field"><span>Data inicial</span><input name="dateFrom" type="date" value="${attr(filters.dateFrom || '')}"></label><label class="atlas-v2-field"><span>Data final</span><input name="dateTo" type="date" value="${attr(filters.dateTo || '')}"></label><label class="atlas-v2-check-row"><input name="attachmentsOnly" type="checkbox" ${filters.attachmentsOnly ? 'checked' : ''}><span><strong>Somente com anexos</strong><small>Imagens ou arquivos.</small></span></label><label class="atlas-v2-field is-wide"><span>Salvar esta pesquisa como</span><input name="saveName" maxlength="60" placeholder="Ex.: Atrasados com evidências"></label></form><div class="atlas-v2-saved-searches">${saved.map((entry) => `<button type="button" data-action="filter-use-saved" data-search-id="${attr(entry.id)}"><i data-lucide="bookmark"></i><span>${escapeHtml(entry.name)}</span><b>${escapeHtml(entry.query || '')}</b></button>`).join('') || '<p>Nenhuma pesquisa salva neste quadro.</p>'}</div>`,
+      actions: `<button class="atlas-v2-button atlas-v2-button-quiet" type="button" data-action="filter-clear"><i data-lucide="filter-x"></i>Limpar</button><button class="atlas-v2-button atlas-v2-button-primary" type="submit" form="atlas-v2-filter-form"><i data-lucide="list-filter"></i>Aplicar filtros</button>`,
     });
   }
 
-  // Devolve os ids que sobrevivem, em qualquer profundidade - ou `null` quando
-  // nao ha filtro, para o desenho seguir o caminho de sempre. Uma linha fica
-  // quando ELA passa ou quando algum descendente passa; sem isso, um subitem
-  // que casa com o filtro nao teria por onde aparecer.
-  function allowedRowIds(boardEntry, escopo, raizes) {
-    const regras = runtime.columnFilters?.[escopo];
-    if (!regras || !Object.keys(regras).length) return null;
-    const permitidos = new Set();
-    const visita = (entry) => {
-      // `map` e nao `some`: `some` para no primeiro filho que passa e deixaria
-      // os irmaos seguintes fora do conjunto, sumindo da tela.
-      const filhos = visibleSubitems(boardEntry, entry).map(visita);
-      const passa = rowPassesColumnFilters(boardEntry, regras, entry);
-      if (passa || filhos.some(Boolean)) {
-        permitidos.add(entry.id);
-        return true;
-      }
-      return false;
+  function submitAdvancedFilters(form) {
+    const context = findBoard();
+    if (!context) return;
+    const data = new FormData(form);
+    const filters = {
+      groupId: String(data.get('groupId') || ''),
+      columnId: String(data.get('columnId') || ''),
+      value: String(data.get('value') || '').trim(),
+      dateColumnId: String(data.get('dateColumnId') || ''),
+      dateFrom: String(data.get('dateFrom') || ''),
+      dateTo: String(data.get('dateTo') || ''),
+      attachmentsOnly: Boolean(data.get('attachmentsOnly')),
     };
-    (raizes || []).forEach(visita);
-    return permitidos;
-  }
-
-  function sortRowsByColumn(boardEntry, escopo, linhas) {
-    const ordem = runtime.columnSort?.[escopo];
-    if (!ordem) return linhas;
-    const columnEntry = boardEntry.columns.find((entry) => entry.id === ordem.columnId);
-    if (!columnEntry) return linhas;
-    const numerica = ['number', 'currency', 'percentage'].includes(columnEntry.type);
-    const sinal = ordem.dir === 'desc' ? -1 : 1;
-    return [...linhas].sort((a, b) => {
-      const va = columnFilterValue(boardEntry, columnEntry, a);
-      const vb = columnFilterValue(boardEntry, columnEntry, b);
-      // Vazio vai para o fim nas DUAS direcoes. Inverter a ordem nao deveria
-      // encher o topo da tela de celulas em branco.
-      if (!va && !vb) return 0;
-      if (!va) return 1;
-      if (!vb) return -1;
-      if (numerica) {
-        const na = Number(va.replace(',', '.'));
-        const nb = Number(vb.replace(',', '.'));
-        if (Number.isFinite(na) && Number.isFinite(nb)) return (na - nb) * sinal;
-      }
-      return va.localeCompare(vb, 'pt-BR', { numeric: true, sensitivity: 'base' }) * sinal;
-    });
-  }
-
-  function scopeFilterCount(escopo) {
-    return Object.keys(runtime.columnFilters?.[escopo] || {}).length;
-  }
-
-  function boardFilterCount(boardEntry) {
-    const prefixo = `${String(boardEntry?.id || '')}::`;
-    let total = 0;
-    Object.entries(runtime.columnFilters || {}).forEach(([chave, regras]) => {
-      if (chave.startsWith(prefixo)) total += Object.keys(regras || {}).length;
-    });
-    Object.keys(runtime.columnSort || {}).forEach((chave) => {
-      if (chave.startsWith(prefixo)) total += 1;
-    });
-    return total;
-  }
-
-  function clearBoardColumnFilters(boardEntry) {
-    const prefixo = `${String(boardEntry?.id || '')}::`;
-    Object.keys(runtime.columnFilters || {}).forEach((chave) => {
-      if (chave.startsWith(prefixo)) delete runtime.columnFilters[chave];
-    });
-    Object.keys(runtime.columnSort || {}).forEach((chave) => {
-      if (chave.startsWith(prefixo)) delete runtime.columnSort[chave];
-    });
-  }
-
-  // As linhas do escopo ANTES do filtro de coluna - e delas que sai a lista de
-  // valores do menu. O nome do setor pode ter "::", por isso o resto da chave
-  // volta a ser juntado em vez de usar uma posicao fixa.
-  function scopeRows(boardEntry, escopo) {
-    const partes = String(escopo || '').split('::');
-    if (partes[1] === 'g') {
-      const groupEntry = boardEntry.groups.find((entry) => entry.id === partes[2]);
-      return groupEntry ? filteredItems(boardEntry, groupEntry, false) : [];
+    runtime.searchFilters[context.board.id] = filters;
+    const saveName = String(data.get('saveName') || '').trim();
+    if (saveName) {
+      context.board.settings = context.board.settings || {};
+      context.board.settings.savedSearches = context.board.settings.savedSearches || [];
+      context.board.settings.savedSearches.push({ id: id('search'), name: saveName, query: runtime.boardSearch, filters: deepClone(filters) });
+      saveData('Pesquisa salva');
     }
-    if (partes[1] === 's') {
-      const workItem = boardEntry.groups.flatMap((entry) => entry.items).find((entry) => entry.id === partes[2]);
-      const sectorName = partes.slice(3).join('::');
-      return workItem ? sectorizedWorkItems(boardEntry, workItem, sectorName, false) : [];
-    }
-    return [];
-  }
-
-  // ---------------------------------------------------------------------------
-  // O menu ancorado no cabecalho
-  // ---------------------------------------------------------------------------
-  // O Atlas so tinha modal centralizado e gaveta lateral, e as duas ocupam o
-  // #atlas-v2-overlay-root inteiro. Um menu de coluna precisa ficar COLADO na
-  // coluna - um modal no meio da tela perderia a unica coisa que explica o que
-  // ele filtra. Entao esta e uma primitiva nova, com raiz propria.
-  function columnMenuRoot() {
-    let root = document.getElementById('atlas-v2-column-menu');
-    if (!root) {
-      root = document.createElement('div');
-      root.id = 'atlas-v2-column-menu';
-      document.body.appendChild(root);
-    }
-    return root;
-  }
-
-  function closeColumnMenu() {
-    runtime.columnMenu = null;
-    const root = document.getElementById('atlas-v2-column-menu');
-    if (root) {
-      root.innerHTML = '';
-      root.hidden = true;
-    }
-  }
-
-  function columnMenuAnchor() {
-    const estado = runtime.columnMenu;
-    if (!estado) return null;
-    // Procura por comparacao em vez de montar um seletor: a chave de escopo tem
-    // "::" e pode ter o nome do setor dentro, que nao e seguro interpolar num
-    // seletor CSS.
-    return [...document.querySelectorAll('[data-action="column-menu"]')]
-      .find((el) => el.dataset.scope === estado.escopo && el.dataset.columnId === estado.columnId) || null;
-  }
-
-  function positionColumnMenu() {
-    const estado = runtime.columnMenu;
-    const card = document.getElementById('atlas-v2-column-menu')?.firstElementChild;
-    if (!estado || !card) return;
-    const margem = 8;
-    const largura = card.offsetWidth || 260;
-    const altura = card.offsetHeight || 320;
-    // Alinhado pela esquerda da coluna, mas nunca passando da borda da tela -
-    // a ultima coluna da tabela fica justamente na beirada.
-    const esquerda = Math.max(margem, Math.min(estado.rect.left, window.innerWidth - largura - margem));
-    let topo = estado.rect.bottom + 4;
-    if (topo + altura > window.innerHeight - margem) {
-      topo = Math.max(margem, estado.rect.top - altura - 4);
-    }
-    card.style.left = `${Math.round(esquerda)}px`;
-    card.style.top = `${Math.round(topo)}px`;
-  }
-
-  // Chamada depois de cada desenho do quadro. O cabecalho e recriado inteiro a
-  // cada render (inclusive por sincronizacao em tempo real), entao o menu
-  // precisa reencontrar sua coluna - senao ele fica flutuando apontando para o
-  // lugar errado, ou pior, para outra coluna que passou a ocupar aquele ponto.
-  function syncColumnMenuAnchor() {
-    if (!runtime.columnMenu) return;
-    const anchor = columnMenuAnchor();
-    if (!anchor) {
-      closeColumnMenu();
-      return;
-    }
-    runtime.columnMenu.rect = anchor.getBoundingClientRect();
-    positionColumnMenu();
-  }
-
-  function openColumnMenu(escopo, columnId, anchor) {
-    const context = findBoard();
-    const columnEntry = context?.board.columns.find((entry) => entry.id === columnId);
-    if (!context || !columnEntry || !anchor) return;
-    const regra = runtime.columnFilters?.[escopo]?.[columnId];
-    const tipo = columnFilterKind(columnEntry);
-    const opcoes = tipo === 'lista'
-      ? columnFilterOptions(context.board, scopeRows(context.board, escopo), columnEntry)
-      : [];
-    runtime.columnMenu = {
-      escopo,
-      columnId,
-      tipo,
-      opcoes,
-      // Rascunho: a escolha so vale no Aplicar. Aplicar a cada caixinha
-      // redesenharia o quadro e fecharia o proprio menu no primeiro clique.
-      // Sem regra ainda, tudo vem marcado - e o estado "nao estou filtrando".
-      marcados: new Set(regra?.tipo === 'lista' ? regra.valores : opcoes),
-      de: regra?.tipo === 'faixa' ? (regra.de || '') : '',
-      ate: regra?.tipo === 'faixa' ? (regra.ate || '') : '',
-      rect: anchor.getBoundingClientRect(),
-    };
-    renderColumnMenu();
-  }
-
-  function renderColumnMenu() {
-    const estado = runtime.columnMenu;
-    if (!estado) return;
-    const context = findBoard();
-    const columnEntry = context?.board.columns.find((entry) => entry.id === estado.columnId);
-    if (!columnEntry) {
-      closeColumnMenu();
-      return;
-    }
-    const root = columnMenuRoot();
-    const ordem = runtime.columnSort?.[estado.escopo];
-    const ordenadaPor = (dir) => ordem?.columnId === estado.columnId && ordem.dir === dir;
-    const temRegra = Boolean(runtime.columnFilters?.[estado.escopo]?.[estado.columnId]);
-    const todosMarcados = estado.tipo === 'lista' && estado.marcados.size === estado.opcoes.length;
-    const entrada = ['date', 'period'].includes(columnEntry.type) ? 'date' : 'number';
-    const corpo = estado.tipo === 'faixa'
-      ? `<div class="atlas-v2-column-menu-range">
-          <label><span>De</span><input type="${entrada}" data-column-menu-field="de" value="${attr(estado.de)}"></label>
-          <label><span>Até</span><input type="${entrada}" data-column-menu-field="ate" value="${attr(estado.ate)}"></label>
-          <small>${columnEntry.type === 'period' ? 'Entra todo período que encosta na faixa, mesmo sem caber inteiro dentro dela.' : 'Deixe um dos dois em branco para abrir o lado.'}</small>
-        </div>`
-      : `<div class="atlas-v2-column-menu-list">
-          <button type="button" class="atlas-v2-column-menu-all ${todosMarcados ? 'is-checked' : ''}" data-action="column-menu-all" aria-pressed="${todosMarcados}"><i data-lucide="${todosMarcados ? 'check-square' : 'square'}"></i><span>(Selecionar tudo)</span></button>
-          ${estado.opcoes.map((chave) => {
-            const marcado = estado.marcados.has(chave);
-            return `<button type="button" class="${marcado ? 'is-checked' : ''}" data-action="column-menu-toggle" data-valor="${attr(chave)}" aria-pressed="${marcado}"><i data-lucide="${marcado ? 'check-square' : 'square'}"></i><span>${escapeHtml(columnFilterLabel(chave))}</span></button>`;
-          }).join('') || '<p class="atlas-v2-column-menu-vazio">Esta tabela não tem nenhuma linha para listar.</p>'}
-        </div>`;
-    root.hidden = false;
-    root.innerHTML = `<div class="atlas-v2-column-menu-card" role="dialog" aria-label="Filtrar por ${attr(columnEntry.name)}">
-      <header>
-        <i data-lucide="${attr(COLUMN_TYPES[columnEntry.type]?.icon || 'type')}"></i>
-        <strong>${escapeHtml(columnEntry.name)}</strong>
-        <button type="button" data-action="column-menu-close" title="Fechar" aria-label="Fechar o menu da coluna"><i data-lucide="x"></i></button>
-      </header>
-      <div class="atlas-v2-column-menu-sort">
-        <button type="button" class="${ordenadaPor('asc') ? 'is-active' : ''}" data-action="column-menu-sort" data-dir="asc"><i data-lucide="arrow-up-narrow-wide"></i><span>Ordenar A → Z</span></button>
-        <button type="button" class="${ordenadaPor('desc') ? 'is-active' : ''}" data-action="column-menu-sort" data-dir="desc"><i data-lucide="arrow-down-wide-narrow"></i><span>Ordenar Z → A</span></button>
-      </div>
-      ${corpo}
-      <footer>
-        <div class="atlas-v2-column-menu-acoes">
-          ${temRegra ? '<button type="button" class="atlas-v2-column-menu-quiet" data-action="column-menu-clear-column">Limpar esta coluna</button>' : ''}
-          <button type="button" class="atlas-v2-column-menu-apply" data-action="column-menu-apply"><i data-lucide="check"></i><span>Aplicar</span></button>
-        </div>
-        ${boardFilterCount(context.board) ? `<button type="button" class="atlas-v2-column-menu-tudo" data-action="column-menu-clear-board"><i data-lucide="filter-x"></i><span>Limpar todos os filtros deste quadro (${boardFilterCount(context.board)})</span></button>` : ''}
-      </footer>
-    </div>`;
-    positionColumnMenu();
-    refreshIcons(root);
-  }
-
-  function applyColumnMenu() {
-    const estado = runtime.columnMenu;
-    const context = findBoard();
-    if (!estado || !context) return;
-    const root = document.getElementById('atlas-v2-column-menu');
-    const regras = runtime.columnFilters[estado.escopo] || {};
-    if (estado.tipo === 'faixa') {
-      const de = String(root?.querySelector('[data-column-menu-field="de"]')?.value || '').trim();
-      const ate = String(root?.querySelector('[data-column-menu-field="ate"]')?.value || '').trim();
-      if (de && ate && de > ate) {
-        toast('O início da faixa é maior que o fim; nenhuma linha passaria.', true);
-        return;
-      }
-      if (!de && !ate) delete regras[estado.columnId];
-      else regras[estado.columnId] = { tipo: 'faixa', de, ate };
-    } else {
-      if (!estado.marcados.size) {
-        toast('Marque ao menos um valor: desmarcar tudo esvaziaria a tabela.', true);
-        return;
-      }
-      // Tudo marcado e o mesmo que nao filtrar. Guardar a regra assim mesmo
-      // deixaria o funil aceso e o selo "18 de 18" na tela sem nada escondido.
-      if (estado.marcados.size === estado.opcoes.length) delete regras[estado.columnId];
-      else regras[estado.columnId] = { tipo: 'lista', valores: [...estado.marcados] };
-    }
-    if (Object.keys(regras).length) runtime.columnFilters[estado.escopo] = regras;
-    else delete runtime.columnFilters[estado.escopo];
-    closeColumnMenu();
+    closeOverlay();
     render();
   }
 
-  // A gaveta "Filtros avancados" saiu na V2.5.0. Ela filtrava o quadro inteiro
-  // a partir de uma tela que, depois de fechada, nao deixava NENHUM sinal na
-  // tabela: linhas sumiam e nada na tela dizia por que. O filtro agora mora no
-  // cabecalho da coluna, onde o funil marcado e o selo do setor respondem essa
-  // pergunta sozinhos.
-  //
-  // As pesquisas salvas (board.settings.savedSearches) continuam GRAVADAS no
-  // banco. Tirar a tela nao e motivo para destruir o que as pessoas salvaram;
-  // se voltarem a fazer falta, o dado esta la.
-
-  // ===========================================================================
-  // A lista de obras (V2.5.0)
-  // ===========================================================================
-  // Antes: uma fita horizontal de abas. Com 24 obras ela virava rolagem lateral
-  // sem fim, sem dizer o que estava concluido, em andamento ou parado, e sem
-  // jeito de procurar. Agora: lista vertical a esquerda, agrupada por situacao.
-  //
-  // O que NAO foi inventado aqui: a situacao vem da coluna de status do proprio
-  // quadro, com os rotulos e a ordem que a equipe configurou. Criar categorias
-  // minhas ("atrasada", "parada") exigiria adivinhar o que cada quadro entende
-  // por isso. A unica reordenacao e empurrar para o fim os status marcados como
-  // "encerra o item" - e so porque essa marca existe no proprio quadro.
-
-  function workProgress(boardEntry, itemEntry) {
-    const registros = visibleSubitems(boardEntry, itemEntry);
-    const total = registros.length;
-    const concluidos = registros.filter((entry) => itemIsCompleted(boardEntry, entry)).length;
-    // Sem registro nenhum o percentual seria 0/0. Mostrar "0%" diria que a obra
-    // nao andou, quando na verdade ela nao tem o que andar.
-    return { total, concluidos, percentual: total ? Math.round((concluidos / total) * 100) : null };
+  function clearAdvancedFilters() {
+    const context = findBoard();
+    if (!context) return;
+    delete runtime.searchFilters[context.board.id];
+    runtime.boardSearch = '';
+    const input = document.getElementById('atlas-v2-board-search');
+    if (input) input.value = '';
+    closeOverlay();
+    render();
   }
 
-  function workStatusColumn(boardEntry) {
-    return boardEntry.columns.find((entry) => entry.type === 'status') || null;
+  function useSavedSearch(searchId) {
+    const context = findBoard();
+    const saved = context?.board.settings?.savedSearches?.find((entry) => entry.id === searchId);
+    if (!context || !saved) return;
+    runtime.searchFilters[context.board.id] = deepClone(saved.filters || {});
+    runtime.boardSearch = saved.query || '';
+    closeOverlay();
+    render();
   }
 
-  function groupedWorkEntries(boardEntry) {
-    const works = boardWorkEntries(boardEntry);
-    const statusColumn = workStatusColumn(boardEntry);
-    if (!statusColumn) return [{ key: 'todas', label: '', background: '', done: false, entries: works }];
-
-    const options = normalizeStatusOptions(statusColumn.options || []);
-    const baldes = new Map();
-    options.forEach((option) => {
-      baldes.set(normalizedStatusLabel(option.label), {
-        key: option.label, label: option.label, background: option.background, done: option.done === true, entries: [],
-      });
-    });
-    const semSituacao = { key: '', label: 'Sem situação', background: '', done: false, entries: [] };
-
-    works.forEach((entry) => {
-      const valor = String(entry.item.values?.[statusColumn.id] || '').trim();
-      const balde = valor ? baldes.get(normalizedStatusLabel(valor)) : null;
-      // Status digitado que nao existe mais nas opcoes nao pode sumir da lista:
-      // a obra continua existindo, e esconde-la seria pior do que agrupa-la a
-      // parte.
-      if (balde) balde.entries.push(entry);
-      else if (valor) {
-        const chave = `?${normalizedStatusLabel(valor)}`;
-        if (!baldes.has(chave)) baldes.set(chave, { key: valor, label: valor, background: '', done: false, entries: [] });
-        baldes.get(chave).entries.push(entry);
-      } else semSituacao.entries.push(entry);
-    });
-
-    const todos = [...baldes.values(), semSituacao].filter((balde) => balde.entries.length);
-    // Concluidas por ultimo: nao exigem nada de ninguem. A ordem do resto e a
-    // que a equipe configurou na coluna.
-    return [...todos.filter((balde) => !balde.done), ...todos.filter((balde) => balde.done)];
-  }
-
-  // A busca do quadro ja existe no topo e ja serve para obras. Em vez de um
-  // segundo campo fazendo quase a mesma coisa, a lista usa aquele - mas so
-  // quando o texto casa com alguma obra. Sem essa ressalva, procurar um
-  // registro ("CTO-CG-002") esvaziaria a lista de obras inteira.
-  function workListFilter(boardEntry) {
-    const query = normalizeSearchText(runtime.boardSearch);
-    if (!query) return null;
-    const casa = boardWorkEntries(boardEntry)
-      .filter(({ item: itemEntry }) => normalizeSearchText(itemEntry.name).includes(query));
-    return casa.length ? new Set(casa.map(({ item: itemEntry }) => itemEntry.id)) : null;
-  }
-
-  function renderWorkSidebar(boardEntry) {
+  function renderWorkTabs(boardEntry) {
     const works = boardWorkEntries(boardEntry);
     if (!works.length) return '';
     const searchMatch = workSearchMatch(boardEntry);
-    const filtro = workListFilter(boardEntry);
-    const grupos = groupedWorkEntries(boardEntry).map((grupo) => ({
-      ...grupo,
-      visiveis: filtro ? grupo.entries.filter(({ item }) => filtro.has(item.id)) : grupo.entries,
-    })).filter((grupo) => grupo.visiveis.length);
-
-    const linha = ({ item: itemEntry, group: groupEntry }) => {
-      const { total, concluidos, percentual } = workProgress(boardEntry, itemEntry);
-      const ativa = runtime.workFilter === itemEntry.id;
-      const largura = percentual === null ? 0 : percentual;
-      return `<li><button class="atlas-v2-work-tab ${ativa ? 'is-active' : ''} ${searchMatch?.item.id === itemEntry.id ? 'is-search-match' : ''}" type="button" data-action="filter-work" data-work-id="${attr(itemEntry.id)}" style="--work-color:${attr(groupEntry.color || '#176ead')}" ${ativa ? 'aria-current="true"' : ''}>
-        <span class="atlas-v2-work-tab-head"><span class="atlas-v2-work-dot"></span><strong title="${attr(itemEntry.name)}">${escapeHtml(itemEntry.name)}</strong><small>${total ? `${concluidos}/${total}` : '—'}</small></span>
-        <span class="atlas-v2-work-bar" role="presentation"><span style="width:${largura}%"></span></span>
-      </button></li>`;
-    };
-
-    const secao = (grupo) => {
-      if (!grupo.label) return `<ul class="atlas-v2-work-list">${grupo.visiveis.map(linha).join('')}</ul>`;
-      const recolhido = runtime.collapsedWorkStatus.has(grupo.key) && !filtro;
-      return `<section class="atlas-v2-work-section ${grupo.done ? 'is-done' : ''}">
-        <button class="atlas-v2-work-section-head" type="button" data-action="toggle-work-status" data-status-key="${attr(grupo.key)}" aria-expanded="${recolhido ? 'false' : 'true'}">
-          <i data-lucide="${recolhido ? 'chevron-right' : 'chevron-down'}"></i>
-          <span class="atlas-v2-work-section-dot" style="--status-bg:${attr(grupo.background || '#8ca7b3')}"></span>
-          <span class="atlas-v2-work-section-name">${escapeHtml(grupo.label)}</span>
-          <span class="atlas-v2-work-section-count">${grupo.visiveis.length}</span>
-        </button>
-        ${recolhido ? '' : `<ul class="atlas-v2-work-list">${grupo.visiveis.map(linha).join('')}</ul>`}
-      </section>`;
-    };
-
-    const vazio = !grupos.length
-      ? '<p class="atlas-v2-work-empty">Nenhuma obra corresponde à busca.</p>'
-      : '';
-
-    return `<aside class="atlas-v2-work-sidebar" aria-label="Obras">
-      <header class="atlas-v2-work-sidebar-head">
-        <span>${works.length} ${works.length === 1 ? 'obra' : 'obras'}</span>
-        <span class="atlas-v2-work-actions">
-          <button class="atlas-v2-work-rename" type="button" data-action="rename-work" title="Renomear obra" aria-label="Renomear obra selecionada"><i data-lucide="pencil"></i></button>
-          <button class="atlas-v2-work-delete" type="button" data-action="delete-work" title="Excluir obra" aria-label="Excluir obra selecionada"><i data-lucide="trash-2"></i></button>
-        </span>
-      </header>
-      ${vazio}${grupos.map(secao).join('')}
-    </aside>`;
+    const button = (label, value, count, color) => `<button class="atlas-v2-work-tab ${runtime.workFilter === value ? 'is-active' : ''} ${searchMatch?.item.id === value ? 'is-search-match' : ''}" type="button" data-action="filter-work" data-work-id="${attr(value)}" style="--work-color:${attr(color || '#176ead')}" title="${attr(label)}"><span class="atlas-v2-work-dot"></span><strong>${escapeHtml(label)}</strong><small>${count}</small></button>`;
+    return `<nav class="atlas-v2-work-tabs" aria-label="Selecionar obra">${works.map(({ item: itemEntry, group: groupEntry }) => button(itemEntry.name, itemEntry.id, itemEntry.subitems?.length || 0, groupEntry.color)).join('')}<span class="atlas-v2-work-actions"><button class="atlas-v2-work-rename" type="button" data-action="rename-work" title="Renomear obra" aria-label="Renomear obra selecionada"><i data-lucide="pencil"></i></button><button class="atlas-v2-work-delete" type="button" data-action="delete-work" title="Excluir obra" aria-label="Excluir obra selecionada"><i data-lucide="trash-2"></i></button></span></nav>`;
   }
 
   function visibleGroups(boardEntry) {
     let groups = boardEntry.groups;
     if (boardEntry.activeView === 'works' && runtime.workFilter) {
-      // Em Obras so aparecem os setores da obra selecionada - os outros sao de
-      // outras obras e poluiriam a tela.
-      //
-      // MAS setor VAZIO tambem aparece. Ele nao pertence a obra nenhuma: e um
-      // setor recem-criado, esperando o primeiro registro. Filtra-lo fazia o
-      // botao "Novo grupo" parecer quebrado - voce criava o setor e ele sumia
-      // na mesma hora, sem explicacao, e so reaparecia na Tabela.
-      groups = groups.filter((groupEntry) => {
-        const itens = groupEntry.items.filter((itemEntry) => !itemEntry.archived);
-        if (!itens.length) return true;
-        return itens.some((itemEntry) => itemEntry.id === runtime.workFilter);
-      });
+      groups = groups.filter((groupEntry) => groupEntry.items.some((itemEntry) => itemEntry.id === runtime.workFilter));
     }
     const query = contextualItemSearch(boardEntry);
     if (!query) return groups;
@@ -7936,25 +6888,12 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
       .find(({ item: itemEntry }) => itemEntry.id === runtime.workFilter) || null;
   }
 
-  // Obras concluidas comecam recolhidas: sao as que nao exigem nada de
-  // ninguem, e numa lista de 24 obras sao metade do espaco. SO na primeira vez
-  // que o quadro aparece - depois disso quem manda e quem clicou, senao abrir
-  // o grupo nao adiantaria nada e a tela pareceria quebrada.
-  function seedWorkStatusCollapse(boardEntry) {
-    if (runtime.seededWorkStatusBoards.has(boardEntry.id)) return;
-    runtime.seededWorkStatusBoards.add(boardEntry.id);
-    groupedWorkEntries(boardEntry)
-      .filter((grupo) => grupo.done && grupo.entries.length)
-      .forEach((grupo) => runtime.collapsedWorkStatus.add(grupo.key));
-  }
-
   function ensureWorkSelection(boardEntry) {
     const works = boardWorkEntries(boardEntry);
     if (!works.length) {
       runtime.workFilter = '';
       return null;
     }
-    seedWorkStatusCollapse(boardEntry);
     selectWorkFromContextSearch(boardEntry);
     if (!works.some(({ item: itemEntry }) => itemEntry.id === runtime.workFilter)) {
       runtime.workFilter = works[0].item.id;
@@ -7962,75 +6901,32 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
     return selectedWork(boardEntry);
   }
 
-  function sectorizedWorkItems(boardEntry, workItem, sectorName, aplicarFiltroDeColuna = true) {
+  function sectorizedWorkItems(boardEntry, workItem, sectorName) {
     const columnId = boardEntry.settings?.works_sector_column_id;
     const query = contextualItemSearch(boardEntry);
     const sectorMatches = query && contextualSectorMatch(sectorName, query);
-    const porBusca = visibleSubitems(boardEntry, workItem).filter((entry) => {
+    return visibleSubitems(boardEntry, workItem).filter((entry) => {
       if (String(entry.values?.[columnId] || '').trim() !== sectorName) return false;
       if (!query || sectorMatches) return true;
       const ownText = normalizeSearchText(`${entry.name} ${Object.values(entry.values || {}).join(' ')}`);
       const childrenText = normalizeSearchText(visibleSubitems(boardEntry, entry).map((child) => `${child.name} ${Object.values(child.values || {}).join(' ')}`).join(' '));
       return `${ownText} ${childrenText}`.includes(query);
     });
-    if (!aplicarFiltroDeColuna) return porBusca;
-    // O setor da obra tem cabecalho proprio, entao tem filtro proprio - igual
-    // ao grupo da visao Tabela.
-    const escopo = sectorFilterScope(boardEntry, workItem, sectorName);
-    const permitidos = allowedRowIds(boardEntry, escopo, porBusca);
-    const sobraram = permitidos ? porBusca.filter((entry) => permitidos.has(entry.id)) : porBusca;
-    return sortRowsByColumn(boardEntry, escopo, sobraram);
   }
 
   function workSectorStateKey(boardId, workId, sectorName) {
     return `${String(boardId || '')}::${String(workId || '')}::${String(sectorName || '')}`;
   }
 
-  // O cabecalho de coluna e o MESMO nas duas tabelas (visao Tabela e setor da
-  // Obras). Ele morava duplicado em dois trechos que ja tinham divergido - um
-  // tinha data-column-id, o outro nao. Uma funcao so, para o funil nao nascer
-  // de novo em apenas metade da tela.
-  function renderColumnHead(boardEntry, columnEntry, escopo, arrastavel) {
-    const largura = Number(columnEntry.width || 160);
-    const regra = runtime.columnFilters?.[escopo]?.[columnEntry.id];
-    const ordem = runtime.columnSort?.[escopo];
-    const ordenada = ordem?.columnId === columnEntry.id;
-    const icone = ordenada
-      ? (ordem.dir === 'desc' ? 'arrow-down-wide-narrow' : 'arrow-up-narrow-wide')
-      : 'list-filter';
-    const titulo = regra
-      ? `${columnEntry.name}: filtro ativo`
-      : `Filtrar ou ordenar por ${columnEntry.name}`;
-    return `<th style="width:${largura}px;min-width:${largura}px" ${arrastavel ? 'draggable="true"' : ''} data-column-id="${attr(columnEntry.id)}">
-      <div class="atlas-v2-column-head">
-        <i data-lucide="${attr(COLUMN_TYPES[columnEntry.type]?.icon || 'type')}"></i>
-        <span>${escapeHtml(columnEntry.name)}</span>
-        <button class="atlas-v2-column-filter ${regra || ordenada ? 'is-active' : ''}" type="button" data-action="column-menu" data-column-id="${attr(columnEntry.id)}" data-scope="${attr(escopo)}" title="${attr(titulo)}" aria-label="${attr(titulo)}" aria-haspopup="dialog"><i data-lucide="${attr(icone)}"></i></button>
-      </div>
-    </th>`;
-  }
-
-  // O selo que aparece no cabecalho do setor quando ha filtro. Sem ele, linhas
-  // somem e a unica pista fica num funil de 14px la em cima - foi assim que o
-  // filtro avancado antigo conseguiu esconder registros sem ninguem perceber.
-  function renderScopeFilterChip(escopo, visiveis, total) {
-    if (!scopeFilterCount(escopo)) return '';
-    return `<button class="atlas-v2-scope-filter-chip" type="button" data-action="clear-scope-filters" data-scope="${attr(escopo)}" title="Limpar o filtro deste setor"><i data-lucide="filter-x"></i><span>${visiveis} de ${total}</span></button>`;
-  }
-
   function renderWorkSectorTable(boardEntry, workItem, sectorName, sectorIndex) {
-    const escopo = sectorFilterScope(boardEntry, workItem, sectorName);
     const items = sectorizedWorkItems(boardEntry, workItem, sectorName);
-    const totalSemFiltro = sectorizedWorkItems(boardEntry, workItem, sectorName, false).length;
-    const permitidos = allowedRowIds(boardEntry, escopo, items);
-    const subitemCount = items.reduce((total, entry) => total
-      + visibleSubitems(boardEntry, entry).filter((filho) => !permitidos || permitidos.has(filho.id)).length, 0);
+    const subitemCount = items.reduce((total, entry) => total + visibleSubitems(boardEntry, entry).length, 0);
     const columnsWidth = boardEntry.columns.reduce((total, entry) => total + Number(entry.width || 160), 0);
     const tableWidth = 40 + 500 + columnsWidth + 42;
     const tableHead = `<thead><tr>
       <th class="atlas-v2-select-cell"></th>
       <th class="atlas-v2-item-cell"><div class="atlas-v2-column-head"><i data-lucide="scan-line"></i><span>Registro</span></div></th>
-      ${boardEntry.columns.map((columnEntry) => renderColumnHead(boardEntry, columnEntry, escopo, false)).join('')}
+      ${boardEntry.columns.map((columnEntry) => `<th style="width:${Number(columnEntry.width || 160)}px;min-width:${Number(columnEntry.width || 160)}px"><div class="atlas-v2-column-head"><i data-lucide="${attr(COLUMN_TYPES[columnEntry.type]?.icon || 'type')}"></i><span>${escapeHtml(columnEntry.name)}</span></div></th>`).join('')}
       <th class="atlas-v2-end-spacer" aria-hidden="true"></th>
     </tr></thead>`;
     const sectorColors = boardEntry.settings?.works_sector_colors || {};
@@ -8042,14 +6938,14 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
         <span class="atlas-v2-group-index">${String(sectorIndex + 1).padStart(2, '0')}</span>
         <button type="button" data-action="toggle-work-sector" data-work-id="${attr(workItem.id)}" data-work-sector="${attr(sectorName)}" title="${expanded ? 'Recolher setor' : 'Expandir setor'}" aria-expanded="${expanded}"><i data-lucide="${expanded ? 'chevron-down' : 'chevron-right'}"></i></button>
         <div class="atlas-v2-group-title"><span>${escapeHtml(sectorName)}</span></div>
-        <div class="atlas-v2-group-meta"><span class="atlas-v2-group-count">${items.length} ${items.length === 1 ? 'elemento' : 'elementos'}${subitemCount ? ` · ${subitemCount} ${subitemCount === 1 ? 'subelemento' : 'subelementos'}` : ''}</span>${renderScopeFilterChip(escopo, items.length, totalSemFiltro)}</div>
+        <span class="atlas-v2-group-count">${items.length} ${items.length === 1 ? 'elemento' : 'elementos'}${subitemCount ? ` · ${subitemCount} ${subitemCount === 1 ? 'subelemento' : 'subelementos'}` : ''}</span>
         <span class="atlas-v2-group-head-spacer" aria-hidden="true"></span>
       </header>
       ${expanded ? `<div class="atlas-v2-table-sticky-head" data-sticky-work-sector="${attr(sectorName)}">
         <table class="atlas-v2-table" style="width:${tableWidth}px;min-width:${tableWidth}px">${tableHead}</table>
       </div><div class="atlas-v2-table-wrap">
         <table class="atlas-v2-table" style="width:${tableWidth}px;min-width:${tableWidth}px">
-          <tbody>${items.map((itemEntry) => renderItemRows(boardEntry, itemEntry, null, 0, permitidos)).join('') || `<tr><td colspan="${boardEntry.columns.length + 3}" class="atlas-v2-empty-cell">${scopeFilterCount(escopo) ? `Nenhum registro em ${escapeHtml(sectorName)} passa no filtro desta tabela.` : `Nenhum registro em ${escapeHtml(sectorName)}.`}</td></tr>`}</tbody>
+          <tbody>${items.map((itemEntry) => renderItemRows(boardEntry, itemEntry)).join('') || `<tr><td colspan="${boardEntry.columns.length + 3}" class="atlas-v2-empty-cell">Nenhum registro em ${escapeHtml(sectorName)}.</td></tr>`}</tbody>
         </table>
         <button class="atlas-v2-add-row" type="button" data-action="add-work-element" data-item-id="${attr(workItem.id)}" data-work-sector="${attr(sectorName)}"><i data-lucide="plus"></i><span>Adicionar elemento em ${escapeHtml(sectorName)}</span></button>
       </div>` : ''}
@@ -8077,7 +6973,7 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
   function boardScrollerKey(element, index = 0) {
     if (!element) return `scroller:${index}`;
     if (element.id) return `id:${element.id}`;
-    if (element.classList.contains('atlas-v2-work-sidebar')) return 'work-sidebar';
+    if (element.classList.contains('atlas-v2-work-tabs')) return 'work-tabs';
     if (element.classList.contains('atlas-v2-gantt-scroll')) return 'gantt';
     const workSector = element.closest('[data-work-sector]');
     if (workSector) return `work-sector:${workSector.getAttribute('data-work-sector') || index}`;
@@ -8123,7 +7019,7 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
       return pendingState;
     }
     if (!boardScroll || !root) return runtime.boardUiStates.get(boardId) || null;
-    const scrollers = [...root.querySelectorAll('.atlas-v2-table-wrap, .atlas-v2-work-sidebar, .atlas-v2-gantt-scroll')]
+    const scrollers = [...root.querySelectorAll('.atlas-v2-table-wrap, .atlas-v2-work-tabs, .atlas-v2-gantt-scroll')]
       .map((element, index) => ({
         key: boardScrollerKey(element, index),
         left: element.scrollLeft,
@@ -8149,7 +7045,7 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
       if (!boardScroll || !root) return;
       boardScroll.scrollLeft = Number(state.boardLeft || 0);
       boardScroll.scrollTop = Number(state.boardTop || 0);
-      const candidates = [...root.querySelectorAll('.atlas-v2-table-wrap, .atlas-v2-work-sidebar, .atlas-v2-gantt-scroll')];
+      const candidates = [...root.querySelectorAll('.atlas-v2-table-wrap, .atlas-v2-work-tabs, .atlas-v2-gantt-scroll')];
       (state.scrollers || []).forEach((saved) => {
         const element = candidates.find((candidate, index) => boardScrollerKey(candidate, index) === saved.key);
         if (!element) return;
@@ -8209,10 +7105,7 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
         const content = boardEntry.settings?.works_mode === 'sectorized'
           ? renderSectorizedWorks(boardEntry)
           : (visibleGroups(boardEntry).map((groupEntry, groupIndex) => renderGroupTable(boardEntry, groupEntry, groupIndex)).join('') || renderEmptyBoard());
-        const sidebar = renderWorkSidebar(boardEntry);
-        root.innerHTML = sidebar
-          ? `<div class="atlas-v2-works-layout">${sidebar}<div class="atlas-v2-works-main">${content}</div></div>`
-          : content;
+        root.innerHTML = renderWorkTabs(boardEntry) + content;
       }
       revealContextSearchWork(boardEntry, false);
     } else if (boardEntry.activeView === 'gantt') {
@@ -8235,24 +7128,7 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
       root.innerHTML = visibleGroups(boardEntry).map((groupEntry) => renderGroupTable(boardEntry, groupEntry, boardEntry.groups.indexOf(groupEntry))).join('') || `<div class="atlas-v2-empty-view"><div><i data-lucide="search-x"></i><strong>Nenhum setor, item ou subitem encontrado</strong></div></div>`;
     }
     restoreBoardUiState(uiState, restoreToken);
-    syncBoardFilterIndicator(boardEntry);
-    // O cabecalho acabou de ser recriado: o menu aberto precisa reencontrar a
-    // coluna dele ou fechar. Sem isto ele fica apontando para o vazio depois de
-    // uma sincronizacao em tempo real.
-    syncColumnMenuAnchor();
     void ensureBoardViewData(boardEntry);
-  }
-
-  // O botao da barra de ferramentas so existe enquanto ha filtro. Aceso, ele e
-  // a resposta de longe para "cade meus registros"; apagado, nao ocupa espaco
-  // nem promete uma tela que nao existe mais.
-  function syncBoardFilterIndicator(boardEntry) {
-    const botao = document.getElementById('atlas-v2-clear-filters');
-    if (!botao) return;
-    const total = boardFilterCount(boardEntry);
-    botao.hidden = !total;
-    const marca = botao.querySelector('b');
-    if (marca) marca.textContent = total > 1 ? String(total) : '';
   }
 
   function renderEmptyBoard() {
@@ -8264,22 +7140,18 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
   }
 
   function renderGroupTable(boardEntry, groupEntry, groupIndex = 0) {
-    const escopo = groupFilterScope(boardEntry, groupEntry);
     const items = filteredItems(boardEntry, groupEntry);
-    const totalSemFiltro = filteredItems(boardEntry, groupEntry, false).length;
-    const permitidos = allowedRowIds(boardEntry, escopo, items);
     const searchOpensSector = contextualSectorMatch(groupEntry.name, contextualItemSearch(boardEntry));
     const groupCollapsed = groupEntry.collapsed && !searchOpensSector;
     const selectableIds = items.flatMap((entry) => itemTreeIds(entry, []));
     const allSelected = selectableIds.length > 0 && selectableIds.every((itemId) => runtime.selectedItems.has(itemId));
-    const subitemCount = items.reduce((total, entry) => total
-      + visibleSubitems(boardEntry, entry).filter((filho) => !permitidos || permitidos.has(filho.id)).length, 0);
+    const subitemCount = items.reduce((total, entry) => total + visibleSubitems(boardEntry, entry).length, 0);
     const columnsWidth = boardEntry.columns.reduce((total, entry) => total + Number(entry.width || 160), 0);
     const tableWidth = 40 + 500 + columnsWidth + 42;
     const tableHead = `<thead><tr>
       <th class="atlas-v2-select-cell"><input class="atlas-v2-checkbox" type="checkbox" data-action="select-group" data-group-id="${attr(groupEntry.id)}" ${allSelected ? 'checked' : ''} aria-label="Selecionar grupo"></th>
       <th class="atlas-v2-item-cell"><div class="atlas-v2-column-head"><i data-lucide="scan-line"></i><span>Registro</span></div></th>
-      ${boardEntry.columns.map((columnEntry) => renderColumnHead(boardEntry, columnEntry, escopo, true)).join('')}
+      ${boardEntry.columns.map((columnEntry) => `<th style="width:${Number(columnEntry.width || 160)}px;min-width:${Number(columnEntry.width || 160)}px" draggable="true" data-column-id="${attr(columnEntry.id)}"><div class="atlas-v2-column-head"><i data-lucide="${attr(COLUMN_TYPES[columnEntry.type]?.icon || 'type')}"></i><span>${escapeHtml(columnEntry.name)}</span></div></th>`).join('')}
       <th class="atlas-v2-end-spacer" aria-hidden="true"></th>
     </tr></thead>`;
     return `<section class="atlas-v2-group" style="--group-color:${attr(groupEntry.color || '#0f6cbd')}" data-group-id="${attr(groupEntry.id)}" draggable="true">
@@ -8287,7 +7159,7 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
         <span class="atlas-v2-group-index">${String(groupIndex + 1).padStart(2, '0')}</span>
         <button type="button" data-action="toggle-group" data-group-id="${attr(groupEntry.id)}" title="${groupCollapsed ? 'Expandir grupo' : 'Recolher grupo'}"><i data-lucide="${groupCollapsed ? 'chevron-right' : 'chevron-down'}"></i></button>
         <div class="atlas-v2-group-title"><span>${escapeHtml(groupEntry.name)}</span></div>
-        <div class="atlas-v2-group-meta"><span class="atlas-v2-group-count">${items.length} ${items.length === 1 ? 'item' : 'itens'}${subitemCount ? ` · ${subitemCount} ${subitemCount === 1 ? 'subitem' : 'subitens'}` : ''}</span>${renderScopeFilterChip(escopo, items.length, totalSemFiltro)}</div>
+        <span class="atlas-v2-group-count">${items.length} ${items.length === 1 ? 'item' : 'itens'}${subitemCount ? ` · ${subitemCount} ${subitemCount === 1 ? 'subitem' : 'subitens'}` : ''}</span>
         <button type="button" data-action="group-menu" data-group-id="${attr(groupEntry.id)}" title="Opções do grupo"><i data-lucide="more-horizontal"></i></button>
       </header>
       ${groupCollapsed ? '' : `<div class="atlas-v2-table-sticky-head" data-sticky-group="${attr(groupEntry.id)}">
@@ -8295,8 +7167,7 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
       </div><div class="atlas-v2-table-wrap" data-drop-group="${attr(groupEntry.id)}">
         <table class="atlas-v2-table" style="width:${tableWidth}px;min-width:${tableWidth}px">
           <tbody>
-            ${items.map((itemEntry) => renderItemRows(boardEntry, itemEntry, null, 0, permitidos)).join('')}
-            ${!items.length && scopeFilterCount(escopo) ? `<tr><td colspan="${boardEntry.columns.length + 3}" class="atlas-v2-empty-cell">Nenhum registro deste grupo passa no filtro das colunas.</td></tr>` : ''}
+            ${items.map((itemEntry) => renderItemRows(boardEntry, itemEntry)).join('')}
           </tbody>
         </table>
         <button class="atlas-v2-add-row" type="button" data-action="add-item-to-group" data-group-id="${attr(groupEntry.id)}"><i data-lucide="plus"></i><span>Adicionar item</span></button>
@@ -8304,16 +7175,12 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
     </section>`;
   }
 
-  function renderItemRows(boardEntry, itemEntry, parentItem = null, depth = 0, permitidos = null) {
+  function renderItemRows(boardEntry, itemEntry, parentItem = null, depth = 0) {
     const expanded = itemEntry.subitemsExpanded !== false;
     const mainRow = renderItemRow(boardEntry, itemEntry, parentItem, expanded, depth);
-    // `permitidos` e o conjunto que sobreviveu ao filtro de coluna. Ele vale em
-    // qualquer profundidade: filtrar so a primeira linha deixaria subitens que
-    // nao casam com o filtro desenhados logo abaixo dela.
-    const subitems = visibleSubitems(boardEntry, itemEntry)
-      .filter((subitem) => !permitidos || permitidos.has(subitem.id));
+    const subitems = visibleSubitems(boardEntry, itemEntry);
     if (!expanded || !subitems.length) return mainRow;
-    return mainRow + subitems.map((subitem) => renderItemRows(boardEntry, subitem, itemEntry, depth + 1, permitidos)).join('');
+    return mainRow + subitems.map((subitem) => renderItemRows(boardEntry, subitem, itemEntry, depth + 1)).join('');
   }
 
   function renderItemRow(boardEntry, itemEntry, parentItem = null, expanded = true, depth = 0) {
@@ -10687,7 +9554,7 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
   function boardViewItemIds(boardEntry) {
     if (!boardEntry) return [];
     const allIds = () => flatBoardItems(boardEntry).map(({ item }) => item.id);
-    if (boardFilterCount(boardEntry)) return allIds();
+    if (Object.keys(runtime.searchFilters?.[boardEntry.id] || {}).length) return allIds();
     // Sem os valores dos subitens recolhidos, uma formula de agregacao
     // calcularia 0 silenciosamente (subitem.values vazio vira 0), mostrando um
     // numero plausivel e ERRADO - por isso esses quadros carregam a arvore
@@ -10942,12 +9809,7 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
   }
 
   function renderMobileWorks(boardEntry) {
-    // DEFEITO corrigido aqui: a remodelagem da lista de obras trocou
-    // renderWorkTabs por renderWorkSidebar e esta chamada ficou para tras. No
-    // celular, abrir a visao Obras lancava "renderWorkTabs is not defined" e a
-    // tela inteira ficava em branco - nao so a lista. O smoke em navegador
-    // pegava isso; ele e que nao tinha rodado.
-    const tabs = renderWorkSidebar(boardEntry);
+    const tabs = renderWorkTabs(boardEntry);
     const selected = selectedWork(boardEntry);
     if (!selected) return tabs + renderEmptyBoard();
     const rows = [];
@@ -12050,20 +10912,20 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
       subtitle: 'Monte a estrutura sem código ou SQL.',
       body: `<form id="atlas-v2-create-form" class="atlas-v2-form-grid">
         <div class="atlas-v2-field is-wide"><span>O que deseja criar?</span><div class="atlas-v2-choice-grid">
-          ${choice('create-type', 'workspace', 'layout-grid', 'Núcleo', defaultType === 'workspace')}
+          ${choice('create-type', 'workspace', 'layout-grid', 'Área', defaultType === 'workspace')}
           ${choice('create-type', 'module', 'boxes', 'Módulo', defaultType === 'module')}
           ${choice('create-type', 'submodule', 'folder-tree', 'Submódulo', defaultType === 'submodule')}
           ${choice('create-type', 'board', 'table-2', 'Quadro', defaultType === 'board')}
         </div></div>
         <label class="atlas-v2-field is-wide"><span>Nome</span><input name="name" maxlength="80" required autofocus placeholder="Ex.: Planejamento de Rede"></label>
-        <label class="atlas-v2-field" data-create-parent="module"><span>Núcleo</span><select name="workspaceId">${runtime.data.workspaces.map((entry) => `<option value="${attr(entry.id)}" ${entry.id === workspace.id ? 'selected' : ''}>${escapeHtml(entry.name)}</option>`).join('')}</select></label>
+        <label class="atlas-v2-field" data-create-parent="module"><span>Área de trabalho</span><select name="workspaceId">${runtime.data.workspaces.map((entry) => `<option value="${attr(entry.id)}" ${entry.id === workspace.id ? 'selected' : ''}>${escapeHtml(entry.name)}</option>`).join('')}</select></label>
         <label class="atlas-v2-field" data-create-parent="submodule"><span>Módulo principal</span><select name="parentModuleId">${moduleOptions}</select></label>
         <label class="atlas-v2-field" data-create-parent="board"><span>Módulo</span><select name="moduleId">${moduleOptions}</select></label>
         <label class="atlas-v2-field" data-create-board><span>Modelo inicial</span><select name="template"><option value="blank">Em branco</option><option value="project">Gestão de projetos</option><option value="maintenance">Manutenção operacional</option><option value="field-inspection">Inspeção em campo</option><option value="sla-service">Chamados e SLA</option><option value="portfolio">Portfólio executivo</option>${customTemplates}</select></label>
         <label class="atlas-v2-field" data-create-access><span>Acesso</span><select name="access">${Object.entries(ACCESS).map(([key, value]) => `<option value="${key}">${escapeHtml(value.label)}</option>`).join('')}</select></label>
         <label class="atlas-v2-field is-wide" data-create-board><span>Descrição</span><textarea name="description" maxlength="180" placeholder="Objetivo deste quadro"></textarea></label>
         <section class="atlas-v2-storage-setup is-wide" data-create-storage>
-          <header><span><i data-lucide="hard-drive"></i></span><div><strong>Armazenamento do núcleo</strong><small>Escolha uma conta setorial já conectada ou cadastre um novo Google Drive.</small></div></header>
+          <header><span><i data-lucide="hard-drive"></i></span><div><strong>Armazenamento da área</strong><small>Escolha uma conta setorial já conectada ou cadastre um novo Google Drive.</small></div></header>
           <div class="atlas-v2-storage-choice-grid">
             ${choice('storage-mode', 'existing', 'database', 'Usar Drive existente', defaultStorageMode === 'existing')}
             ${choice('storage-mode', 'new', 'cloud-cog', 'Cadastrar novo Drive', defaultStorageMode === 'new')}
@@ -12206,7 +11068,7 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
           return;
         }
         if (data.get('driveVerified') !== '1') {
-          setStorageTestStatus('Teste a conexão antes de criar o núcleo.', 'error');
+          setStorageTestStatus('Teste a conexão antes de criar a área.', 'error');
           return;
         }
         const connection = {
@@ -12261,7 +11123,7 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
       runtime.data.activeBoardId = newBoard.id;
     }
     closeOverlay();
-    saveData(`${type === 'workspace' ? 'Núcleo' : type === 'module' ? 'Módulo' : type === 'submodule' ? 'Submódulo' : 'Quadro'} criado`);
+    saveData(`${type === 'workspace' ? 'Área' : type === 'module' ? 'Módulo' : type === 'submodule' ? 'Submódulo' : 'Quadro'} criado`);
     render();
   }
 
@@ -12721,10 +11583,10 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
   function openWorkspaceMenu() {
     const visibleWorkspaces = runtime.data.workspaces.filter((workspace) => workspace.modules.some((module) => module.boards.some((boardEntry) => hasPermission('view', { workspace, module, board: boardEntry }))));
     openModal({
-      title: 'Núcleos',
-      subtitle: 'Escolha, renomeie ou crie um núcleo.',
+      title: 'Áreas de trabalho',
+      subtitle: 'Escolha, renomeie ou crie uma área de trabalho.',
       body: `<div class="atlas-v2-settings-list">${visibleWorkspaces.map((entry) => `<div class="atlas-v2-workspace-menu-row"><button class="atlas-v2-settings-row atlas-v2-workspace-select" type="button" data-action="select-workspace" data-workspace-id="${attr(entry.id)}"><span class="atlas-v2-workspace-mark" style="background:${attr(entry.color || '#0f6cbd')}">${escapeHtml(entry.name.slice(0, 1).toUpperCase())}</span><span><strong>${escapeHtml(entry.name)}</strong><small>${entry.modules.length} ${entry.modules.length === 1 ? 'módulo' : 'módulos'} · ${escapeHtml(ACCESS[entry.access]?.label || 'Organizacional')}</small></span><i data-lucide="chevron-right"></i></button>${hasPermission('configure', findBoard()) ? `<button class="atlas-v2-icon-button atlas-v2-workspace-edit" type="button" data-action="edit-workspace" data-workspace-id="${attr(entry.id)}" title="Renomear ${attr(entry.name)}" aria-label="Renomear ${attr(entry.name)}"><i data-lucide="pencil"></i></button>` : ''}</div>`).join('')}</div>`,
-      actions: `<button class="atlas-v2-button atlas-v2-button-quiet" type="button" data-action="close-overlay">Fechar</button><button class="atlas-v2-button atlas-v2-button-primary" type="button" data-action="create-workspace"><i data-lucide="plus"></i>Novo núcleo</button>`,
+      actions: `<button class="atlas-v2-button atlas-v2-button-quiet" type="button" data-action="close-overlay">Fechar</button><button class="atlas-v2-button atlas-v2-button-primary" type="button" data-action="create-workspace"><i data-lucide="plus"></i>Nova área</button>`,
     });
   }
 
@@ -12732,9 +11594,9 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
     const workspace = runtime.data.workspaces.find((entry) => entry.id === workspaceId);
     if (!workspace) return;
     openModal({
-      title: 'Renomear núcleo',
+      title: 'Renomear área de trabalho',
       subtitle: workspace.name,
-      body: `<form id="atlas-v2-workspace-form"><input type="hidden" name="workspaceId" value="${attr(workspace.id)}"><label class="atlas-v2-field"><span>Nome do núcleo</span><input name="name" value="${attr(workspace.name)}" maxlength="80" required autofocus></label></form>`,
+      body: `<form id="atlas-v2-workspace-form"><input type="hidden" name="workspaceId" value="${attr(workspace.id)}"><label class="atlas-v2-field"><span>Nome da área</span><input name="name" value="${attr(workspace.name)}" maxlength="80" required autofocus></label></form>`,
       actions: `<button class="atlas-v2-button atlas-v2-button-quiet" type="button" data-action="workspace-menu">Cancelar</button><button class="atlas-v2-button atlas-v2-button-primary" type="submit" form="atlas-v2-workspace-form"><i data-lucide="check"></i>Salvar nome</button>`,
     });
   }
@@ -12746,7 +11608,7 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
     if (!workspace || !name) return;
     workspace.name = name;
     closeOverlay();
-    saveData('Núcleo renomeado');
+    saveData('Área de trabalho renomeada');
     render();
   }
 
@@ -12779,7 +11641,7 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
     if (!context || !requirePermission('share', context, 'compartilhar este quadro')) return;
     const members = runtime.data.boardMembers.filter((entry) => entry.boardId === context.board.id);
     const availableUsers = runtime.data.users.filter((entry) => entry.status === 'active' && entry.id !== runtime.data.currentUserId).map((entry) => `<option value="${attr(entry.id)}">${escapeHtml(entry.name)} · ${roleLabel(entry.role)}</option>`).join('');
-    const memberRows = members.map((entry) => { const user = runtime.data.users.find((candidate) => candidate.id === entry.userId); return `<div class="atlas-v2-settings-row">${avatarMarkup(user)}<span><strong>${escapeHtml(user?.name || 'Usuário removido')}</strong><small>${escapeHtml(ACCESS_LEVELS[membershipLevel(entry.role)]?.label || 'Visualização')}</small></span><button class="atlas-v2-admin-icon-danger" type="button" data-action="remove-board-member" data-user-id="${attr(entry.userId)}" title="Remover acesso"><i data-lucide="x"></i></button></div>`; }).join('');
+    const memberRows = members.map((entry) => { const user = runtime.data.users.find((candidate) => candidate.id === entry.userId); return `<div class="atlas-v2-settings-row"><span class="atlas-v2-avatar">${escapeHtml((user?.name || 'U').slice(0, 2).toUpperCase())}</span><span><strong>${escapeHtml(user?.name || 'Usuário removido')}</strong><small>${escapeHtml(ACCESS_LEVELS[membershipLevel(entry.role)]?.label || 'Visualização')}</small></span><button class="atlas-v2-admin-icon-danger" type="button" data-action="remove-board-member" data-user-id="${attr(entry.userId)}" title="Remover acesso"><i data-lucide="x"></i></button></div>`; }).join('');
     openDrawer({
       title: 'Compartilhar quadro',
       subtitle: context.board.name,
@@ -13085,6 +11947,7 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
   //     e cancelar o descarte, nao confirma-lo);
   //   - com a revisao aberta -> pede confirmacao antes de jogar fora.
   function requestCloseOverlay() {
+    if (globalThis.AtlasPublicForms?.shouldPreventClose()) return;
     if (runtime.importDiscardOpen) {
       openImportPreview();
       return;
@@ -13323,6 +12186,21 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
       subtitle: 'Escolha outra forma de trabalhar com o mesmo quadro.',
       body: `<div class="atlas-v2-choice-grid">${availableViews.map(([key, value]) => `<button class="atlas-v2-choice" type="button" data-action="enable-view" data-view="${key}"><span><i data-lucide="${value.icon}"></i><b>${escapeHtml(value.label)}</b></span></button>`).join('')}</div>`,
       actions: `<button class="atlas-v2-button atlas-v2-button-quiet" type="button" data-action="close-overlay">Fechar</button>`,
+    });
+  }
+
+  function openPublicForms() {
+    const context = findBoard();
+    if (!context || !requirePermission('configure', context, 'construir formularios')) return;
+    if (!runtime.authClient || !runtime.remoteMode) {
+      toast('Conecte este quadro ao servidor para publicar formularios.', true);
+      return;
+    }
+    void window.AtlasPublicForms.open({
+      client: runtime.authClient, board: context.board,
+      publicOrigin: window.ATNX_CONFIG?.PUBLIC_FORMS_ORIGIN || window.ATNX_CONFIG?.SUPABASE_URL,
+      drawer: openDrawer, modal: openModal, icons: refreshIcons, toast,
+      audit: (action) => recordAudit(action, { boardId: context.board.id }),
     });
   }
 
@@ -14069,14 +12947,6 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
 
 
   function handleClick(event) {
-    // O menu da coluna fecha em qualquer clique que nao seja nele nem no funil
-    // que o abriu. Vem antes do `return` de quem nao tem data-action: clicar no
-    // meio da tabela tambem tem de fechar.
-    if (runtime.columnMenu
-      && !event.target.closest('#atlas-v2-column-menu')
-      && !event.target.closest('[data-action="column-menu"]')) {
-      closeColumnMenu();
-    }
     const target = event.target.closest('[data-action]');
     if (!target) return;
     const action = target.dataset.action;
@@ -14087,7 +12957,7 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
       'bulk-move': 'edit', 'bulk-move-board': 'edit', 'item-move-board': 'edit', 'bulk-edit': 'edit', sort: 'edit', 'rename-work': 'edit',
       'delete-item': 'delete', 'bulk-delete': 'delete', 'delete-work': 'delete', 'confirm-delete-work': 'delete', 'confirm-delete-items': 'delete', 'confirm-delete-group': 'delete',
       'add-group': 'configure', 'add-column': 'configure', 'group-menu': 'configure', 'edit-group': 'configure', 'duplicate-group': 'configure', 'delete-group': 'configure',
-      'board-settings': 'configure', 'board-config': 'configure', 'edit-column': 'configure', 'edit-status-colors': 'configure', 'move-column': 'configure', 'delete-column': 'configure', 'edit-workspace': 'configure', automations: 'configure', 'automation-new': 'configure', 'automation-edit': 'configure', 'automation-toggle': 'configure', 'automation-delete': 'configure', 'automation-confirm-delete': 'configure', 'automation-templates': 'configure', 'automation-use-template': 'configure', 'automation-run': 'configure', 'automation-history': 'configure',
+      'board-settings': 'configure', 'edit-column': 'configure', 'edit-status-colors': 'configure', 'move-column': 'configure', 'delete-column': 'configure', 'edit-workspace': 'configure', automations: 'configure', 'automation-new': 'configure', 'automation-edit': 'configure', 'automation-toggle': 'configure', 'automation-delete': 'configure', 'automation-confirm-delete': 'configure', 'automation-templates': 'configure', 'automation-use-template': 'configure', 'automation-run': 'configure', 'automation-history': 'configure',
     };
     if (protectedActions[action] && !requirePermission(protectedActions[action], context, 'executar esta ação')) return;
 
@@ -14164,15 +13034,6 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
       'workspace-menu': openWorkspaceMenu,
       'edit-workspace': () => openRenameWorkspaceModal(target.dataset.workspaceId),
       'open-board': () => openBoard(target.dataset.boardId),
-      'board-config': () => {
-        // openBoard SEMPRE, sem a condicao "se ja nao for o ativo". O quadro
-        // pode ja estar marcado como ativo enquanto a tela mostra o Inicio -
-        // e e assim que o Atlas comeca. Com a condicao, a pessoa configurava o
-        // quadro, fechava a janela e continuava no Inicio, com a lista ao lado
-        // dizendo que o quadro estava aberto. openBoard e idempotente.
-        openBoard(target.dataset.boardId);
-        openBoardSettings();
-      },
       'search-open-board': () => { closeOverlay(); openBoard(target.dataset.boardId); },
       'toggle-module': () => {
         const workspace = currentWorkspace();
@@ -14209,6 +13070,7 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
       'delete-work': () => openDeleteWorkModal(runtime.workFilter),
       'confirm-delete-work': () => deleteWork(target.dataset.itemId),
       'add-view': openAddViewModal,
+      'board-forms': openPublicForms,
       'enable-view': () => {
         const view = target.dataset.view;
         if (!context.board.views.includes(view)) context.board.views.push(view);
@@ -14236,15 +13098,6 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
       },
       'add-group': () => openGroupModal(true),
       'add-column': () => openColumnModal(),
-      'toggle-work-status': () => {
-        const chave = target.dataset.statusKey || '';
-        if (runtime.collapsedWorkStatus.has(chave)) runtime.collapsedWorkStatus.delete(chave);
-        else runtime.collapsedWorkStatus.add(chave);
-        const atual = findBoard();
-        if (!atual) return;
-        renderBoardContent(atual.board);
-        refreshIcons(document.getElementById('atlas-v2-board-content'));
-      },
       'toggle-group': () => {
         const groupEntry = context.board.groups.find((entry) => entry.id === target.dataset.groupId);
         if (groupEntry) { groupEntry.collapsed = !groupEntry.collapsed; saveData('', { remote: false, audit: false, revision: false }); render(); }
@@ -14305,68 +13158,12 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
         openNotificationsDrawer();
       },
       'notifications-read-all': markAllNotificationsRead,
-      'column-menu': () => {
-        // Clicar de novo no mesmo funil fecha, como qualquer menu.
-        const mesmo = runtime.columnMenu?.escopo === target.dataset.scope
-          && runtime.columnMenu?.columnId === target.dataset.columnId;
-        if (mesmo) closeColumnMenu();
-        else openColumnMenu(target.dataset.scope, target.dataset.columnId, target);
+      'filter': () => {
+        if (runtime.fieldMode && window.innerWidth <= 820) document.getElementById('atlas-v2-board-search')?.focus();
+        else openAdvancedFilters();
       },
-      'column-menu-close': closeColumnMenu,
-      'column-menu-toggle': () => {
-        const estado = runtime.columnMenu;
-        if (!estado) return;
-        const valor = target.dataset.valor ?? '';
-        if (estado.marcados.has(valor)) estado.marcados.delete(valor);
-        else estado.marcados.add(valor);
-        renderColumnMenu();
-      },
-      'column-menu-all': () => {
-        const estado = runtime.columnMenu;
-        if (!estado) return;
-        if (estado.marcados.size === estado.opcoes.length) estado.marcados.clear();
-        else estado.opcoes.forEach((chave) => estado.marcados.add(chave));
-        renderColumnMenu();
-      },
-      'column-menu-sort': () => {
-        const estado = runtime.columnMenu;
-        if (!estado) return;
-        const dir = target.dataset.dir === 'desc' ? 'desc' : 'asc';
-        const atual = runtime.columnSort[estado.escopo];
-        // Clicar na ordem que ja esta ativa desfaz: e o unico jeito de voltar a
-        // ordem original do setor sem recarregar a pagina.
-        if (atual?.columnId === estado.columnId && atual.dir === dir) delete runtime.columnSort[estado.escopo];
-        else runtime.columnSort[estado.escopo] = { columnId: estado.columnId, dir };
-        closeColumnMenu();
-        render();
-      },
-      'column-menu-apply': applyColumnMenu,
-      'column-menu-clear-column': () => {
-        const estado = runtime.columnMenu;
-        if (!estado) return;
-        delete runtime.columnFilters[estado.escopo]?.[estado.columnId];
-        if (!Object.keys(runtime.columnFilters[estado.escopo] || {}).length) delete runtime.columnFilters[estado.escopo];
-        closeColumnMenu();
-        render();
-      },
-      'column-menu-clear-board': () => {
-        if (!context) return;
-        clearBoardColumnFilters(context.board);
-        closeColumnMenu();
-        render();
-      },
-      'clear-scope-filters': () => {
-        delete runtime.columnFilters[target.dataset.scope];
-        delete runtime.columnSort[target.dataset.scope];
-        closeColumnMenu();
-        render();
-      },
-      'clear-board-filters': () => {
-        if (!context) return;
-        clearBoardColumnFilters(context.board);
-        closeColumnMenu();
-        render();
-      },
+      'filter-clear': clearAdvancedFilters,
+      'filter-use-saved': () => useSavedSearch(target.dataset.searchId),
       'sort': () => {
         context.board.groups.forEach((groupEntry) => groupEntry.items.sort((a, b) => a.name.localeCompare(b.name, 'pt-BR')));
         saveData('Itens ordenados'); render();
@@ -14375,9 +13172,6 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
         if (!document.fullscreenElement) document.documentElement.requestFullscreen?.(); else document.exitFullscreen?.();
       },
       'user-menu': openUserMenu,
-      'open-meu-perfil': openMeuPerfil,
-      'perfil-foto-remover': removerFotoPerfil,
-      'perfil-trocar-email': openTrocarEmail,
       'open-administration': () => openAdministration('overview'),
       'admin-tab': () => { void openAdminTab(target.dataset.adminTab || 'overview'); },
       'admin-sync-users': () => syncAuthUsersFromSupabase(),
@@ -14475,14 +13269,6 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
     }
     const context = findBoard();
     if (!context) return;
-    if (target.matches('[data-action="perfil-foto"]')) {
-      enviarFotoPerfil(target);
-      return;
-    }
-    if (target.matches('[data-action="admin-user-ve-tudo"]')) {
-      definirEnxergaTudo(target.dataset.userId, target.checked);
-      return;
-    }
     if (target.matches('[data-action="admin-user-role"]')) {
       updateAdminUser(target.dataset.userId, 'role', target.value);
       return;
@@ -14727,9 +13513,6 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
     const form = event.target;
     if (!form.id?.startsWith('atlas-v2-')) return;
     event.preventDefault();
-    if (form.id === 'atlas-v2-perfil-form') submitMeuPerfil(form);
-    if (form.id === 'atlas-v2-trocar-email-form') { void submitTrocarEmail(form); }
-    if (form.id === 'atlas-v2-confirmar-email-form') { void submitConfirmarTrocaEmail(form); }
     if (form.id === 'atlas-v2-create-form') submitCreate(form);
     if (form.id === 'atlas-v2-group-form') submitGroup(form);
     if (form.id === 'atlas-v2-column-form') submitColumn(form);
@@ -14740,6 +13523,7 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
     if (form.id === 'atlas-v2-bulk-edit-form') submitBulkEdit(form);
     if (form.id === 'atlas-v2-cross-board-move-form') { void submitCrossBoardMove(form); }
     if (form.id === 'atlas-v2-dashboard-widget-form') submitDashboardWidget(form);
+    if (form.id === 'atlas-v2-filter-form') submitAdvancedFilters(form);
     if (form.id === 'atlas-v2-rename-work-form') submitRenameWork(form);
     if (form.id === 'atlas-v2-version-label-form') { void submitVersionLabel(form); }
     if (form.id === 'atlas-v2-chat-form') { void submitItemChat(form); }
@@ -14754,7 +13538,7 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
     if (form.id === 'atlas-v2-automation-run-form') submitAutomationRun(form);
   }
 
-  const HORIZONTAL_DRAG_SCROLL_SELECTOR = '.atlas-v2-table-wrap, .atlas-v2-gantt-scroll';
+  const HORIZONTAL_DRAG_SCROLL_SELECTOR = '.atlas-v2-table-wrap, .atlas-v2-work-tabs, .atlas-v2-gantt-scroll';
 
   function horizontalDragContainer(target) {
     if (window.innerWidth <= 820) return null;
@@ -14934,15 +13718,6 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
 
   function handleKeydown(event) {
     if (document.body.classList.contains('atlas-v2-auth-locked')) return;
-    // O menu da coluna e a camada mais de cima: Escape fecha ele primeiro, sem
-    // mexer no modal que porventura esteja atras.
-    if (runtime.columnMenu && event.key === 'Escape') {
-      event.preventDefault();
-      const anchor = columnMenuAnchor();
-      closeColumnMenu();
-      anchor?.focus();
-      return;
-    }
     if (runtime.imageViewer && event.key === 'ArrowLeft') {
       event.preventDefault();
       moveImageViewer(-1);
@@ -14983,6 +13758,7 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
   // rodape nao esta mostrando Sincronizando"). Em 4G instavel de campo isso
   // significa confiar que a pessoa leu, lembrou e olhou o icone certo.
   function hasUnsavedWork() {
+    if (globalThis.AtlasPublicForms?.hasUnsavedDraft()) return true;
     return Boolean(
       runtime.remoteSyncing
       || runtime.remoteSyncQueued
@@ -15010,8 +13786,6 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
   }
 
   function handleResize() {
-    // A tela mudou de tamanho: as contas de posicao do menu nao valem mais.
-    if (runtime.columnMenu) closeColumnMenu();
     clearTimeout(runtime.resizeTimer);
     runtime.resizeTimer = setTimeout(() => {
       const context = findBoard();
@@ -15046,10 +13820,6 @@ window.__ATLAS_VERSION__ = '2.4.4 OFICIAL';
   function handleBoardTableScroll(event) {
     const table = event.target?.matches?.('.atlas-v2-table-wrap') ? event.target : null;
     if (table) syncBoardTableHeader(table);
-    // Qualquer rolagem move a coluna debaixo do menu. Reposicionar e melhor que
-    // fechar: a pessoa costuma rolar justamente para ver o efeito do que
-    // acabou de marcar.
-    if (runtime.columnMenu) syncColumnMenuAnchor();
   }
 
   window.__ATLAS_REALTIME_STATUS__ = () => ({

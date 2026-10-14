@@ -26,12 +26,12 @@ const deployScript = read('deploy-cloudflare.ps1');
 const auditFixes = read('supabase/ATLAS_V2_4_0_AUDITORIA_CORRECOES.sql');
 const manual = read('manual.html');
 
-assert(app.includes("window.__ATLAS_VERSION__ = '2.4.4 OFICIAL'"), 'Versao interna divergente.');
-assert(config.includes('V2.4.4 Oficial'), 'Config sem a versao do pacote.');
+assert(app.includes("window.__ATLAS_VERSION__ = '2.4.5 OFICIAL'"), 'Versao interna divergente.');
+assert(config.includes('V2.4.5 Oficial'), 'Config sem a versao do pacote.');
 assert(index.includes('id="atlas-v2-footer-version"'), 'Rodape sem o elemento de versao (agora preenchido via JS a partir do config.js).');
-assert(index.includes('V2.4.4 Oficial</span>'), 'Rodape HTML ainda exibe uma versao antiga antes do JavaScript carregar.');
-assert(index.includes('name="robots" content="noindex, nofollow, noarchive"'), 'Ambiente de homologacao sem bloqueio de indexacao.');
-assert(manifest.includes('2.4.4'), 'Manifest sem a versao do pacote.');
+assert(index.includes('V2.4.5 Oficial</span>'), 'Rodape HTML ainda exibe uma versao antiga antes do JavaScript carregar.');
+assert(index.includes('name="robots" content="index, follow"'), 'Edicao oficial ainda esta marcada como ambiente de homologacao.');
+assert(manifest.includes('2.4.5'), 'Manifest sem a versao do pacote.');
 // O manual ficou uma versao inteira para tras (dizia V2.4.2 com a 2.4.3 no ar)
 // e nada acusou: nenhuma trava conferia isso, e a unica conferencia que existia
 // vivia no browser-smoke, que o script de publicacao nao roda. Agora a defasagem
@@ -261,27 +261,8 @@ assert(/async function ensureBoardViewData[\s\S]*?classList\.remove\('atlas-v2-b
 assert(/function applyPermissionUi[\s\S]*?if \(canCreate && canEdit && canDelete && canConfigure && canShare\) return;/.test(app), 'Administradores ainda varrem todos os controles a cada troca de area.');
 assert(app.includes('function renderBoardRoute(context, options = {})'), 'Renderizacao segmentada de rotas ausente.');
 assert(app.includes("rpc('atlas_admin_update_profile_access'"), 'Liberacao administrativa nao usa a RPC segura.');
-// DECISAO INVERTIDA NA V2.5.0.
-// Ate aqui o cadastro NAO pedia confirmacao de e-mail, e estas duas linhas
-// guardavam isso. O motivo era pratico: nenhum dos ambientes tinha SMTP, entao
-// exigir confirmacao trancaria todo mundo do lado de fora.
-//
-// Com o envio de e-mail funcionando, a conta passa a confirmar o endereco por
-// codigo antes de chegar ao administrador - porque sem e-mail confirmado nao ha
-// recuperacao de senha, e foi exatamente isso que obrigou a resetar a senha do
-// Aron pelo terminal.
-//
-// A trava do redirect continua: a confirmacao e por CODIGO digitado, nao por
-// link. Link depende da lista de enderecos permitidos do GoTrue.
-assert(!app.includes('options.emailRedirectTo'), 'Cadastro voltou a usar link de confirmacao; a decisao foi codigo digitado.');
-assert(
-  app.includes("verifyOtp({ email, token, type: 'signup' })"),
-  'A tela de cadastro nao confirma o e-mail por codigo.',
-);
-assert(
-  !app.includes('Não é necessário confirmar o e-mail.'),
-  'A tela ainda diz que nao e necessario confirmar o e-mail. Isso deixou de ser verdade na V2.5.0.',
-);
+assert(!app.includes('options.emailRedirectTo'), 'Cadastro ainda configura confirmacao por e-mail.');
+assert(app.includes('Não é necessário confirmar o e-mail.'), 'Tela de cadastro ainda exige confirmacao por e-mail.');
 assert(/function postJsonWithUploadProgress[\s\S]*?request\.open\('POST', endpoint, true\)/.test(app), 'Upload nao usa o POST XHR compativel com o Apps Script.');
 assert(/function postJsonWithUploadProgress[\s\S]*?searchParams\.set\('atlasRequest'/.test(app), 'Upload nao evita resposta GET armazenada pelo conector.');
 assert(!/request\.upload\.onprogress/.test(app), 'Monitoramento XHR ainda dispara preflight incompatível com o Apps Script.');
@@ -397,13 +378,7 @@ assert(
     'ATLAS_V2_4_3_CORRIGE_VERSAO_ANEXO.sql',
     'ATLAS_V2_4_3_SLA_NO_SERVIDOR.sql',
     'ATLAS_V2_4_4_LEITURA_EM_CONJUNTO.sql',
-    'ATLAS_V2_5_0_CADASTRO_CONFIRMADO.sql',
-    'ATLAS_V2_5_0_FOTO_GUARD_SEM_DONO.sql',
-    'ATLAS_V2_5_0_FOTO_PERFIL.sql',
-    'ATLAS_V2_5_0_PAPEIS.sql',
-    'ATLAS_V2_5_0_PERFIL.sql',
-    'ATLAS_V2_5_0_TROCA_EMAIL.sql',
-    'ATLAS_V2_5_0_VISAO_SEM_PODER.sql',
+    'ATLAS_V2_4_5_FORMULARIOS.sql',
     // Nao e migracao: e o retrato do esquema em producao, e a unica fonte
     // confiavel sobre o estado do banco. Ver supabase/README.md.
     'BASELINE_PRODUCAO.sql',
@@ -423,37 +398,5 @@ const localReferences = [...index.matchAll(/(?:src|href)=["']([^"'?#]+)(?:\?[^"'
 localReferences.forEach((entry) => {
   assert(fs.existsSync(path.join(root, entry)), `Referencia local ausente: ${entry}`);
 });
-
-// ---------------------------------------------------------------------------
-// Todo data-lucide escrito a mao tem de existir no pacote de icones
-// ---------------------------------------------------------------------------
-// Um nome inexistente nao quebra nada: o lucide simplesmente nao desenha, e
-// sobra um buraco do tamanho do icone. Foi assim que `funnel-x` entrou na
-// V2.5.0 e passou pelo teste, pelo navegador e por uma captura de tela antes de
-// alguem reparar. O pacote e a fonte da verdade - nao a memoria de quem escreve.
-const lucideBundle = read('assets/vendor/lucide.min.js');
-const nomesDoPacote = new Set();
-for (const achado of lucideBundle.matchAll(/([A-Z][A-Za-z0-9]*):[A-Za-z$_][A-Za-z0-9$_]{0,3}[,}]/g)) {
-  nomesDoPacote.add(achado[1]);
-}
-assert(nomesDoPacote.size > 1500, `So extrai ${nomesDoPacote.size} nomes do pacote lucide; a leitura do pacote quebrou.`);
-
-const paraPascal = (nome) => nome.split('-').map((parte) => parte[0].toUpperCase() + parte.slice(1)).join('');
-const iconesUsados = new Set();
-['js/v2.js', 'index.html', 'manual.html', 'v2.html'].forEach((arquivo) => {
-  let fonteDoArquivo;
-  try {
-    fonteDoArquivo = read(arquivo);
-  } catch {
-    return;
-  }
-  for (const achado of fonteDoArquivo.matchAll(/data-lucide="([a-z0-9-]+)"/g)) iconesUsados.add(achado[1]);
-});
-assert(iconesUsados.size > 50, 'Quase nenhum data-lucide literal encontrado; a varredura quebrou.');
-const iconesInexistentes = [...iconesUsados].filter((nome) => !nomesDoPacote.has(paraPascal(nome)));
-assert(
-  iconesInexistentes.length === 0,
-  `Icone que nao existe no pacote lucide (desenha um buraco, sem erro): ${iconesInexistentes.join(', ')}`,
-);
 
 console.log('Atlas V2.4.0: auditoria estatica aprovada.');

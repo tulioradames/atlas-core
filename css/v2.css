@@ -345,57 +345,6 @@ button {
   color: #aeb7c5;
 }
 
-/* A linha do quadro passa a ter um botao de configuracao ao lado. Ele fica
-   POSICIONADO SOBRE a ultima coluna do grid da linha, que ja existia e antes
-   era ocupada por um icone decorativo. Dessa forma o realce de hover e de
-   quadro ativo continuam pertencendo ao botao da linha, e nenhum dos tres
-   blocos de tema que estilizam .atlas-v2-board-row precisou mudar. */
-.atlas-v2-board-row-wrap {
-  position: relative;
-  display: block;
-}
-
-.atlas-v2-board-config {
-  position: absolute;
-  top: 50%;
-  right: 5px;
-  display: grid;
-  width: 22px;
-  height: 22px;
-  transform: translateY(-50%);
-  place-items: center;
-  padding: 0;
-  color: inherit;
-  border: 0;
-  border-radius: 4px;
-  background: transparent;
-  cursor: pointer;
-  opacity: .45;
-}
-
-.atlas-v2-board-config i {
-  width: 15px;
-  height: 15px;
-}
-
-.atlas-v2-board-row-wrap:hover .atlas-v2-board-config,
-.atlas-v2-board-config:focus-visible {
-  opacity: 1;
-}
-
-.atlas-v2-board-config:hover {
-  opacity: 1;
-  background: rgba(255, 255, 255, 0.14);
-}
-
-/* Toque: 22px e pequeno demais para o dedo, mas aumentar o quadrado visivel
-   desalinharia a lista. A area clicavel cresce sem o desenho crescer. */
-.atlas-v2-board-config::after {
-  position: absolute;
-  content: "";
-  inset: -8px -4px;
-}
-
 .atlas-v2-module-row:hover,
 .atlas-v2-board-row:hover {
   color: #fff;
@@ -935,140 +884,34 @@ body.atlas-v2-board-loading .atlas-v2-board-content {
   transition: opacity 140ms ease;
 }
 
-/* ===========================================================================
-   Lista de obras (V2.5.0)
-   ===========================================================================
-   Era uma fita horizontal de abas, que com muitas obras virava rolagem lateral
-   sem fim. Agora e uma coluna a esquerda, agrupada por situacao, rolando junto
-   com a tela. A classe .atlas-v2-work-tab continua existindo porque e ela que
-   o restante do codigo usa para achar a obra selecionada e rolar ate ela. */
-
-.atlas-v2-works-layout {
+.atlas-v2-work-tabs {
   display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  gap: 18px;
-}
-
-.atlas-v2-works-main {
-  flex: 999 1 560px;
-  min-width: 0;
-}
-
-.atlas-v2-work-sidebar {
-  flex: 1 1 248px;
-  min-width: 224px;
-  max-width: 300px;
-  box-sizing: border-box;
-  padding: 8px;
+  align-items: center;
+  gap: 4px;
+  width: max-content;
+  max-width: 100%;
+  margin-bottom: 14px;
+  padding: 4px;
+  overflow-x: auto;
   border: 1px solid var(--v2-line-strong);
   border-radius: 5px;
   background: var(--v2-surface-alt);
-  /* Com 24 obras a lista passa de 800px e empurrava a pagina inteira: rolar
-     ate uma obra fazia os registros sairem da tela, que era justamente o que
-     esta visualizacao deveria evitar. Agora a lista rola por conta propria e
-     fica no lugar enquanto se trabalha na obra escolhida. */
-  position: sticky;
-  top: 0;
-  max-height: calc(100vh - 210px);
-  min-height: 160px;
-  overflow-y: auto;
-  overscroll-behavior: contain;
+  scrollbar-width: none;
 }
 
-.atlas-v2-work-sidebar-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 2px 4px 8px;
-  color: var(--v2-muted);
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: .06em;
-  text-transform: uppercase;
-}
-
-.atlas-v2-work-empty {
-  margin: 4px;
-  color: var(--v2-muted);
-  font-size: 11px;
-}
-
-.atlas-v2-work-section + .atlas-v2-work-section {
-  margin-top: 6px;
-}
-
-.atlas-v2-work-section-head {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  width: 100%;
-  padding: 5px 4px;
-  color: var(--v2-muted);
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: .05em;
-  text-transform: uppercase;
-  border: none;
-  background: transparent;
-  cursor: pointer;
-}
-
-.atlas-v2-work-section-head:hover {
-  color: var(--v2-text);
-}
-
-.atlas-v2-work-section-head i {
-  width: 13px;
-  height: 13px;
-  flex: none;
-}
-
-.atlas-v2-work-section-dot {
-  width: 7px;
-  height: 7px;
-  flex: none;
-  border-radius: 50%;
-  background: var(--status-bg);
-}
-
-.atlas-v2-work-section-name {
-  flex: 1;
-  overflow: hidden;
-  text-align: left;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.atlas-v2-work-section-count {
-  flex: none;
-  font-variant-numeric: tabular-nums;
-}
-
-/* A situacao que encerra o item fica discreta: nao exige nada de ninguem. */
-.atlas-v2-work-section.is-done .atlas-v2-work-section-head {
-  opacity: .72;
-}
-
-.atlas-v2-work-list {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
+.atlas-v2-work-tabs::-webkit-scrollbar {
+  display: none;
 }
 
 .atlas-v2-work-tab {
   --work-color: var(--v2-blue);
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  width: 100%;
-  padding: 6px 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 32px;
+  padding: 0 10px;
+  flex: none;
   color: var(--v2-muted);
-  text-align: left;
   border: 1px solid transparent;
   border-radius: 3px;
   background: transparent;
@@ -1084,14 +927,7 @@ body.atlas-v2-board-loading .atlas-v2-board-content {
   color: var(--work-color);
   border-color: color-mix(in srgb, var(--work-color) 52%, var(--v2-line));
   background: color-mix(in srgb, var(--work-color) 12%, var(--v2-surface));
-  box-shadow: inset 2px 0 0 var(--work-color);
-}
-
-.atlas-v2-work-tab-head {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  width: 100%;
+  box-shadow: inset 0 -2px 0 var(--work-color);
 }
 
 .atlas-v2-work-dot {
@@ -1103,38 +939,22 @@ body.atlas-v2-board-loading .atlas-v2-board-content {
 }
 
 .atlas-v2-work-tab strong {
-  flex: 1;
-  overflow: hidden;
   font-size: 11px;
-  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .atlas-v2-work-tab small {
-  flex: none;
+  display: grid;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  place-items: center;
   color: currentColor;
   font-size: 9px;
-  font-variant-numeric: tabular-nums;
-  opacity: .85;
-}
-
-/* Barra de progresso: quantos registros da obra ja estao concluidos. */
-.atlas-v2-work-bar {
-  display: block;
-  width: 100%;
-  height: 3px;
-  overflow: hidden;
+  border: 1px solid color-mix(in srgb, currentColor 28%, var(--v2-line));
   border-radius: 999px;
-  background: color-mix(in srgb, var(--v2-line) 70%, transparent);
+  background: var(--v2-surface);
 }
-
-.atlas-v2-work-bar > span {
-  display: block;
-  height: 100%;
-  border-radius: 999px;
-  background: var(--work-color);
-}
-
 
 .atlas-v2-work-rename {
   position: sticky;
@@ -3530,14 +3350,14 @@ a:focus-visible {
   background: color-mix(in srgb, var(--v2-atlas) 7%, var(--v2-surface));
 }
 
-.atlas-v2-work-sidebar {
+.atlas-v2-work-tabs {
   border-color: color-mix(in srgb, var(--v2-atlas) 38%, var(--v2-line));
   border-radius: 2px;
   box-shadow: inset 0 0 16px color-mix(in srgb, var(--v2-atlas) 5%, transparent);
 }
 
 .atlas-v2-work-tab.is-active {
-  box-shadow: inset 2px 0 0 var(--work-color), 0 0 12px color-mix(in srgb, var(--work-color) 14%, transparent);
+  box-shadow: inset 0 -2px 0 var(--work-color), 0 0 12px color-mix(in srgb, var(--work-color) 14%, transparent);
 }
 
 .atlas-v2-work-actions {
@@ -6365,12 +6185,14 @@ body.atlas-v2-auth-locked {
 
 /* Arraste horizontal com botão direito e cores de status. */
 .atlas-v2-table-wrap,
+.atlas-v2-work-tabs,
 .atlas-v2-gantt-scroll {
   overscroll-behavior-x: contain;
   touch-action: pan-y;
 }
 
 .atlas-v2-table-wrap.is-right-dragging,
+.atlas-v2-work-tabs.is-right-dragging,
 .atlas-v2-gantt-scroll.is-right-dragging,
 body.atlas-v2-right-dragging,
 body.atlas-v2-right-dragging * {
@@ -8025,10 +7847,31 @@ body.atlas-v2-right-dragging * {
     grid-column: 1 / -1;
   }
 
-  .atlas-v2-work-sidebar {
-    flex: 1 1 100%;
+  .atlas-v2-work-tabs {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 5px;
+    width: 100%;
     max-width: 100%;
     margin-bottom: 10px;
+    overflow: visible;
+  }
+
+  .atlas-v2-work-tab {
+    width: 100%;
+    min-width: 0;
+    justify-content: flex-start;
+  }
+
+  .atlas-v2-work-tab strong {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .atlas-v2-work-tab small {
+    margin-left: auto;
   }
 
   .atlas-v2-work-actions {
@@ -8853,498 +8696,4 @@ body.atlas-v2-right-dragging * {
   box-shadow: 0 20px 56px rgba(0, 0, 0, 0.34), 0 0 34px color-mix(in srgb, var(--v2-atlas) 16%, transparent);
   -webkit-backdrop-filter: blur(20px) saturate(145%);
   backdrop-filter: blur(20px) saturate(145%);
-}
-
-/* V2.5.0 - coluna "ve todos os quadros" na tela de usuarios.
-   Esse poder deixou de vir junto com o papel, entao ele precisa de um lugar
-   proprio na tabela em vez de ficar implicito no perfil. */
-.atlas-v2-admin-flag {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 13px;
-  white-space: nowrap;
-  cursor: pointer;
-}
-.atlas-v2-admin-flag input[disabled] { cursor: not-allowed; }
-.atlas-v2-admin-flag input[disabled] + span { opacity: .55; }
-.atlas-v2-admin-flag.is-fixo {
-  cursor: default;
-  opacity: .8;
-  gap: 4px;
-}
-.atlas-v2-admin-flag.is-fixo i { width: 15px; height: 15px; }
-
-/* V2.5.0 - dica abaixo de um campo. Usada nos campos BLOQUEADOS da tela de
-   perfil: sem explicar por que estao bloqueados, a pessoa fica tentando
-   clicar e conclui que o Atlas esta quebrado. */
-.atlas-v2-field-hint {
-  display: block;
-  margin-top: 4px;
-  font-size: 12px;
-  line-height: 1.35;
-  opacity: .7;
-}
-
-/* Campo bloqueado com um botao ao lado (e-mail -> "Alterar"). O input cede o
-   espaco; o botao fica do tamanho do proprio texto e nao encolhe. */
-.atlas-v2-field-com-acao {
-  display: flex;
-  gap: 8px;
-  align-items: stretch;
-}
-
-.atlas-v2-field-com-acao > input {
-  flex: 1 1 auto;
-  min-width: 0;
-}
-
-.atlas-v2-field-com-acao > .atlas-v2-button {
-  flex: 0 0 auto;
-  white-space: nowrap;
-}
-.atlas-v2-field input[disabled] {
-  opacity: .6;
-  cursor: not-allowed;
-}
-
-/* V2.5.0 - foto de perfil.
-   O avatar vira moldura da imagem quando ha foto; sem foto continua sendo o
-   circulo com as iniciais, que e o estado de quem ainda nao enviou nada. */
-.atlas-v2-avatar.tem-foto {
-  padding: 0;
-  overflow: hidden;
-  background: transparent;
-}
-.atlas-v2-avatar.tem-foto img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
-}
-.atlas-v2-perfil-foto {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  margin-bottom: 18px;
-}
-.atlas-v2-perfil-foto .atlas-v2-avatar.is-grande {
-  width: 72px;
-  height: 72px;
-  min-width: 72px;
-  font-size: 24px;
-}
-.atlas-v2-perfil-foto strong { display: block; }
-.atlas-v2-perfil-foto small {
-  display: block;
-  margin-top: 2px;
-  font-size: 12px;
-  opacity: .7;
-}
-.atlas-v2-perfil-foto-acoes {
-  display: flex;
-  gap: 8px;
-  margin-top: 10px;
-  flex-wrap: wrap;
-}
-/* O label faz o papel de botao para abrir o seletor de arquivo sem JavaScript
-   extra; precisa parecer e responder como botao. */
-.atlas-v2-perfil-foto-acoes label { cursor: pointer; }
-
-/* ===========================================================================
-   Filtro por coluna (V2.5.0)
-   ===========================================================================
-   O funil mora no cabecalho da coluna. Ele fica apagado ate alguem passar o
-   mouse na linha do cabecalho - e aceso, sempre, quando aquela coluna esta
-   filtrando ou ordenando. Essa e a unica pista permanente de que a tabela
-   esta escondendo linhas, entao ela nao pode depender de hover. */
-.atlas-v2-column-head {
-  position: relative;
-  padding-right: 20px;
-}
-
-.atlas-v2-column-filter {
-  position: absolute;
-  top: 50%;
-  right: 0;
-  display: grid;
-  width: 18px;
-  height: 18px;
-  padding: 0;
-  transform: translateY(-50%);
-  place-items: center;
-  color: var(--v2-muted);
-  border: 0;
-  border-radius: 3px;
-  background: transparent;
-  opacity: 0;
-  cursor: pointer;
-}
-
-.atlas-v2-column-filter i,
-.atlas-v2-column-filter svg {
-  width: 13px;
-  height: 13px;
-}
-
-.atlas-v2-table th:hover .atlas-v2-column-filter,
-.atlas-v2-column-filter:focus-visible {
-  opacity: 1;
-}
-
-.atlas-v2-column-filter:hover {
-  opacity: 1;
-  color: var(--v2-text);
-  background: var(--v2-surface-alt);
-}
-
-/* Coluna filtrada ou ordenada: visivel sempre, e na cor do sistema. */
-.atlas-v2-column-filter.is-active {
-  opacity: 1;
-  color: var(--v2-blue);
-  background: var(--v2-blue-soft);
-}
-
-/* O toque cresce sem o desenho crescer - 18px nao se acerta com o dedo. */
-.atlas-v2-column-filter::after {
-  position: absolute;
-  content: "";
-  inset: -8px -6px;
-}
-
-/* Contagem e selo dividem UMA celula da grade do cabecalho do setor. A grade
-   tem 5 colunas fixas; um filho a mais quebraria a linha inteira. */
-.atlas-v2-group-meta {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  justify-content: flex-end;
-}
-
-.atlas-v2-group-head .atlas-v2-scope-filter-chip {
-  display: inline-flex;
-  width: auto;
-  height: 22px;
-  align-items: center;
-  padding: 0 7px;
-  gap: 4px;
-  color: var(--v2-blue);
-  border: 1px solid color-mix(in srgb, var(--v2-blue) 40%, transparent);
-  border-radius: 11px;
-  background: var(--v2-blue-soft);
-  font-size: 10px;
-  font-weight: 700;
-  white-space: nowrap;
-}
-
-.atlas-v2-group-head .atlas-v2-scope-filter-chip:hover {
-  color: #fff;
-  background: var(--v2-blue);
-}
-
-.atlas-v2-group-head .atlas-v2-scope-filter-chip i,
-.atlas-v2-group-head .atlas-v2-scope-filter-chip svg {
-  width: 12px;
-  height: 12px;
-}
-
-/* O botao da barra de ferramentas carrega o numero de filtros do quadro. */
-.atlas-v2-filter-indicator {
-  position: relative;
-  color: var(--v2-blue);
-}
-
-.atlas-v2-filter-indicator b:not(:empty) {
-  position: absolute;
-  top: 1px;
-  right: 1px;
-  min-width: 13px;
-  padding: 0 2px;
-  color: #fff;
-  border-radius: 7px;
-  background: var(--v2-blue);
-  font-size: 9px;
-  font-weight: 700;
-  line-height: 13px;
-}
-
-/* ---------------------------------------------------------------------------
-   O menu ancorado
-   ---------------------------------------------------------------------------
-   Raiz propria no fim do body, fora do #atlas-v2-overlay-root: o modal e a
-   gaveta substituem aquela raiz inteira, e o menu precisa poder existir sem
-   apagar nada. `position: fixed` no cartao porque a ancora vem de
-   getBoundingClientRect, que ja e relativo a janela. */
-#atlas-v2-column-menu[hidden] {
-  display: none;
-}
-
-.atlas-v2-column-menu-card {
-  position: fixed;
-  z-index: 70;
-  display: flex;
-  width: 262px;
-  max-height: min(420px, 80vh);
-  flex-direction: column;
-  overflow: hidden;
-  color: var(--v2-text);
-  border: 1px solid var(--v2-line-strong);
-  border-radius: 6px;
-  background: var(--v2-surface);
-  box-shadow: var(--v2-shadow);
-  font-size: 12px;
-}
-
-.atlas-v2-column-menu-card header {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 8px 8px 10px;
-  border-bottom: 1px solid var(--v2-line);
-  background: var(--v2-surface-alt);
-}
-
-.atlas-v2-column-menu-card header strong {
-  overflow: hidden;
-  flex: 1;
-  font-size: 12px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.atlas-v2-column-menu-card header i,
-.atlas-v2-column-menu-card header svg {
-  width: 14px;
-  height: 14px;
-  flex: none;
-  color: var(--v2-muted);
-}
-
-.atlas-v2-column-menu-card header button {
-  display: grid;
-  width: 22px;
-  height: 22px;
-  flex: none;
-  padding: 0;
-  place-items: center;
-  color: var(--v2-muted);
-  border: 0;
-  border-radius: 4px;
-  background: transparent;
-  cursor: pointer;
-}
-
-.atlas-v2-column-menu-card header button:hover {
-  color: var(--v2-text);
-  background: var(--v2-surface);
-}
-
-.atlas-v2-column-menu-sort {
-  display: flex;
-  flex-direction: column;
-  padding: 4px;
-  border-bottom: 1px solid var(--v2-line);
-}
-
-.atlas-v2-column-menu-sort button,
-.atlas-v2-column-menu-list button {
-  display: flex;
-  width: 100%;
-  align-items: center;
-  gap: 7px;
-  padding: 6px 8px;
-  color: inherit;
-  border: 0;
-  border-radius: 4px;
-  background: transparent;
-  cursor: pointer;
-  font-size: 12px;
-  text-align: left;
-}
-
-.atlas-v2-column-menu-sort button:hover,
-.atlas-v2-column-menu-list button:hover {
-  background: var(--v2-surface-alt);
-}
-
-.atlas-v2-column-menu-sort button.is-active {
-  color: var(--v2-blue);
-  background: var(--v2-blue-soft);
-  font-weight: 700;
-}
-
-.atlas-v2-column-menu-sort i,
-.atlas-v2-column-menu-sort svg,
-.atlas-v2-column-menu-list i,
-.atlas-v2-column-menu-list svg {
-  width: 14px;
-  height: 14px;
-  flex: none;
-  color: var(--v2-muted);
-}
-
-.atlas-v2-column-menu-list {
-  overflow-y: auto;
-  flex: 1;
-  padding: 4px;
-}
-
-.atlas-v2-column-menu-list button span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.atlas-v2-column-menu-list button.is-checked i,
-.atlas-v2-column-menu-list button.is-checked svg {
-  color: var(--v2-blue);
-}
-
-.atlas-v2-column-menu-all {
-  border-bottom: 1px solid var(--v2-line);
-  border-radius: 0;
-  font-weight: 700;
-}
-
-.atlas-v2-column-menu-vazio {
-  margin: 0;
-  padding: 10px 8px;
-  color: var(--v2-muted);
-}
-
-.atlas-v2-column-menu-range {
-  display: grid;
-  gap: 7px;
-  padding: 10px;
-}
-
-.atlas-v2-column-menu-range label {
-  display: grid;
-  grid-template-columns: 34px 1fr;
-  align-items: center;
-  gap: 7px;
-}
-
-.atlas-v2-column-menu-range span {
-  color: var(--v2-muted);
-  font-size: 11px;
-}
-
-.atlas-v2-column-menu-range input {
-  width: 100%;
-  padding: 5px 7px;
-  color: inherit;
-  border: 1px solid var(--v2-line-strong);
-  border-radius: 4px;
-  background: var(--v2-surface);
-  font: inherit;
-}
-
-.atlas-v2-column-menu-range small {
-  color: var(--v2-muted);
-  font-size: 10px;
-  line-height: 1.4;
-}
-
-.atlas-v2-column-menu-card footer {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  padding: 7px;
-  border-top: 1px solid var(--v2-line);
-  background: var(--v2-surface-alt);
-}
-
-/* Em duas linhas, nao lado a lado: "Limpar todos os filtros deste quadro" nao
-   cabe ao lado do Aplicar sem quebrar no meio de uma frase. */
-.atlas-v2-column-menu-acoes {
-  display: flex;
-  gap: 6px;
-  justify-content: flex-end;
-}
-
-/* Acao de alcance maior que o resto do menu, entao fica separada embaixo, em
-   voz baixa, e so existe quando ha algo para limpar. */
-.atlas-v2-column-menu-tudo {
-  display: flex;
-  width: 100%;
-  align-items: center;
-  gap: 5px;
-  padding: 5px 7px;
-  color: var(--v2-muted);
-  border: 0;
-  border-radius: 4px;
-  background: transparent;
-  cursor: pointer;
-  font-size: 11px;
-  text-align: left;
-}
-
-.atlas-v2-column-menu-tudo:hover {
-  color: var(--v2-text);
-  background: var(--v2-surface);
-}
-
-.atlas-v2-column-menu-tudo i,
-.atlas-v2-column-menu-tudo svg {
-  width: 13px;
-  height: 13px;
-  flex: none;
-}
-
-.atlas-v2-column-menu-quiet,
-.atlas-v2-column-menu-apply {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 5px 9px;
-  border: 1px solid transparent;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 11px;
-  font-weight: 600;
-}
-
-.atlas-v2-column-menu-quiet {
-  color: var(--v2-muted);
-  background: transparent;
-}
-
-.atlas-v2-column-menu-quiet:hover {
-  color: var(--v2-text);
-  border-color: var(--v2-line-strong);
-  background: var(--v2-surface);
-}
-
-.atlas-v2-column-menu-quiet i,
-.atlas-v2-column-menu-quiet svg {
-  width: 13px;
-  height: 13px;
-}
-
-.atlas-v2-column-menu-apply {
-  color: #fff;
-  background: var(--v2-blue);
-}
-
-.atlas-v2-column-menu-apply:hover {
-  background: color-mix(in srgb, var(--v2-blue) 82%, #000);
-}
-
-.atlas-v2-column-menu-apply i,
-.atlas-v2-column-menu-apply svg {
-  width: 13px;
-  height: 13px;
-}
-
-/* No celular a lista de obras nao pode ocupar a tela toda: ela fica ACIMA dos
-   cartoes de campo, entao uma lista de 24 obras empurraria o registro para
-   fora da tela. Altura limitada, com rolagem propria. */
-@media (max-width: 820px) {
-  .atlas-v2-work-sidebar {
-    position: static;
-    width: 100%;
-    max-height: 38vh;
-    margin-bottom: 10px;
-  }
 }

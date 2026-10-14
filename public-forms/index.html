@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="robots" content="noindex,nofollow,noarchive">
+  <title>Formulario | Atlas</title>
+  <link rel="stylesheet" href="/formularios/assets/form.css">
+  <script src="/formularios/assets/form-core.js" defer></script>
+  <script src="/formularios/assets/form.js" defer></script>
+</head>
+<body>
+  <header class="form-topbar"><img src="/formularios/assets/brand.svg" alt="Atlas" width="110" height="32"></header>
+  <main class="form-page">
+    <div id="form-loading" class="form-loading" role="status"><span></span>Carregando formulario</div>
+    <section id="form-content" hidden>
+      <h1 id="form-title"></h1><p id="form-description"></p>
+      <form id="public-form">
+        <div id="form-questions"></div>
+        <label class="form-trap" aria-hidden="true">Website<input name="website" tabindex="-1" autocomplete="off"></label>
+        <p id="form-error" class="form-error" role="alert" hidden></p>
+        <button id="form-submit" class="form-submit" type="submit">Enviar resposta</button>
+      </form>
+    </section>
+    <section id="form-success" class="form-success" tabindex="-1" hidden>
+      <span class="form-success-icon" aria-hidden="true">&#10003;</span><h1>Resposta enviada</h1>
+      <p id="form-success-message"></p><button id="form-again" type="button">Enviar outra resposta</button>
+    </section>
+    <section id="form-unavailable" role="alert" hidden><h1>Formulario indisponivel</h1><p id="form-unavailable-message"></p></section>
+  </main>
+  <footer class="form-footer">Atlas</footer>
+</body>
+</html>

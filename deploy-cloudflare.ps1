@@ -67,14 +67,14 @@ $presets = @{
   homolog  = @{
     SourceDir  = $PSScriptRoot
     ScriptName = "test-atlas"
-    Backend    = ""   # homologacao sem backend definido apos a saida da nuvem
-    PublicUrl  = "https://SEU-WORKER-HOMOLOGACAO.workers.dev"
+    Backend    = "https://seu-backend-homolog.exemplo.com.br"
+    PublicUrl  = "https://seu-worker-homolog.workers.dev"
   }
   producao = @{
     SourceDir  = $PSScriptRoot
     ScriptName = "atlas"
     Backend    = "https://seu-backend.exemplo.com.br"
-    PublicUrl  = "https://SEU-WORKER-PRODUCAO.workers.dev"
+    PublicUrl  = "https://seu-worker-producao.workers.dev"
   }
 }
 
@@ -221,7 +221,7 @@ $base = "https://api.cloudflare.com/client/v4/accounts/$AccountId"
 # docs/, package.json etc. - nada disso deve ficar publicamente acessivel
 # pela URL do Worker). Confirmado contra o Worker real (curl direto nas
 # rotas) antes de fixar esta lista - ver reference_atlas_paths na memoria.
-$IncludeDirs = @("assets", "config", "css", "js")
+$IncludeDirs = @("assets", "config", "css", "js", "public-forms")
 $IncludeFiles = @("index.html", "manifest.webmanifest", "manual.html", "service-worker.js", "v2.html", "_headers")
 $WorkerModuleName = "worker-security.js"
 $WorkerModulePath = Join-Path $SourceDir $WorkerModuleName
@@ -379,8 +379,8 @@ for ($attempt = 1; $attempt -le 8; $attempt++) {
     if ($rootResponse.StatusCode -ne 200 -or $configResponse.StatusCode -ne 200 -or $appResponse.StatusCode -ne 200) {
       throw "Uma das rotas de saude nao respondeu HTTP 200."
     }
-    if ($configResponse.Content -notmatch [regex]::Escape($presets[$Target].ProjectRef)) {
-      throw "O Worker publicado aponta para outro projeto Supabase."
+    if ($configResponse.Content -notmatch [regex]::Escape($presets[$Target].Backend)) {
+      throw "O Worker publicado aponta para outro backend."
     }
     if ($appResponse.Content -notmatch [regex]::Escape("const ATLAS_BUILD = '$ExpectedBuild'")) {
       throw "O Worker ainda nao esta servindo o build $ExpectedBuild."
