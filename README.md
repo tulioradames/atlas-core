@@ -1,19 +1,23 @@
-# Atlas V2.4.5 Oficial
+# Atlas V2.4.6 Oficial
 
-## Novidades da V2.4.5
+## Novidades da V2.4.6
 
-Baseada na V2.4.4 oficial. A V2.5 permanece separada. Esta edicao foi validada
-em homologacao antes da promocao para producao.
+Baseada na V2.4.5 oficial. A V2.5 permanece separada.
 
 - Crie formularios pela aba **Formularios** do quadro com acesso de configuracao.
 - Escolha as colunas, perguntas, ordem, obrigatoriedade e setor de destino.
 - Publique e copie o link. O preenchimento nao exige conta no Atlas.
-- Cada envio cria um elemento com os valores correspondentes no quadro.
+- Escolha se cada envio cria um elemento ou preenche um elemento/subelemento existente.
+- No modo existente, o link exibe somente os nomes do setor e atualiza apenas as colunas publicadas.
+- Alteracoes em registros existentes entram no historico e disparam automacoes de mudanca de campo.
+- Colunas de imagem podem receber ate 12 fotos JPG, PNG, WebP ou GIF pelo link.
+- O envio mostra progresso percentual e valida o conteudo real de cada imagem.
+- Os originais ficam em bucket privado, acessiveis apenas pelo backend do formulario.
 - Pause, defina validade ou gere um novo link sem apagar os registros recebidos.
 
 Detalhes de instalacao, limites e seguranca em
-`docs/V2_4_5_FORMULARIOS.md`. Execute `pnpm install --frozen-lockfile` e
-`pnpm test:forms` antes de aplicar o SQL. A chave de servico fica exclusivamente
+`docs/V2_4_6_FORMULARIOS_IMAGENS.md`. Execute `pnpm install --frozen-lockfile` e
+`pnpm test:forms` antes de aplicar os SQLs. A chave de servico fica exclusivamente
 no backend; nunca em `config/config.js`.
 
 ## Edição pública

@@ -59,14 +59,15 @@
       body: `<div class="atlas-forms-list">${forms.map((entry) => {
         const expired = entry.expires_at && Date.parse(entry.expires_at) <= Date.now();
         const active = receiving(entry);
-        return `<article class="atlas-form-list-row"><div><strong>${e(entry.title)}</strong><small>${active ? 'Recebendo respostas' : expired ? 'Encerrado' : 'Pausado'} · ${counts.get(entry.id) || 0} resposta(s) · ${e(host.board.groups.find((g) => g.id === entry.group_id)?.name || 'Setor removido')}</small></div><div class="atlas-form-row-actions">${button('edit','pencil','Editar formulario',`data-form-id="${e(entry.id)}"`)}${button('copy','copy','Copiar link',`data-form-id="${e(entry.id)}" ${active ? '' : 'disabled'}`)}${active ? `<a class="atlas-v2-icon-button" href="${e(link(entry))}" target="_blank" rel="noopener noreferrer" title="Abrir formulario" aria-label="Abrir formulario"><i data-lucide="external-link"></i></a>` : button('open','external-link','Formulario ainda nao publicado','disabled')}${button('pause','pause','Pausar respostas',`data-form-id="${e(entry.id)}" ${entry.active ? '' : 'disabled'}`)}${button('delete','trash-2','Excluir formulario',`data-form-id="${e(entry.id)}"`)}</div></article>`;
+        const mode = entry.submission_mode === 'existing' ? 'Preenche registros existentes' : 'Cria novos elementos';
+        return `<article class="atlas-form-list-row"><div><strong>${e(entry.title)}</strong><small>${active ? 'Recebendo respostas' : expired ? 'Encerrado' : 'Pausado'} · ${counts.get(entry.id) || 0} resposta(s) · ${e(host.board.groups.find((g) => g.id === entry.group_id)?.name || 'Setor removido')} · ${mode}</small></div><div class="atlas-form-row-actions">${button('edit','pencil','Editar formulario',`data-form-id="${e(entry.id)}"`)}${button('copy','copy','Copiar link',`data-form-id="${e(entry.id)}" ${active ? '' : 'disabled'}`)}${active ? `<a class="atlas-v2-icon-button" href="${e(link(entry))}" target="_blank" rel="noopener noreferrer" title="Abrir formulario" aria-label="Abrir formulario"><i data-lucide="external-link"></i></a>` : button('open','external-link','Formulario ainda nao publicado','disabled')}${button('pause','pause','Pausar respostas',`data-form-id="${e(entry.id)}" ${entry.active ? '' : 'disabled'}`)}${button('delete','trash-2','Excluir formulario',`data-form-id="${e(entry.id)}"`)}</div></article>`;
       }).join('') || '<p class="atlas-v2-admin-empty">Nenhum formulario neste quadro.</p>'}</div>`,
       actions: '<button type="button" class="atlas-v2-button atlas-v2-button-primary" data-form-action="new"><i data-lucide="plus"></i>Novo formulario</button>',
     }); icons();
   }
   function eligibleColumns() { return host.board.columns.filter((column) => Object.hasOwn(AtlasFormCore.TYPES, column.type)); }
   function newDraft() {
-    draft = { id: null, title: host.board.name, description: '', name_label: 'Nome do registro', success_message: 'Sua resposta foi enviada.', group_id: host.board.groups[0]?.id || '', active: false, expires_at: null,
+    draft = { id: null, title: host.board.name, description: '', name_label: 'Nome do registro', success_message: 'Sua resposta foi enviada.', group_id: host.board.groups[0]?.id || '', submission_mode: 'create', active: false, expires_at: null,
       fields: eligibleColumns().map((column) => ({ columnId: column.id, type: column.type, label: column.name, help: '', required: !!column.required, options: (column.options || []).filter((entry) => !entry.approverIds?.length && entry.step == null).map((entry) => typeof entry === 'string' ? entry : entry.label) })) };
     dirty = true; renderEditor();
   }
@@ -75,7 +76,9 @@
     if (!draft || !form) return;
     const data = new FormData(form);
     draft.title = String(data.get('title') || ''); draft.description = String(data.get('description') || '');
-    draft.name_label = String(data.get('nameLabel') || ''); draft.success_message = String(data.get('successMessage') || '');
+    draft.submission_mode = String(data.get('submissionMode') || 'create');
+    if (data.has('nameLabel')) draft.name_label = String(data.get('nameLabel') || '');
+    draft.success_message = String(data.get('successMessage') || '');
     draft.group_id = String(data.get('groupId') || ''); draft.active = data.has('active');
     draft.expires_at = data.get('expiresAt') ? new Date(String(data.get('expiresAt'))).toISOString() : null;
     draft.fields.forEach((field, index) => {
@@ -92,8 +95,9 @@
         <label class="is-wide atlas-form-toggle atlas-form-publish-toggle"><input name="active" type="checkbox" ${draft.active ? 'checked' : ''}>Publicar e receber respostas pelo link</label>
         <label class="atlas-v2-field is-wide"><span>Titulo</span><input name="title" required maxlength="120" value="${e(draft.title)}"></label>
         <label class="atlas-v2-field is-wide"><span>Descricao</span><textarea name="description" rows="3" maxlength="2000">${e(draft.description)}</textarea></label>
-        <label class="atlas-v2-field is-wide"><span>Setor de destino</span><select name="groupId" required>${host.board.groups.map((group) => `<option value="${e(group.id)}" ${group.id === draft.group_id ? 'selected' : ''}>${e(group.name)}</option>`).join('')}</select></label>
-        <label class="atlas-v2-field is-wide"><span>Pergunta que define o nome do elemento</span><input name="nameLabel" required maxlength="120" value="${e(draft.name_label)}"></label>
+        <fieldset class="is-wide atlas-form-mode-options"><legend>O que acontece ao enviar</legend><label><input type="radio" name="submissionMode" value="create" ${draft.submission_mode !== 'existing' ? 'checked' : ''}><span><strong>Criar novo elemento</strong><small>Cada resposta adiciona um elemento ao setor.</small></span></label><label><input type="radio" name="submissionMode" value="existing" ${draft.submission_mode === 'existing' ? 'checked' : ''}><span><strong>Preencher registro existente</strong><small>A pessoa escolhe um elemento ou subelemento antes de preencher.</small></span></label></fieldset>
+        <label class="atlas-v2-field is-wide"><span>${draft.submission_mode === 'existing' ? 'Setor dos registros disponiveis' : 'Setor de destino'}</span><select name="groupId" required>${host.board.groups.map((group) => `<option value="${e(group.id)}" ${group.id === draft.group_id ? 'selected' : ''}>${e(group.name)}</option>`).join('')}</select></label>
+        ${draft.submission_mode === 'existing' ? '' : `<label class="atlas-v2-field is-wide"><span>Pergunta que define o nome do elemento</span><input name="nameLabel" required maxlength="120" value="${e(draft.name_label)}"></label>`}
         <div class="is-wide atlas-forms-fields">${draft.fields.map((field,index) => {
           const column = host.board.columns.find((entry) => entry.id === field.columnId);
           return `<section class="atlas-form-question-row"><header><small>${index+1} · ${e(column?.name || 'Coluna removida')} · ${e(AtlasFormCore.TYPES[field.type] || field.type)}</small><div>${button('up','arrow-up','Mover pergunta para cima',`data-index="${index}" ${index ? '' : 'disabled'}`)}${button('down','arrow-down','Mover pergunta para baixo',`data-index="${index}" ${index===draft.fields.length-1 ? 'disabled' : ''}`)}${button('remove','x','Remover pergunta',`data-index="${index}" ${column?.required ? 'disabled' : ''}`)}</div></header><label class="atlas-v2-field"><span>Pergunta</span><input name="label-${index}" required maxlength="120" value="${e(field.label)}"></label><label class="atlas-v2-field"><span>Descricao da pergunta</span><input name="help-${index}" maxlength="500" value="${e(field.help)}"></label><label class="atlas-form-toggle"><input type="checkbox" name="required-${index}" ${field.required ? 'checked' : ''} ${column?.required ? 'disabled' : ''}>Obrigatoria</label></section>`;
@@ -113,7 +117,7 @@
     try {
       const { data, error } = await host.client.rpc('atlas_v2_save_public_form', { p_board_id: host.board.id, p_form_id: draft.id,
         p_config: { title:draft.title,description:draft.description,nameLabel:draft.name_label,successMessage:draft.success_message,
-          groupId:draft.group_id,active:draft.active,expiresAt:draft.expires_at,fields:draft.fields } });
+          groupId:draft.group_id,submissionMode:draft.submission_mode,active:draft.active,expiresAt:draft.expires_at,fields:draft.fields } });
       if(error) throw error;
       draft=structuredClone(data); forms=[data,...forms.filter((entry)=>entry.id!==data.id)]; dirty=false;
       host.audit('Formulario salvo'); renderEditor(); host.toast(receiving(draft) ? 'Formulario publicado. O link ja pode receber respostas.' : draft.active ? 'Formulario salvo com o prazo de recebimento encerrado.' : 'Rascunho salvo. O recebimento de respostas esta pausado.');
@@ -137,8 +141,9 @@
   }
   function preview() {
     capture();
+    const targets = draft.submission_mode === 'existing' ? [{id:'preview-element',name:'Elemento de exemplo',parentId:null,depth:0},{id:'preview-subelement',name:'Subelemento de exemplo',parentId:'preview-element',depth:1}] : [];
     host.drawer({title:'Previa do formulario',subtitle:draft.title,
-      body:`<div class="atlas-forms-preview"><h2>${e(draft.title)}</h2><p>${e(draft.description)}</p><form>${AtlasFormCore.markup({nameLabel:draft.name_label,fields:draft.fields})}<button class="atlas-v2-button atlas-v2-button-primary" type="button" disabled>Enviar resposta</button></form></div>`,
+      body:`<div class="atlas-forms-preview"><h2>${e(draft.title)}</h2><p>${e(draft.description)}</p><form>${AtlasFormCore.markup({submissionMode:draft.submission_mode,nameLabel:draft.name_label,targets,fields:draft.fields})}<button class="atlas-v2-button atlas-v2-button-primary" type="button" disabled>Enviar resposta</button></form></div>`,
       actions:'<button class="atlas-v2-button" type="button" data-form-action="return-editor">Voltar ao editor</button>'});icons();
   }
   function confirmDiscard() {
@@ -147,12 +152,12 @@
   }
   document.addEventListener('submit',(event)=>{if(event.target.id==='atlas-public-form-editor'){event.preventDefault();void save(event.target);}});
   document.addEventListener('input',(event)=>{if(event.target.closest('#atlas-public-form-editor'))dirty=true;});
-  document.addEventListener('change',(event)=>{if(event.target.closest('#atlas-public-form-editor')){dirty=true;updatePublicationButton();}});
+  document.addEventListener('change',(event)=>{if(event.target.closest('#atlas-public-form-editor')){dirty=true;updatePublicationButton();if(event.target.name==='submissionMode'){capture();renderEditor();}}});
   document.addEventListener('click',(event)=>{
     const target=event.target.closest('[data-form-action]');if(!target||!host)return;
     event.preventDefault();const action=target.dataset.formAction;const selected=forms.find((entry)=>entry.id===target.dataset.formId);
     if(action==='new')newDraft();
-    if(action==='edit'&&selected){draft=structuredClone(selected);dirty=false;renderEditor();}
+    if(action==='edit'&&selected){draft=structuredClone(selected);draft.submission_mode=draft.submission_mode||'create';dirty=false;renderEditor();}
     if(action==='back'){if(dirty)confirmDiscard();else renderList();}
     if(action==='discard'){dirty=false;renderList();}
     if(action==='return-editor'){if(draft)renderEditor();else renderList();}

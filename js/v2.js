@@ -1,7 +1,7 @@
 (function atlasV2Official() {
   'use strict';
 
-window.__ATLAS_VERSION__ = '2.4.5 OFICIAL';
+window.__ATLAS_VERSION__ = '2.4.6 OFICIAL';
 
   // ---------------------------------------------------------------------------
   // VERSAO DOS ARQUIVOS WEB - fonte unica.
@@ -15,13 +15,27 @@ window.__ATLAS_VERSION__ = '2.4.5 OFICIAL';
   // pre-cache. tests/static-audit.cjs falha se index.html e ATLAS_BUILD
   // divergirem, que era a causa dos casos de "publiquei mas continua igual".
   // ---------------------------------------------------------------------------
-  const ATLAS_BUILD = '2.4.5-formularios-oficial-r1';
+  const ATLAS_BUILD = '2.4.6-formularios-registros-oficial-r1';
   window.__ATLAS_BUILD__ = ATLAS_BUILD;
 
   // Changelog exibido na tela de Inicio. Toda alteracao funcional ou correcao
   // publicada precisa ser registrada aqui antes do deploy.
   // Ordem: mais recente primeiro.
   const CHANGELOG = [
+    {
+      version: 'V2.4.6 Oficial',
+      date: '2026-10-14',
+      notes: [
+        'Formularios: o gestor pode publicar um link para preencher elementos e subelementos existentes, alem do modo que cria novos elementos.',
+        'Formularios: a pessoa escolhe o registro em uma lista vertical, e o Atlas atualiza somente as colunas publicadas, preservando nome, setor e hierarquia.',
+        'Automacoes: alteracoes feitas pelo link em registros existentes disparam as mesmas automacoes de mudanca de campo e ficam registradas no historico.',
+        'Formularios: colunas de imagem podem ser publicadas no link e aceitam fotos de pessoas sem conta no Atlas.',
+        'Imagens: cada resposta aceita ate 12 imagens JPG, PNG, WebP ou GIF, com validacao do conteudo e limite de 6 MB por arquivo.',
+        'Envio: uma barra mostra o progresso percentual, inclusive durante o upload em conexoes moveis.',
+        'Privacidade: os originais ficam em armazenamento privado e sao entregues pelo backend usando enderecos aleatorios.',
+        'Limpeza: imagens removidas no Atlas entram na fila segura de exclusao do armazenamento, sem serem confundidas com arquivos do Google Drive.',
+      ],
+    },
     {
       version: 'V2.4.5 Oficial',
       date: '2026-10-13',
@@ -464,6 +478,7 @@ window.__ATLAS_VERSION__ = '2.4.5 OFICIAL';
     authListenerRegistered: false,
     authUsersLoading: false,
     bootstrapRefreshing: false,
+    remoteBootstrapError: null,
     deferredHydration: false,
     deferredHydrated: false,
     bootstrapCacheTimer: null,
@@ -1374,6 +1389,24 @@ window.__ATLAS_VERSION__ = '2.4.5 OFICIAL';
     (boardEntry?.groups || []).forEach((groupEntry) => collapseItemTree(groupEntry.items));
   }
 
+  function isTransientRemoteReadError(error) {
+    const detail = `${error?.code || ''} ${error?.message || error || ''} ${error?.details || ''}`;
+    return /57014|statement timeout|timed out|timeout|failed to fetch|networkerror|network request failed/i.test(detail);
+  }
+
+  async function executeRemoteRead(buildQuery, options = {}) {
+    const retries = Math.max(0, Number(options.retries ?? 1));
+    let lastError = null;
+    for (let attempt = 0; attempt <= retries; attempt += 1) {
+      const { data, error } = await buildQuery();
+      if (!error) return data || [];
+      lastError = error;
+      if (!isTransientRemoteReadError(error) || attempt >= retries) break;
+      await new Promise((resolve) => setTimeout(resolve, 180 * (attempt + 1)));
+    }
+    throw lastError;
+  }
+
   async function readRemoteTable(table, options = {}) {
     const pageSize = 1000;
     const rows = [];
@@ -1384,18 +1417,42 @@ window.__ATLAS_VERSION__ = '2.4.5 OFICIAL';
     while (true) {
       const currentPageSize = maxRows ? Math.min(pageSize, maxRows - rows.length) : pageSize;
       if (currentPageSize <= 0) break;
-      let query = runtime.authClient.from(table).select(selectedColumns).range(offset, offset + currentPageSize - 1);
-      Object.entries(options.eq || {}).forEach(([columnName, value]) => { query = query.eq(columnName, value); });
-      if (options.in?.column && Array.isArray(options.in.values) && options.in.values.length) {
-        query = query.in(options.in.column, options.in.values);
-      }
-      orders.forEach((columnName) => { query = query.order(columnName, { ascending: options.ascending !== false, nullsFirst: false }); });
-      const { data, error } = await query;
-      if (error) throw error;
-      const page = data || [];
+      const page = await executeRemoteRead(() => {
+        let query = runtime.authClient.from(table).select(selectedColumns).range(offset, offset + currentPageSize - 1);
+        Object.entries(options.eq || {}).forEach(([columnName, value]) => { query = query.eq(columnName, value); });
+        if (options.in?.column && Array.isArray(options.in.values) && options.in.values.length) {
+          query = query.in(options.in.column, options.in.values);
+        }
+        orders.forEach((columnName) => { query = query.order(columnName, { ascending: options.ascending !== false, nullsFirst: false }); });
+        return query;
+      }, options);
       rows.push(...page);
       if (page.length < currentPageSize || (maxRows && rows.length >= maxRows)) break;
       offset += currentPageSize;
+    }
+    return rows;
+  }
+
+  async function readRemoteTableByKeyset(table, options = {}) {
+    const pageSize = Math.max(100, Math.min(1000, Number(options.pageSize || 1000)));
+    const cursorColumn = String(options.cursorColumn || 'id');
+    const selectedColumns = options.select || '*';
+    const rows = [];
+    let cursor = null;
+    while (true) {
+      const page = await executeRemoteRead(() => {
+        let query = runtime.authClient.from(table).select(selectedColumns).order(cursorColumn, { ascending: true }).limit(pageSize);
+        Object.entries(options.eq || {}).forEach(([columnName, value]) => { query = query.eq(columnName, value); });
+        if (cursor !== null) query = query.gt(cursorColumn, cursor);
+        return query;
+      }, options);
+      rows.push(...page);
+      if (page.length < pageSize) break;
+      const nextCursor = page[page.length - 1]?.[cursorColumn];
+      if (nextCursor === undefined || nextCursor === null || String(nextCursor) === String(cursor)) {
+        throw new Error(`A paginacao de ${table} nao conseguiu avancar.`);
+      }
+      cursor = nextCursor;
     }
     return rows;
   }
@@ -2499,7 +2556,7 @@ window.__ATLAS_VERSION__ = '2.4.5 OFICIAL';
       readRemoteTable('atlas_v2_boards', { select: 'id,module_id,nome,descricao,icone,tipo_acesso,origem,configuracoes,oficial,ativo,ordem,storage_connection_id', order: ['module_id', 'ordem', 'id'] }),
       readRemoteTable('atlas_v2_groups', { select: 'id,board_id,nome,cor,recolhido,ordem', order: ['board_id', 'ordem', 'id'] }),
       readRemoteTable('atlas_v2_columns', { select: 'id,board_id,nome,tipo,configuracoes,largura,obrigatorio,ativo,ordem', order: ['board_id', 'ordem', 'id'] }),
-      readRemoteTable('atlas_v2_items', { select: 'id,board_id,group_id,parent_item_id,nome,ordem,arquivado,criado_por,created_at,updated_at', order: ['board_id', 'group_id', 'parent_item_id', 'ordem', 'id'] }),
+      readRemoteTableByKeyset('atlas_v2_items', { select: 'id,board_id,group_id,parent_item_id,nome,ordem,arquivado,criado_por,created_at,updated_at' }),
       readRemoteTable('atlas_v2_views', { select: 'id,board_id,nome,tipo,configuracoes,padrao,ordem', order: ['board_id', 'ordem', 'id'] }),
       readRemoteTable('atlas_v2_storage_connections', { order: ['nome', 'id'] }),
       readRemoteAccessRules(),
@@ -2508,7 +2565,11 @@ window.__ATLAS_VERSION__ = '2.4.5 OFICIAL';
       includeExtras ? readRemoteTable('atlas_v2_field_templates', { order: ['nome', 'id'] }) : Promise.resolve([]),
       includeExtras ? readRemoteTable('atlas_v2_integrations', { order: ['id'] }) : Promise.resolve([]),
     ]);
-    if (!workspaceRows.length) return null;
+    if (!workspaceRows.length) {
+      const error = new Error('Nenhuma area esta visivel para este usuario.');
+      error.code = 'ATLAS_NO_VISIBLE_WORKSPACE';
+      throw error;
+    }
 
     const local = runtime.data?.workspaces?.length ? runtime.data : loadData();
     // O fallback precisa ser o MESMO quadro que activeBoardId vai receber mais
@@ -2594,7 +2655,9 @@ window.__ATLAS_VERSION__ = '2.4.5 OFICIAL';
     const columnsByBoard = indexRows(columnRows, (entry) => entry.board_id);
     const groupsByBoard = indexRows(groupRows, (entry) => entry.board_id);
     const topItemsByGroup = indexRows(
-      itemRows.filter((entry) => !entry.parent_item_id && !entry.arquivado),
+      itemRows
+        .filter((entry) => !entry.parent_item_id && !entry.arquivado)
+        .sort((left, right) => Number(left.ordem || 0) - Number(right.ordem || 0) || String(left.id).localeCompare(String(right.id))),
       (entry) => `${entry.board_id}:${entry.group_id}`,
     );
     const modulesByWorkspace = indexRows(
@@ -4253,7 +4316,7 @@ window.__ATLAS_VERSION__ = '2.4.5 OFICIAL';
   }
 
   function authVersion() {
-    return window.ATNX_CONFIG?.V2_VERSION || 'V2.4.5 Oficial';
+    return window.ATNX_CONFIG?.V2_VERSION || 'V2.4.6 Oficial';
   }
 
   function authFeatureList() {
@@ -4441,6 +4504,20 @@ window.__ATLAS_VERSION__ = '2.4.5 OFICIAL';
     return message || 'Não foi possível concluir a autenticação.';
   }
 
+  function remoteBootstrapErrorMessage(error) {
+    const detail = `${error?.code || ''} ${error?.message || error || ''} ${error?.details || ''}`;
+    if (/42P01|PGRST205|relation .* does not exist|schema cache/i.test(detail)) {
+      return 'A estrutura do Atlas não está disponível no servidor. Avise o administrador do sistema.';
+    }
+    if (/ATLAS_NO_VISIBLE_WORKSPACE/i.test(detail)) {
+      return 'Seu usuário está ativo, mas ainda não possui uma área de trabalho disponível. Solicite acesso ao administrador.';
+    }
+    if (isTransientRemoteReadError(error)) {
+      return 'O servidor demorou para carregar os dados. O Atlas tentará reconectar automaticamente.';
+    }
+    return 'Não foi possível carregar os dados do Atlas. Verifique sua conexão e tente novamente.';
+  }
+
   function databaseProfileToUser(profile, authUser = null) {
     return {
       id: profile.id,
@@ -4607,6 +4684,7 @@ window.__ATLAS_VERSION__ = '2.4.5 OFICIAL';
     if (profile) upsertAuthenticatedUser(profile, authUser);
 
     if (profile && runtime.authClient && runtime.authSession?.user) {
+      runtime.remoteBootstrapError = null;
       const cached = await readBootstrapCache(runtime.authSession.user.id);
       if (cached) {
         runtime.data = cached;
@@ -4649,6 +4727,7 @@ window.__ATLAS_VERSION__ = '2.4.5 OFICIAL';
         runtime.remoteMode = false;
         runtime.remoteReady = false;
         runtime.remoteRows = null;
+        runtime.remoteBootstrapError = error;
         console.error('Atlas V2: falha ao carregar a base operacional.', error);
       }
     }
@@ -4656,7 +4735,12 @@ window.__ATLAS_VERSION__ = '2.4.5 OFICIAL';
     unlockApplication();
     render();
     scheduleLocalBackupCompaction();
-    if (profile && !runtime.remoteMode) toast('A estrutura V2 ainda não foi carregada do Supabase. Execute o SQL completo da versão.', true);
+    if (profile && !runtime.remoteMode) {
+      toast(remoteBootstrapErrorMessage(runtime.remoteBootstrapError), true);
+      if (isTransientRemoteReadError(runtime.remoteBootstrapError)) {
+        setTimeout(() => refreshRemoteApplication(profile, authUser, { full: false, silent: true }), 1200);
+      }
+    }
     if (profile && runtime.remoteMode) hydrateDeferredRemoteData();
     if (['admin', 'root'].includes(profile?.role)) syncAuthUsersFromSupabase({ renderAfter: false });
     if (profile) { startAutomationMonitor(); refreshNotifications(); startRealtime(); }
@@ -6114,7 +6198,7 @@ window.__ATLAS_VERSION__ = '2.4.5 OFICIAL';
   }
 
   async function syncDriveAttachmentRows(rows = [], action = 'delete') {
-    const durableRows = rows.filter((row) => row?.file_id);
+    const durableRows = rows.filter((row) => row?.file_id && !String(row.file_id).startsWith('form-image:'));
     if (!durableRows.length) return;
     const authToken = await currentAuthAccessToken();
     const batches = new Map();
@@ -9467,7 +9551,11 @@ window.__ATLAS_VERSION__ = '2.4.5 OFICIAL';
     const removedIndexes = new Set(removedEntries.map((entry) => Number(entry._index)).filter(Number.isInteger));
     if (!data.versioned) removedIndexes.add(runtime.imageViewer.index);
     const attachmentIds = [...new Set(removedEntries.map((entry) => entry.attachmentId).filter(Boolean))];
-    const driveFiles = [...new Map(removedEntries.filter((entry) => entry.fileId).map((entry) => [entry.fileId, {
+    const formImageAttachmentIds = [...new Set(removedEntries
+      .filter((entry) => String(entry.fileId || '').startsWith('form-image:'))
+      .map((entry) => entry.attachmentId).filter(Boolean))];
+    const regularAttachmentIds = attachmentIds.filter((attachmentId) => !formImageAttachmentIds.includes(attachmentId));
+    const driveFiles = [...new Map(removedEntries.filter((entry) => entry.fileId && !String(entry.fileId).startsWith('form-image:')).map((entry) => [entry.fileId, {
       file_id: entry.fileId,
       storage_connection_id: entry.storageConnectionId || null,
       nome: entry.name || 'Arquivo',
@@ -9487,8 +9575,19 @@ window.__ATLAS_VERSION__ = '2.4.5 OFICIAL';
 
     if (attachmentIds.length && runtime.authClient && runtime.remoteMode) {
       attachmentIds.forEach((attachmentId) => runtime.realtimeLocalIds.add(attachmentId));
-      const { data: deletedRows, error } = await runtime.authClient.from('atlas_v2_attachments').delete().in('id', attachmentIds).select('id');
-      if (error || deletedRows?.length !== attachmentIds.length) {
+      let deletedCount = 0;
+      let deletionError = null;
+      if (formImageAttachmentIds.length) {
+        const result = await runtime.authClient.rpc('atlas_v2_delete_form_images', { p_attachment_ids: formImageAttachmentIds });
+        if (result.error || result.data?.length !== formImageAttachmentIds.length) deletionError = result.error || new Error('o servidor nao confirmou a exclusao das imagens do formulario');
+        else deletedCount += result.data.length;
+      }
+      if (!deletionError && regularAttachmentIds.length) {
+        const result = await runtime.authClient.from('atlas_v2_attachments').delete().in('id', regularAttachmentIds).select('id');
+        if (result.error || result.data?.length !== regularAttachmentIds.length) deletionError = result.error || new Error('o servidor nao confirmou todas as exclusoes');
+        else deletedCount += result.data.length;
+      }
+      if (deletionError || deletedCount !== attachmentIds.length) {
         attachmentIds.forEach((attachmentId) => runtime.realtimeLocalIds.delete(attachmentId));
         if (driveTrashed) {
           try {
@@ -9500,7 +9599,7 @@ window.__ATLAS_VERSION__ = '2.4.5 OFICIAL';
             return;
           }
         }
-        toast(`Não foi possível remover o arquivo do Atlas: ${error?.message || 'o servidor não confirmou todas as exclusões'}`, true);
+        toast(`Não foi possível remover o arquivo do Atlas: ${deletionError?.message || 'o servidor não confirmou todas as exclusões'}`, true);
         return;
       }
       setTimeout(() => attachmentIds.forEach((attachmentId) => runtime.realtimeLocalIds.delete(attachmentId)), 2000);

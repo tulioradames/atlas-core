@@ -19,6 +19,10 @@
         <div id="form-questions"></div>
         <label class="form-trap" aria-hidden="true">Website<input name="website" tabindex="-1" autocomplete="off"></label>
         <p id="form-error" class="form-error" role="alert" hidden></p>
+        <div id="form-progress" class="form-progress" hidden aria-live="polite">
+          <div><span>Enviando</span><strong id="form-progress-value">0%</strong></div>
+          <progress id="form-progress-bar" max="100" value="0"></progress>
+        </div>
         <button id="form-submit" class="form-submit" type="submit">Enviar resposta</button>
       </form>
     </section>

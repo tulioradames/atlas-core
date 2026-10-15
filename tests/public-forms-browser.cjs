@@ -37,6 +37,22 @@ try{({chromium}=require('playwright'));}catch(_){({chromium}=require(path.join(p
       assert.equal(await page.locator('[name="__name__"]').inputValue(),'');
       await page.close();
     }
+    const existingParent=randomUUID();const existingChild=randomUUID();
+    await db.query(`insert into atlas_v2_items(id,board_id,group_id,parent_item_id,nome,ordem) values
+      ($1,$3,$4,null,'Elemento publicado',0),($2,$3,$4,$1,'Subelemento publicado',0)`,[existingParent,existingChild,ids.board,ids.group]);
+    const existingForm=await save({title:'Atualizacao de registro',description:'Escolha o registro correto.',submissionMode:'existing'});
+    for(const width of [320,1440]){
+      const page=await browser.newPage({viewport:{width,height:900}});page.on('pageerror',error=>errors.push(error.message));
+      await page.goto(`${base}/formularios/${existingForm.token}`);await page.locator('#form-content').waitFor({state:'visible'});
+      assert.equal(await page.locator('[name="__name__"]').count(),0);assert((await page.locator('[name="__target__"]').count())>=2);
+      await page.getByText('Subelemento publicado',{exact:true}).click();
+      await page.locator(`[name="${ids.text}"]`).fill(`Preenchido no layout ${width}`);
+      assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),true);
+      await page.screenshot({path:path.join(root,`tests/forms-existing-${width}.png`),fullPage:true});
+      await page.locator('#form-submit').click();await page.locator('#form-success').waitFor({state:'visible'});
+      const value=await db.query('select valor from atlas_v2_item_values where item_id=$1 and column_id=$2',[existingChild,ids.text]);
+      assert.equal(value.rows[0].valor,`Preenchido no layout ${width}`);await page.close();
+    }
     // Exercise the real builder module with a local Supabase adapter. No service
     // key or real account is used in this browser-only fixture.
     const page=await browser.newPage({viewport:{width:390,height:844}});page.on('pageerror',error=>errors.push(error.message));
@@ -81,6 +97,15 @@ try{({chromium}=require('playwright'));}catch(_){({chromium}=require(path.join(p
     assert.equal(saved.id,paused.id);assert.equal(saved.token,paused.token);
     assert.equal(await page.locator('[data-form-action="copy-draft"]').isDisabled(),false);
     assert.match(await page.locator('.atlas-form-publication-status').textContent(),/Publicado/);
+    await page.locator('[name="submissionMode"][value="existing"]').check();
+    assert.equal(await page.locator('[name="nameLabel"]').count(),0);
+    await page.locator('[data-form-action="preview"]').click();
+    assert.equal(await page.getByText('Elemento de exemplo',{exact:true}).count(),1);
+    assert.equal(await page.getByText('Subelemento de exemplo',{exact:true}).count(),1);
+    await page.locator('[data-form-action="return-editor"]').click();
+    await page.locator('[form="atlas-public-form-editor"]').click();
+    await page.waitForFunction(()=>document.getElementById('toast').textContent.includes('publicado'));
+    assert.equal((await db.query('select submission_mode from atlas_v2_public_forms where id=$1',[saved.id])).rows[0].submission_mode,'existing');
     await page.locator('[name="active"]').uncheck();
     assert.equal(await page.locator('#atlas-form-publication-label').textContent(),'Pausar e salvar');
     await page.locator('[name="active"]').check();
@@ -91,6 +116,6 @@ try{({chromium}=require('playwright'));}catch(_){({chromium}=require(path.join(p
     await page.locator('[data-form-action="back"]').click();await page.locator('[data-form-action="return-editor"]').click();
     assert.equal(await page.locator('[name="title"]').inputValue(),'Nao salvo');
     await page.close();assert.deepEqual(errors,[]);
-    console.log('PASS public forms browser: anonymous submissions at 320/390/1440, draft remains private, explicit publication, paused copy disabled, preview/save/dirty draft');
+    console.log('PASS public forms browser: create/existing submissions, parent/subitem selection, 320/390/1440 layouts, builder preview/save and dirty draft');
   }finally{await browser.close();server.closeAllConnections();await new Promise(resolve=>server.close(resolve));await db.close();}
 })().catch(error=>{console.error(error.stack);process.exitCode=1;});

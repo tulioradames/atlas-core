@@ -24,14 +24,16 @@ const securityHeaders = read('_headers');
 const workerSecurity = read('worker-security.js');
 const deployScript = read('deploy-cloudflare.ps1');
 const auditFixes = read('supabase/ATLAS_V2_4_0_AUDITORIA_CORRECOES.sql');
+const formImagesMigration = read('supabase/ATLAS_V2_4_6_FORMULARIOS_IMAGENS.sql');
+const formExistingItemsMigration = read('supabase/ATLAS_V2_4_6_FORMULARIOS_REGISTROS_EXISTENTES.sql');
 const manual = read('manual.html');
 
-assert(app.includes("window.__ATLAS_VERSION__ = '2.4.5 OFICIAL'"), 'Versao interna divergente.');
-assert(config.includes('V2.4.5 Oficial'), 'Config sem a versao do pacote.');
+assert(app.includes("window.__ATLAS_VERSION__ = '2.4.6 OFICIAL'"), 'Versao interna divergente.');
+assert(config.includes('V2.4.6 Oficial'), 'Config sem a versao do pacote.');
 assert(index.includes('id="atlas-v2-footer-version"'), 'Rodape sem o elemento de versao (agora preenchido via JS a partir do config.js).');
-assert(index.includes('V2.4.5 Oficial</span>'), 'Rodape HTML ainda exibe uma versao antiga antes do JavaScript carregar.');
-assert(index.includes('name="robots" content="index, follow"'), 'Edicao oficial ainda esta marcada como ambiente de homologacao.');
-assert(manifest.includes('2.4.5'), 'Manifest sem a versao do pacote.');
+assert(index.includes('V2.4.6 Oficial</span>'), 'Rodape HTML ainda exibe uma versao antiga antes do JavaScript carregar.');
+assert(index.includes('name="robots" content="index, follow"'), 'Edicao oficial ainda bloqueia indexacao como homologacao.');
+assert(manifest.includes('2.4.6'), 'Manifest sem a versao do pacote.');
 // O manual ficou uma versao inteira para tras (dizia V2.4.2 com a 2.4.3 no ar)
 // e nada acusou: nenhuma trava conferia isso, e a unica conferencia que existia
 // vivia no browser-smoke, que o script de publicacao nao roda. Agora a defasagem
@@ -337,7 +339,7 @@ assert(!completeSchema.includes('atlas_profiles_update_self'), 'Perfil ainda per
 assert(completeSchema.includes('revoke all on function public.atlas_v2_run_automations'), 'Motor interno de automacoes ainda exposto.');
 assert(completeSchema.includes("public.atlas_v2_can_board(a.board_id,'edit')"), 'Automacoes globais sem limite no schema completo.');
 
-[hotfix, migration, completeSchema, adminApproval].forEach((sql, index) => {
+[hotfix, migration, completeSchema, adminApproval, formImagesMigration, formExistingItemsMigration].forEach((sql, index) => {
   const dollarQuotes = (sql.match(/\$\$/g) || []).length;
   assert(dollarQuotes % 2 === 0, `Blocos SQL com delimitadores incompletos no arquivo ${index + 1}.`);
   assert(/\bbegin\s*;/i.test(sql), `Transacao inicial ausente no arquivo SQL ${index + 1}.`);
@@ -379,6 +381,8 @@ assert(
     'ATLAS_V2_4_3_SLA_NO_SERVIDOR.sql',
     'ATLAS_V2_4_4_LEITURA_EM_CONJUNTO.sql',
     'ATLAS_V2_4_5_FORMULARIOS.sql',
+    'ATLAS_V2_4_6_FORMULARIOS_IMAGENS.sql',
+    'ATLAS_V2_4_6_FORMULARIOS_REGISTROS_EXISTENTES.sql',
     // Nao e migracao: e o retrato do esquema em producao, e a unica fonte
     // confiavel sobre o estado do banco. Ver supabase/README.md.
     'BASELINE_PRODUCAO.sql',
