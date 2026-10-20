@@ -42,7 +42,7 @@
 
 .EXAMPLE
   .\deploy-cloudflare.ps1
-  Publica Atlas_Core_V2_2_0_DEV_HOMOLOGACAO em test-atlas (padrao seguro).
+  Publica Atlas_Core_V2_2_0_DEV_HOMOLOGACAO em SEU-WORKER-HOMOLOG (padrao seguro).
 
 .EXAMPLE
   .\deploy-cloudflare.ps1 -Target producao -Confirm "publicar em producao"
@@ -66,15 +66,15 @@ $CloudflareTokenPath = Join-Path $HOME ".atlas-secrets\cloudflare_token.txt"
 $presets = @{
   homolog  = @{
     SourceDir  = $PSScriptRoot
-    ScriptName = "test-atlas"
-    Backend    = "https://seu-backend-homolog.exemplo.com.br"
-    PublicUrl  = "https://seu-worker-homolog.workers.dev"
+    ScriptName = "SEU-WORKER-HOMOLOG"
+    Backend    = "https://homolog.seu-backend.exemplo.com.br"
+    PublicUrl  = "https://SEU-WORKER-HOMOLOG.workers.dev"
   }
   producao = @{
     SourceDir  = $PSScriptRoot
-    ScriptName = "atlas"
+    ScriptName = "SEU-WORKER-PRODUCAO"
     Backend    = "https://seu-backend.exemplo.com.br"
-    PublicUrl  = "https://seu-worker-producao.workers.dev"
+    PublicUrl  = "https://SEU-WORKER-PRODUCAO.workers.dev"
   }
 }
 
@@ -85,7 +85,7 @@ if ($ScriptName -ne $presets[$Target].ScriptName) {
   throw "Worker incompatível com o ambiente '$Target'. Esperado: $($presets[$Target].ScriptName)."
 }
 
-if (($Target -eq "producao" -or $ScriptName -eq "atlas") -and $Confirm -ne "publicar em producao") {
+if (($Target -eq "producao" -or $ScriptName -eq $presets.producao.ScriptName) -and $Confirm -ne "publicar em producao") {
   Write-Warning "Voce esta publicando em PRODUCAO OFICIAL (Worker '$ScriptName')."
   Write-Warning "SourceDir: $SourceDir"
   Write-Output "Cancelado - passe -Confirm 'publicar em producao' para seguir (nao ha prompt interativo, ver ajuda do script)."
@@ -100,21 +100,17 @@ $appPath = Join-Path $SourceDir "js\v2.js"
 if (-not (Test-Path -LiteralPath $configPath -PathType Leaf)) { throw "Configuracao ausente: $configPath" }
 if (-not (Test-Path -LiteralPath $appPath -PathType Leaf)) { throw "Aplicacao ausente: $appPath" }
 $configSource = [System.IO.File]::ReadAllText($configPath)
-# Ate a saida da nuvem esta trava comparava o "project ref" extraido de
-# https://<ref>.supabase.co. Com o backend proprio nao existe ref nenhum, entao
-# ela passou a comparar a URL INTEIRA - que prova a mesma coisa: que ninguem
-# esta publicando em producao um pacote apontando para outro ambiente.
-$backendEsperado = $presets[$Target].Backend
+# A trava compara a URL inteira da API propria para impedir que um pacote de
+# homologacao seja publicado em producao, ou vice-versa.
+$backendEsperado = $presets[$Target].PublicUrl
 if ($backendEsperado) {
-  $backendMatch = [regex]::Match($configSource, 'SUPABASE_URL:\s*"([^"]+)"', 'IgnoreCase')
+  $backendMatch = [regex]::Match($configSource, 'API_URL:\s*"([^"]+)"', 'IgnoreCase')
   if (-not $backendMatch.Success -or $backendMatch.Groups[1].Value.TrimEnd('/') -ne $backendEsperado) {
     $achado = if ($backendMatch.Success) { $backendMatch.Groups[1].Value } else { '(nao encontrado)' }
-    throw "O backend configurado no pacote ($achado) nao e o do ambiente '$Target' ($backendEsperado)."
+    throw "A origem da API configurada no pacote ($achado) nao e a do ambiente '$Target' ($backendEsperado)."
   }
 }
-if ($configSource -match 'supabase\.co') {
-  throw "O pacote ainda aponta para a nuvem da Supabase (supabase.co) no config.js."
-}
+if ($configSource -match 'supabase\.co') { throw "O pacote ainda aponta para um backend legado no config.js." }
 $appSource = [System.IO.File]::ReadAllText($appPath)
 $buildMatch = [regex]::Match($appSource, "const ATLAS_BUILD = '([^']+)'", 'IgnoreCase')
 if (-not $buildMatch.Success) { throw "ATLAS_BUILD nao encontrado em js\v2.js." }
@@ -123,7 +119,7 @@ $ExpectedBuild = $buildMatch.Groups[1].Value
 # ---------------------------------------------------------------------------
 # V2.4.2 - Bateria de testes ANTES de publicar.
 #
-# Ate a V2.4.1 este script conferia o ambiente, o projeto Supabase e a saude
+# Ate a V2.4.1 este script conferia o ambiente, o backend e a saude
 # do site depois de publicar - mas nunca rodava um teste sequer. Dava para
 # publicar em producao um pacote que falharia na auditoria estatica, desde que
 # a versao e o ambiente estivessem certos. "Rodar os testes" era um passo
@@ -161,11 +157,23 @@ function Invoke-AtlasTests {
     throw "Nenhum interpretador Node encontrado (nem 'node' no PATH, nem o VS Code). Instale o Node ou use -SkipTests por sua conta e risco."
   }
 
-  # browser-smoke fica de fora: precisa de um Chrome/Edge real e de um
-  # servidor local, o que nao faz parte de uma publicacao.
-  $suites = Get-ChildItem -LiteralPath $testsDir -Filter "*.cjs" -File |
-    Where-Object { $_.Name -ne "browser-smoke.cjs" } |
-    Sort-Object Name
+  # A lista oficial fica em package.json. Arquivos auxiliares, ensaios manuais
+  # e testes de integracao com navegador/banco nao devem entrar por acidente
+  # apenas porque terminam em .cjs.
+  $packagePath = Join-Path $PackageDir "package.json"
+  if (-not (Test-Path -LiteralPath $packagePath -PathType Leaf)) {
+    throw "package.json ausente em $PackageDir - publicacao abortada."
+  }
+  $package = Get-Content -LiteralPath $packagePath -Raw | ConvertFrom-Json
+  $testCommand = [string]$package.scripts.'test:all'
+  $suiteMatches = [regex]::Matches($testCommand, 'node\s+tests/([A-Za-z0-9._-]+\.cjs)')
+  $suites = @($suiteMatches | ForEach-Object {
+    $suitePath = Join-Path $testsDir $_.Groups[1].Value
+    if (-not (Test-Path -LiteralPath $suitePath -PathType Leaf)) {
+      throw "Suite declarada em test:all nao encontrada: $suitePath"
+    }
+    Get-Item -LiteralPath $suitePath
+  })
 
   if (-not $suites) { throw "Nenhuma suite de teste encontrada em $testsDir - publicacao abortada." }
 
@@ -183,6 +191,14 @@ function Invoke-AtlasTests {
         throw "Teste reprovado: tests/$($suite.Name) - publicacao abortada."
       }
     }
+
+    $apiSecuritySuite = Join-Path $PackageDir "server\atlas-api\tests\security.test.cjs"
+    if (-not (Test-Path -LiteralPath $apiSecuritySuite -PathType Leaf)) {
+      throw "Teste de seguranca da API Atlas ausente - publicacao abortada."
+    }
+    $apiTestPaths = @(Get-ChildItem -LiteralPath (Split-Path $apiSecuritySuite) -Filter '*.test.cjs' -File | ForEach-Object FullName)
+    & $runner.Exe "--test" @apiTestPaths
+    if ($LASTEXITCODE -ne 0) { throw "Teste de seguranca da API Atlas reprovado - publicacao abortada." }
   } finally {
     if ($runner.Electron) { $env:ELECTRON_RUN_AS_NODE = $previousElectron }
   }
@@ -217,7 +233,7 @@ if (-not $AccountId) {
 $base = "https://api.cloudflare.com/client/v4/accounts/$AccountId"
 
 # So os arquivos web REAIS do app - nunca a pasta inteira do repositorio (que
-# tem appscript/ com refs internas, supabase/ com SQL de migracao, tests/,
+# tem appscript/ com refs internas, SQL de migracao, tests/,
 # docs/, package.json etc. - nada disso deve ficar publicamente acessivel
 # pela URL do Worker). Confirmado contra o Worker real (curl direto nas
 # rotas) antes de fixar esta lista - ver reference_atlas_paths na memoria.

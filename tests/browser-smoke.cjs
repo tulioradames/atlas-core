@@ -224,7 +224,7 @@ try {
         });
         for (const name of ['sidebar', 'viewer', 'history']) {
           const surface = glassSurfaces[name];
-          if (!surface.backdrop.includes('blur') || surface.background === 'none') {
+          if (!surface.backdrop.includes('blur') || surface.backgroundColor === 'rgba(0, 0, 0, 0)') {
             throw new Error(`Superficie translucida ausente em ${name}: ${JSON.stringify(surface)}`);
           }
         }
@@ -466,8 +466,8 @@ try {
         await page.locator('[data-action="open-administration"]').click();
         await page.locator('.atlas-v2-admin-tabs [data-action="admin-tab"][data-admin-tab="system"]').click();
         await page.waitForSelector('.atlas-v2-admin-storage-row');
-        if (!await page.locator('[data-action="admin-organize-storage"]').count()) {
-          throw new Error('Ação de organização do Drive ausente na Administração.');
+          if (await page.locator('[data-action="admin-new-storage"], [data-action="admin-edit-storage"]').count()) {
+            throw new Error('Configuração individual de armazenamento ainda aparece.');
         }
         await page.screenshot({
           path: path.join(root, 'tests', 'smoke-admin-drive.png'),
@@ -563,7 +563,7 @@ try {
     });
     await manual.close();
     if (errors.length) throw new Error(errors.join('\n'));
-    console.log('Atlas V2.4.0: smoke visual aprovado.');
+    console.log('Atlas V2.5.0 Homologacao: smoke visual aprovado.');
   } finally {
     await browser.close();
   }

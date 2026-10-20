@@ -1,4 +1,12 @@
-ATLAS V2.4.3 OFICIAL - INSTALACAO E ATUALIZACAO
+ATLAS V2.5.0 HOMOLOGACAO - API E POSTGRESQL PROPRIOS
+
+As instrucoes antigas abaixo sao historico. Para a arquitetura atual, consulte
+README.md e server/atlas-api/README.md. Aplique as migracoes numeradas em
+server/atlas-api/sql na ordem, usando backup antes da atualizacao.
+Configure os segredos apenas no servidor e publique primeiro em homologacao.
+O frontend usa API_URL e nao recebe credenciais do banco.
+
+HISTORICO V2.4.3 OFICIAL - INSTALACAO E ATUALIZACAO
 
 ATUALIZAR UMA V2.4.1 EXISTENTE
 

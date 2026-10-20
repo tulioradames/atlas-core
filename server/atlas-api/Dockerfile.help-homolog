@@ -1,0 +1,4 @@
+ARG BASE_IMAGE=atlas-api:2.5.0-homolog-social
+FROM ${BASE_IMAGE}
+COPY --chown=node:node src ./src
+COPY --chown=node:node tests ./tests

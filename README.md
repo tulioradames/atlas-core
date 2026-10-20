@@ -1,368 +1,89 @@
-# Atlas V2.4.6 Oficial
-
-## Novidades da V2.4.6
-
-Baseada na V2.4.5 oficial. A V2.5 permanece separada.
-
-- Crie formularios pela aba **Formularios** do quadro com acesso de configuracao.
-- Escolha as colunas, perguntas, ordem, obrigatoriedade e setor de destino.
-- Publique e copie o link. O preenchimento nao exige conta no Atlas.
-- Escolha se cada envio cria um elemento ou preenche um elemento/subelemento existente.
-- No modo existente, o link exibe somente os nomes do setor e atualiza apenas as colunas publicadas.
-- Alteracoes em registros existentes entram no historico e disparam automacoes de mudanca de campo.
-- Colunas de imagem podem receber ate 12 fotos JPG, PNG, WebP ou GIF pelo link.
-- O envio mostra progresso percentual e valida o conteudo real de cada imagem.
-- Os originais ficam em bucket privado, acessiveis apenas pelo backend do formulario.
-- Pause, defina validade ou gere um novo link sem apagar os registros recebidos.
-
-Detalhes de instalacao, limites e seguranca em
-`docs/V2_4_6_FORMULARIOS_IMAGENS.md`. Execute `pnpm install --frozen-lockfile` e
-`pnpm test:forms` antes de aplicar os SQLs. A chave de servico fica exclusivamente
-no backend; nunca em `config/config.js`.
-
-## Edição pública
-
-Este repositório não contém credenciais, URLs de produção, IDs de pastas do
-Google Drive nem dados operacionais. Antes de executar:
-
-1. configure `SUPABASE_URL` e `SUPABASE_KEY` em `config/config.js`;
-2. troque o marcador `seu-backend.exemplo.com.br` pelo seu backend em `_headers`
-   **e** em `worker-security.js` — a política de segurança vive nos dois
-   arquivos, e eles precisam ficar idênticos;
-3. execute o schema adequado da pasta `supabase/`;
-4. se for usar o Google Drive como armazenamento, configure o conector em
-   `appscript/GoogleDriveUpload_AppsScript_V2_CONECTOR_SETOR.gs` e publique uma
-   cópia em cada conta setorial.
-
-A partir da **V2.4.4** o `SUPABASE_URL` é o endereço do **seu próprio servidor**
-(Supabase auto-hospedado), não um projeto na nuvem da Supabase — e a política de
-segurança não permite mais falar com `*.supabase.co`. O armazenamento de arquivos
-também pode ser o seu servidor, por setor, sem depender do Drive.
-
-Use somente uma chave publicável. Nunca coloque `service_role`, senhas, tokens
-de sessão ou identificadores internos no repositório.
-
-Esta revisao troca o carregamento integral por carregamento sob demanda: o Atlas
-abre primeiro os elementos visiveis e busca subelementos, valores e anexos somente
-quando a visualizacao precisar deles.
-
-Pacote de validação da organização por cidade e da exclusão sincronizada entre
-Atlas, Supabase e Google Drive. A base funcional permanece sendo a V2.1.0.
-
-## Novidades da V2.4.4
-
-Versão focada em **autonomia e desempenho**: sair da nuvem, guardar os arquivos
-em casa e fazer os quadros grandes voltarem a abrir.
-
-- **Armazenamento no servidor da empresa.** Cada setor pode guardar seus anexos
-  no próprio servidor em vez do Google Drive. Enviar, abrir a prévia e consultar
-  versões continua igual na tela — o que muda é onde o documento fica e quem
-  responde por ele. O Drive continua funcionando para quem preferir.
-- **Quadros grandes voltaram a abrir rápido.** A leitura dos valores e dos
-  anexos perguntava a permissão uma vez por **linha**: num quadro com milhares
-  de itens e dezenas de colunas isso estourava o limite de tempo do Postgres e
-  a pessoa via erro em vez dos dados. A permissão passou a ser resolvida uma vez
-  por consulta, para o conjunto inteiro. Medido em produção: quadro completo de
-  7,6 s para 0,25 s; lote de 100 itens de 872 ms para 222 ms. **A semântica das
-  regras não mudou** — as funções novas chamam as mesmas funções de permissão de
-  sempre, só que uma vez por escopo em vez de uma vez por linha.
-- **O Atlas deixou de depender da nuvem da Supabase.** Banco, login, tempo real
-  e arquivos rodam no servidor da empresa. A política de segurança do navegador
-  não permite mais conexão com `*.supabase.co`: enquanto aquele domínio
-  estivesse liberado, um `config.js` errado ou um script injetado poderia mandar
-  dado para fora sem o navegador reclamar.
-
-Esta versão **tem migration**: veja "Atualizar uma V2.4.3 existente" abaixo.
-
-## Novidades da V2.4.0
-
-- historico de versoes nos campos de arquivo (V1, V2, V3...), com rotulo editavel,
-  visualizacao e download pelo proprio Atlas;
-- conversa dentro de cada elemento, com mencao por @ e notificacao no sino;
-  anexo da conversa fica no Atlas, nao vai para o Google Drive;
-- planilha editada DENTRO do Drive vira versao nova sozinha, sem duplicar
-  arquivo: cada versao aponta para uma revisao do mesmo arquivo;
-- movimentação de itens e subitens entre quadros e setores permitidos,
-  preservando valores, anexos, histórico e conversas;
-- fórmulas de coluna com número, porcentagem, moeda e agregação sobre a coluna
-  inteira (soma, média, mínimo, máximo, contagem).
-
-Detalhes em `docs/V2_4_0_DESENVOLVIMENTO.md`.
-
-## Novidades da V2.4.3
-
-Versão focada em **confiança nos números**: parar de adivinhar o que está
-concluído, tirar o aviso de prazo da dependência do navegador aberto, e dar
-garantia real à escada de aprovação.
-
-- **"Concluído" deixou de ser adivinhado pelo texto do status.** Cada opção
-  agora diz, com todas as letras, se encerra o item — a marca "Encerra o item"
-  fica junto da cor, na configuração da coluna. O palpite antigo errava dos dois
-  lados: contava como concluído um registro em "Não documentado" (a palavra
-  "documentado" está dentro de "Não documentado") e não reconhecia estado
-  terminal nenhum fora do seu vocabulário, deixando "Reprovados" e "Descartado"
-  atrasados para sempre.
-- **Quadro que ninguém revisou continua se comportando como antes**, para nenhum
-  número mudar sozinho. Ao abrir a configuração do status, o Atlas mostra o que
-  vinha adivinhando e pede conferência.
-- **O aviso de prazo passou a ser gerado no servidor.** Antes só existia
-  enquanto alguém estivesse com o Atlas aberto e visível na tela — prazo que
-  vencia de madrugada, no fim de semana ou com a aba fechada não avisava
-  ninguém, e a marca de "já avisei" ficava presa naquele aparelho.
-- **Cada quadro escolhe quem recebe aviso de prazo.** Sem ninguém escolhido, o
-  aviso vai para administradores e supervisores — nenhum quadro fica em silêncio
-  por falta de configuração.
-- **A escada de aprovação ganhou trava e histórico.** Cada etapa pode listar
-  quem tem permissão de colocar o item nela, e a trava vale no servidor: não dá
-  para contornar pela tela. Toda mudança de status passa a ficar registrada com
-  quem fez e quando.
-- **Pular etapa continua permitido, mas o Atlas pergunta antes** e marca o salto
-  no histórico.
-- **A tela "Configurar quadro" voltou a gravar.** Nome, descrição, acesso,
-  coluna de prazo e alerta antecipado eram descartados a cada salvamento, com a
-  mensagem "Outro usuário atualizou esses dados" — e não havia outro usuário: a
-  base usada para detectar conflito acompanhava as próprias alterações em
-  memória, então nunca batia com o servidor.
-- **Miniaturas do Google Drive voltaram a aparecer.** A política de segurança
-  liberava `*.googleusercontent.com`, mas o Drive corporativo serve as
-  miniaturas de `usercontent.google.com` — domínio diferente. As imagens eram
-  bloqueadas em silêncio.
-
-Esta versão **tem migrations**: veja "Atualizar uma V2.4.2 existente" abaixo.
-
-Detalhes em [`docs/RELEASE_V2_4_3.md`](docs/RELEASE_V2_4_3.md).
-## Novidades da V2.4.2
-
-Pacote focado em não perder trabalho de quem usa, mais a rede de proteção que
-faltava no processo de publicação:
-
-- excluir definitivamente um registro da lixeira agora pede confirmação — era
-  a única exclusão do Atlas que acontecia no primeiro clique, sem volta;
-- o navegador avisa ao fechar a aba com alteração ainda não sincronizada ou
-  com uma importação em revisão;
-- fechar a revisão da importação por engano não descarta mais o mapeamento
-  das colunas: o Atlas pergunta antes, e "Continuar revisando" devolve os
-  ajustes já feitos;
-- apagar mensagem da conversa pede confirmação na própria linha, sem fechar a
-  conversa nem perder o rascunho digitado;
-- a verificação automática deste repositório voltou a rodar a suíte inteira
-  mais o smoke visual em navegador real (antes rodava só um arquivo de teste);
-- `deploy-cloudflare.ps1` executa toda a bateria de testes antes de publicar e
-  aborta se algo reprovar.
-
-Não há migration nesta versão: o banco não muda. Basta publicar os arquivos e
-recarregar com `Ctrl + F5`.
-
-Detalhes em [`docs/RELEASE_V2_4_2.md`](docs/RELEASE_V2_4_2.md).
-
-## Novidades da V2.4.1
-
-Pacote de segurança e correções sobre a V2.4.0 já publicada:
-
-- conexões de armazenamento do tipo servidor local, além do Google Drive por
-  setor (fase inicial de self-hosting), com bloqueio de endereços link-local
-  (`169.254.0.0/16` e `fe80::/10`, usados pelos serviços de metadados de
-  nuvem); redes internas privadas e `localhost` continuam permitidos;
-- prévia privada de imagens do Drive implementada no conector (a permissão já
-  existia no banco, faltava o lado do conector);
-- allowlist de formato aplicada também no armazenamento dos anexos de
-  conversa, não só no aplicativo — evita subir `.html`/`.svg` como anexo de
-  chat contornando o cliente;
-- limpeza do backup local do navegador ao sair da conta;
-- exclusão de grupo passa a pedir confirmação, mesma proteção que já existia
-  para obra, itens e subitens;
-- quadro sem nenhum grupo ganhou um botão "Criar grupo" na tela vazia;
-- nova tabela interna de rastreio de migrations (`atlas_v2_schema_migrations`),
-  que registra por ambiente quais arquivos de `supabase/` já foram aplicados;
-- correção do redirecionamento de `v2.html`, que dependia de um script inline
-  bloqueado silenciosamente pela política de segurança do navegador;
-- correções de corrida e confirmação em conexões de armazenamento e exclusões.
-
-Detalhes completos em
-[`docs/RELEASE_V2_4_1_OFICIAL.md`](docs/RELEASE_V2_4_1_OFICIAL.md).
-
-## Novidades
-
-- painel configurável com totais, médias, somas e distribuição por status;
-- visualização mensal em calendário;
-- SLA com alertas preventivos, atrasos e notificações;
-- histórico restaurável por registro e campo;
-- permissões por área, módulo, quadro, grupo e coluna;
-- importação com mapeamento, prévia, duplicados e reversão do último lote;
-- busca avançada, filtros por campo/data/anexo e pesquisas salvas;
-- automações com duas condições, duas ações, execução agendada e reação ao
-  recebimento de um item vindo de outro quadro;
-- central de saúde do navegador, Supabase, Realtime e Drives setoriais;
-- modelos operacionais para inspeção de campo, SLA e portfólio;
-- visualizador de imagens com zoom, rotação, tela cheia, arraste, navegação e
-  prévia privada de fotos do Drive sem depender de cookies do Google;
-- modo campo simplificado para celular, câmera e geolocalização;
-- navegação mobile totalmente vertical em Tabela, Obras, Kanban, Calendário e Gantt;
-- cache autenticado validado para nunca substituir os registros do Supabase por dados demonstrativos;
-- PWA com cache do aplicativo e fila local para alterações offline;
-- anexos de Obras organizados em Cidade / Setor / Registro / Campo;
-- exclusão e restauração sincronizadas com a lixeira do Google Drive;
-- migração administrativa dos arquivos existentes sem duplicação;
-- consultas de valores e anexos em lotes paralelos, sem fila sequencial por quadro;
-- selecao e busca sem reconstruir toda a pagina a cada clique ou tecla;
-- troca de areas e quadros com renderizacao segmentada e dados carregados em segundo plano;
-- cache completo adiado para nao bloquear a navegacao;
-- upload com percentual visual, POST preservado e sem preflight incompatível com o Google Apps Script;
-- criacao de elementos em Obras preservada durante o carregamento remoto;
-- novos cadastros dependem somente da liberacao do Admin, sem confirmacao por e-mail;
-- leitor de Excel carregado somente ao iniciar uma importacao.
-
-## Atualizar uma V2.4.3 existente
-
-1. Publique os arquivos deste pacote.
-2. Aplique no banco:
-   - `supabase/ATLAS_V2_4_4_LEITURA_EM_CONJUNTO.sql`
-
-   O arquivo traz, no próprio cabeçalho, a medição de antes e depois e como
-   desfazer. Ele **não muda quem enxerga o quê**: reescreve apenas as duas
-   policies de leitura (`atlas_v2_item_values` e `atlas_v2_attachments`) para
-   resolver a permissão uma vez por consulta.
-3. Se for migrar o armazenamento para o próprio servidor, cadastre a conexão do
-   setor com tipo **Servidor local** e o endpoint do seu conector.
-4. Pressione `Ctrl + F5` e confirme `V2.4.4 Oficial` no rodapé.
-
-Nenhuma reimplantação de conector do Drive: ele não muda.
-
-## Atualizar uma V2.4.2 existente
-
-1. Publique os arquivos deste pacote.
-2. Aplique, no SQL Editor do Supabase, nesta ordem:
-   - `supabase/ATLAS_V2_4_3_CONCLUSAO_EXPLICITA.sql`
-   - `supabase/ATLAS_V2_4_3_SLA_NO_SERVIDOR.sql`
-   - `supabase/ATLAS_V2_4_3_APROVACAO.sql`
-   - `supabase/ATLAS_V2_4_3_CORRIGE_VERSAO_ANEXO.sql`
-3. **Antes de agendar o aviso de prazo**, rode uma vez em modo silencioso:
-   ```sql
-   select * from public.atlas_v2_scan_sla(true);
-   ```
-   Isso registra o atraso que já existe como "já avisado". Sem este passo, a
-   primeira execução agendada notifica todo o passivo de uma vez.
-4. Só então agende. O `pg_cron` lê a expressão no fuso do banco, que no
-   Supabase é **UTC** — o exemplo abaixo é 07:10–19:10 em Brasília (UTC−3).
-   Ajuste o deslocamento se o seu fuso for outro:
-   ```sql
-   select cron.schedule('atlas-v2-sla', '10 10-22 * * *',
-                        'select public.atlas_v2_scan_sla(false);');
-   ```
-5. Pressione `Ctrl + F5` e confirme `V2.4.3 Oficial` no rodapé.
-
-Nenhuma reimplantação de conector: o conector do Drive não muda.
-
-## Atualizar uma V2.4.1 existente
-
-1. Publique os arquivos deste pacote.
-2. Pressione `Ctrl + F5` e confirme `V2.4.2 Oficial` no rodapé.
-
-Nenhum SQL a executar e nenhuma reimplantação de conector: a V2.4.2 só altera
-o aplicativo.
-
-## Atualizar uma V2.4.0 existente
-
-1. Faça backup da publicação e do banco.
-2. Aplique, nesta ordem, os arquivos SQL ainda não executados na sua base:
-
-   `supabase/ATLAS_V2_4_0_ARMAZENAMENTO_TIPO.sql`
-
-   `supabase/ATLAS_V2_4_0_CORRECOES_REVISAO_2.sql` (reaplique mesmo se já
-   executada antes — esta versão do arquivo reconhece o tipo de conexão de
-   armazenamento adicionado no passo anterior)
-
-   `supabase/ATLAS_V2_4_1_MIGRATION_TRACKING.sql`
-
-   `supabase/ATLAS_V2_4_1_SECURE_DRIVE_PREVIEW.sql`
-
-   `supabase/ATLAS_V2_4_1_CHAT_ATTACHMENT_ALLOWLIST.sql`
-
-3. Publique os arquivos deste pacote.
-4. Reimplante o conector (`appscript/GoogleDriveUpload_AppsScript_V2_CONECTOR_SETOR.gs`,
-   versão `2.5.0-versoes-drive`) em cada conta setorial para habilitar a
-   prévia privada de imagens; quem não usar esse recurso pode manter
-   temporariamente o conector anterior.
-5. Pressione `Ctrl + F5` e confirme `V2.4.2 Oficial` no rodapé.
-
-O SQL de atualização preserva os dados existentes.
-
-## Atualizar uma V2.1.0 existente
-
-1. Faça backup da publicação e do Apps Script atual.
-2. Publique os arquivos deste pacote.
-3. Substitua o conector de cada conta setorial pelo arquivo
-   `appscript/GoogleDriveUpload_AppsScript_V2_CONECTOR_SETOR.gs` (versão
-   `2.5.0-versoes-drive`).
-4. Crie uma nova implantação e atualize a URL `/exec`, se ela mudar.
-5. Teste a conexão em **Administração > Sistema**.
-6. Use **Organizar arquivos existentes**.
-7. Pressione `Ctrl + F5` e confirme `V2.4.2 Oficial` no rodapé.
-
-Aplique também, nesta ordem, todos os arquivos `supabase/ATLAS_V2_3_1_*`,
-`supabase/ATLAS_V2_3_3_*` e `supabase/ATLAS_V2_4_*` que ainda não tiverem sido
-executados na sua base — os arquivos `ATLAS_V2_4_0_CORRECOES_REVISAO_2.sql` e
-`ATLAS_V2_4_1_*.sql` já vêm nesta versão atualizada, então uma instalação que
-parte diretamente da V2.1.0 não precisa reaplicar nada depois.
-
-Para retirar a confirmacao por e-mail e manter somente a liberacao administrativa,
-execute uma vez:
-
-`supabase/ATLAS_V2_2_0_APROVACAO_ADMIN.sql`
-
-## Instalação nova
-
-Em um banco vazio, execute primeiro:
-
-`supabase/ATLAS_V2_1_0_SCHEMA_COMPLETO.sql`
-
-Depois execute, nesta ordem:
-
-`supabase/ATLAS_V2_2_0_APROVACAO_ADMIN.sql`
-
-`supabase/ATLAS_V2_1_0_VALIDAR.sql`
-
-Em seguida, aplique todos os demais arquivos `supabase/ATLAS_V2_3_1_*`,
-`supabase/ATLAS_V2_3_3_*` e `supabase/ATLAS_V2_4_*` listados em
-`INSTALACAO_COMPLETA.txt` — ainda não existe, nesta versão, um schema completo
-único que já inclua essas mudanças.
-
-## Google Drive
-
-O conector precisa ser reimplantado em cada conta setorial para habilitar a
-prévia privada de imagens e a versão automática por edição no Drive; quem não
-usar esses dois recursos pode manter temporariamente o conector anterior.
-
-Cada setor continua usando sua própria conta, pasta raiz e conexão cadastrada na
-Administração. O frontend usa somente a chave publicável do Supabase. Nunca
-coloque `service_role` no navegador ou no Apps Script.
-
-## Testes
-
-```powershell
-npm run test:all
-npm run check:js
-npm run test:browser
-```
-
-`npm run test:all` roda toda a suíte de Node (estática, fórmulas, tempo real,
-versões de anexo, conversa por elemento, movimentação entre módulos, tipos de
-armazenamento e as demais suítes de correção). `npm run test:browser` faz um
-smoke visual com um navegador real e não entra em `test:all` por depender de
-um Chrome/Edge instalado.
-
-## Estrutura
+# Atlas V2.5.0 Oficial
+
+## Novidades da V2.5.0
+
+- autenticação, sessões e aprovação administrativa geridas pelo próprio Atlas;
+- API própria entre navegador e PostgreSQL, sem acesso direto do cliente ao banco;
+- perfis Visitante, Analista, Gestor e Root;
+- perfil pessoal com foto privada, cargo, setor e telefone;
+- recuperação de senha e troca de e-mail por códigos de uso único;
+- formulários públicos, inclusive imagens e atualização de registros existentes;
+- anexos privados de conversa e avatar armazenados no servidor;
+- sincronização por consulta incremental ao banco;
+- lista vertical de obras, filtros por coluna e configuração dedicada de quadro.
+- armazenamento central no servidor, sem escolher provedor por quadro;
+- presença de usuários e conversas privadas com anexos protegidos;
+- assistente de ajuda com Groq, consentimento e limites de uso;
+- localização com mapa, identidade visual renovada e abertos recentemente;
+- cliente da API com suporte a RPC single/maybeSingle, sem registros duplicados.
+
+Esta edição é a V2.5.0 Oficial. Alterações futuras devem ser validadas primeiro
+em homologação e promovidas somente após autorização explícita.
+
+## Arquitetura
 
 ```text
-appscript/       Conector seguro do Google Drive
-assets/          Marca, ícones e bibliotecas locais
-config/          Configuração pública do Supabase
-css/             Estilos da aplicação
-docs/            Manual e notas da versão
-js/              Aplicação Atlas
-supabase/        Atualização, schema completo e validação
-tests/           Auditoria estática e smoke visual
-index.html       Entrada da aplicação
-manual.html      Manual interativo
-service-worker.js Cache PWA
+Navegador -> API Atlas -> PostgreSQL
+                    |-> disco local de arquivos privados
+Link público -> serviço de formulários -> PostgreSQL + disco local
+Anexos operacionais -> serviço central de arquivos no servidor
 ```
+
+O navegador recebe somente a URL pública da API. Senhas do banco, segredos de
+sessão, SMTP e chaves de assinatura ficam exclusivamente no servidor.
+
+## Componentes
+
+- `js/`, `css/`, `assets/`: aplicação web estática;
+- `server/atlas-api/`: autenticação, Data API, RPCs e arquivos privados;
+- `server/atlas-files/`: anexos operacionais no servidor próprio;
+- `server-forms/`: formulários públicos e imagens recebidas por link;
+- `server/atlas-api/sql/`: migrações idempotentes do banco;
+- `appscript/`: compatibilidade histórica com anexos antigos do Google Drive;
+- `tests/`: testes de regressão, segurança e regras operacionais.
+
+## Configuração
+
+1. Aplique os SQLs de `server/atlas-api/sql/` na ordem numérica.
+2. Crie um usuário PostgreSQL exclusivo para a API e conceda a ele o papel
+   `atlas_app_user` e acesso às tabelas internas da API.
+3. Configure os serviços por variáveis de ambiente fora do repositório.
+4. Defina `API_URL` e `PUBLIC_FORMS_ORIGIN` em `config/config.js`.
+5. Mantenha `_headers` e `worker-security.js` alinhados com os domínios próprios.
+6. Rode as verificações antes de qualquer publicação.
+
+## Segurança
+
+- nunca publique senhas, tokens, credenciais SMTP ou segredos de assinatura;
+- sessões usam tokens opacos, com apenas o hash persistido;
+- toda consulta operacional executa com RLS e contexto de usuário;
+- tabelas e funções expostas pela API usam listas explícitas;
+- mutações sem filtro são bloqueadas;
+- uploads têm limite, validação de tipo e caminho normalizado;
+- produção exige backup, plano de reversão e autorização específica.
+
+## Desenvolvimento
+
+```powershell
+node --check js\v2.js
+node tests\static-audit.cjs
+node --test server\atlas-api\tests\security.test.cjs
+```
+
+O teste integrado da API requer uma base descartável:
+
+```powershell
+$env:TEST_API_BASE = "http://127.0.0.1:8790"
+$env:ATLAS_DATABASE_URL = "postgresql://usuario:senha@host/banco_teste"
+node server\atlas-api\tests\integration-smoke.cjs
+```
+
+## Publicação
+
+O script `deploy-cloudflare.ps1` publica em `SEU-WORKER-HOMOLOG` por padrão e verifica
+se `API_URL` pertence à homologação. Produção só é aceita com o parâmetro de
+confirmação explícito documentado no próprio script.
+
+## Licença
+
+Consulte [LICENSE](LICENSE).

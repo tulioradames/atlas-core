@@ -1,0 +1,20 @@
+{
+  "name": "@atlas/api",
+  "version": "2.5.0",
+  "private": true,
+  "description": "API propria do Atlas para PostgreSQL, autenticacao e arquivos",
+  "main": "src/server.cjs",
+  "scripts": {
+    "start": "node src/server.cjs",
+    "check": "node --check src/config.cjs && node --check src/security.cjs && node --check src/db.cjs && node --check src/auth.cjs && node --check src/data.cjs && node --check src/server.cjs",
+    "test": "node --test tests/*.test.cjs"
+  },
+  "dependencies": {
+    "bcryptjs": "3.0.3",
+    "nodemailer": "10.1.1",
+    "pg": "8.23.1"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  }
+}

@@ -10,7 +10,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const root = path.resolve(__dirname, '..');
-const source = fs.readFileSync(path.join(root, 'js/v2.js'), 'utf8');
+const source = fs.readFileSync(path.join(root, 'js/v2.js'), 'utf8').replace(/\r\n?/g, '\n');
 
 function extrair(marcadorInicio, marcadorFim, rotulo) {
   const inicio = source.indexOf(marcadorInicio);

@@ -32,22 +32,25 @@ function extrairCsp(texto) {
 }
 
 const cspHeaders = extrairCsp(headers);
-const cspWorker = extrairCsp(workerSecurity);
+const cspWorker = workerSecurity.match(/headers\.set\('Content-Security-Policy', `([^`]+)`\)/)?.[1] || '';
 
 // ---------------------------------------------------------------------------
-// 1. As duas copias da CSP tem de ser identicas.
+// 1. A CSP estatica e o Worker precisam manter as mesmas protecoes basicas.
 //
 // A politica e mantida a mao em dois lugares (_headers, para os assets, e
 // worker-security.js, que reescreve as respostas). Divergir e facil e o
 // sintoma seria absurdo: comportamento diferente conforme a resposta passe ou
 // nao pelo Worker.
 // ---------------------------------------------------------------------------
-assert(
-  cspHeaders === cspWorker,
-  'A CSP de _headers e a de worker-security.js divergiram.\n'
-  + `  _headers:          ${cspHeaders}\n`
-  + `  worker-security.js: ${cspWorker}`,
-);
+assert(cspWorker, 'Nao encontrei a CSP dinamica do Worker.');
+for (const required of ["default-src 'self'", "object-src 'none'", "frame-ancestors 'none'", 'https://drive.google.com', 'https://*.usercontent.google.com']) {
+  assert(cspHeaders.includes(required) && cspWorker.includes(required), `Protecao CSP ausente: ${required}`);
+}
+assert(workerSecurity.includes("url.hostname.startsWith('SEU-WORKER-HOMOLOG.')")
+  && workerSecurity.includes('https://homolog.seu-backend.exemplo.com.br')
+  && workerSecurity.includes('https://seu-backend.exemplo.com.br'), 'Worker nao separa os backends de homologacao e producao.');
+assert(workerSecurity.includes("url.pathname.startsWith('/atlas-api/')")
+  && workerSecurity.includes('new Request(`${backend}${url.pathname}${url.search}`, request)'), 'Worker nao encaminha a API pela mesma origem do aplicativo.');
 
 // ---------------------------------------------------------------------------
 // 2. Interpretar a diretiva e aplicar a URLs reais.
@@ -115,10 +118,10 @@ const connectSrc = fontesDe(cspHeaders, 'connect-src');
 // O backend saiu da nuvem da Supabase e passou a ser o servidor proprio. Esta
 // conferencia acompanha o config.js em vez de citar um host fixo: o que a CSP
 // tem de liberar e o backend CONFIGURADO, seja ele qual for.
-const backend = (read('config/config.js').match(/SUPABASE_URL:\s*"([^"]+)"/) || [])[1];
-assert(backend, 'Nao encontrei SUPABASE_URL em config/config.js.');
+const backend = (read('config/config.js').match(/API_URL:\s*"([^"]+)"/) || [])[1];
+assert(backend, 'Nao encontrei API_URL em config/config.js.');
 assert(
-  hostPermitido(connectSrc, `${backend.replace(/\/+$/, '')}/rest/v1/x`),
+  connectSrc.includes("'self'"),
   `connect-src precisa liberar o backend configurado (${backend}) - sem isso o app nao fala com o proprio servidor.`,
 );
 // E a porta da nuvem fica FECHADA. Nao e detalhe de limpeza: enquanto

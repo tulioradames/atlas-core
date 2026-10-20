@@ -17,10 +17,16 @@ const ATLAS_CACHE = `atlas-v2-shell-${ATLAS_BUILD}`;
 const ATLAS_VERSIONED = [
   `./css/v2.css?v=${ATLAS_BUILD}`,
   `./js/v2.js?v=${ATLAS_BUILD}`,
+  `./js/recent-files.js?v=${ATLAS_BUILD}`,
+  `./js/icon-gallery.js?v=${ATLAS_BUILD}`,
+  `./js/social.js?v=${ATLAS_BUILD}`,
+  `./css/social.css?v=${ATLAS_BUILD}`,
   `./config/config.js?v=${ATLAS_BUILD}`,
   `./css/public-forms-manager.css?v=${ATLAS_BUILD}`,
+  `./css/atlas-design.css?v=${ATLAS_BUILD}`,
   `./js/public-forms-manager.js?v=${ATLAS_BUILD}`,
   `./public-forms/form-core.js?v=${ATLAS_BUILD}`,
+  `./assets/vendor/atlas-client.js?v=${ATLAS_BUILD}`,
 ];
 
 // Arquivos estaveis: nao mudam entre versoes do Atlas.
@@ -29,8 +35,9 @@ const ATLAS_STATIC = [
   './index.html',
   './manifest.webmanifest',
   './assets/vendor/lucide.min.js',
-  './assets/vendor/supabase.min.js',
   './assets/brand/atnx-logo-horizontal.svg',
+  './assets/brand/atlas-logo-green.svg',
+  './assets/brand/atlas-mark-green.svg',
   './assets/icons/favicon.ico',
   './assets/icons/icon-32.png',
   './assets/icons/icon-192.png',
@@ -42,7 +49,7 @@ const ATLAS_SHELL = [...ATLAS_STATIC, ...ATLAS_VERSIONED];
 // Codigo proprio do Atlas: precisa aparecer atualizado ja no primeiro
 // carregamento depois de uma publicacao. Por isso vai por rede primeiro, com o
 // cache apenas como reserva para uso offline.
-const APP_CODE_PATTERN = /\/(?:css\/(?:v2|public-forms-manager)\.css|js\/(?:v2|public-forms-manager)\.js|public-forms\/form-core\.js|config\/config\.js)$/;
+const APP_CODE_PATTERN = /\/(?:css\/(?:v2|atlas-design|social|public-forms-manager)\.css|js\/(?:v2|social|recent-files|icon-gallery|public-forms-manager)\.js|public-forms\/form-core\.js|config\/config\.js)$/;
 
 self.addEventListener('install', (event) => {
   event.waitUntil(

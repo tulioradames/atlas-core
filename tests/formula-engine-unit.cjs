@@ -9,15 +9,68 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const root = path.resolve(__dirname, '..');
-const source = fs.readFileSync(path.join(root, 'js/v2.js'), 'utf8');
+const source = fs.readFileSync(path.join(root, 'js/v2.js'), 'utf8').replace(/\r\n?/g, '\n');
 
 const startMarker = '  function resolveFormulaOperand(';
-const endMarker = '\n\n  function formulaColumnValue(';
 const startIndex = source.indexOf(startMarker);
-const endIndex = source.indexOf(endMarker);
-if (startIndex === -1 || endIndex === -1) {
+const lastFunctionIndex = source.indexOf('  function evaluateFormula(', startIndex);
+if (startIndex === -1 || lastFunctionIndex === -1) {
   throw new Error('Nao foi possivel extrair o motor de formulas de js/v2.js - marcadores de inicio/fim nao encontrados (o codigo foi renomeado/movido?).');
 }
+
+function functionEnd(sourceText, functionStart) {
+  const opening = sourceText.indexOf('{', functionStart);
+  if (opening === -1) return -1;
+  let depth = 0;
+  let mode = 'code';
+  for (let index = opening; index < sourceText.length; index += 1) {
+    const current = sourceText[index];
+    const next = sourceText[index + 1];
+    if (mode === 'line-comment') {
+      if (current === '\n') mode = 'code';
+      continue;
+    }
+    if (mode === 'block-comment') {
+      if (current === '*' && next === '/') {
+        mode = 'code';
+        index += 1;
+      }
+      continue;
+    }
+    if (mode === 'single' || mode === 'double' || mode === 'template') {
+      if (current === '\\') {
+        index += 1;
+        continue;
+      }
+      if ((mode === 'single' && current === "'")
+        || (mode === 'double' && current === '"')
+        || (mode === 'template' && current === '`')) mode = 'code';
+      continue;
+    }
+    if (current === '/' && next === '/') {
+      mode = 'line-comment';
+      index += 1;
+      continue;
+    }
+    if (current === '/' && next === '*') {
+      mode = 'block-comment';
+      index += 1;
+      continue;
+    }
+    if (current === "'") mode = 'single';
+    else if (current === '"') mode = 'double';
+    else if (current === '`') mode = 'template';
+    else if (current === '{') depth += 1;
+    else if (current === '}') {
+      depth -= 1;
+      if (depth === 0) return index + 1;
+    }
+  }
+  return -1;
+}
+
+const endIndex = functionEnd(source, lastFunctionIndex);
+if (endIndex === -1) throw new Error('Nao foi possivel encontrar o fim do motor de formulas de js/v2.js.');
 const funcSource = source.slice(startIndex, endIndex);
 // eslint-disable-next-line no-eval
 eval(funcSource); // expoe evaluateFormula/evaluateFormulaNumeric etc. neste escopo

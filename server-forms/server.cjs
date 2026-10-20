@@ -23,10 +23,10 @@ function imageType(bytes) {
 }
 
 function createFormsServer(options = {}) {
-  const backend = String(options.backend || process.env.ATLAS_FORMS_BACKEND || '').replace(/\/+$/, '');
-  const key = options.key || process.env.ATLAS_FORMS_SERVICE_KEY || '';
+  const databaseUrl = String(options.databaseUrl || process.env.ATLAS_FORMS_DATABASE_URL || '');
   const publicOrigin = String(options.publicOrigin || process.env.ATLAS_FORMS_PUBLIC_ORIGIN || '').replace(/\/+$/, '');
-  const imageBucket = options.imageBucket || process.env.ATLAS_FORMS_IMAGE_BUCKET || 'atlas-form-images';
+  const filesRoot = path.resolve(options.filesRoot || process.env.ATLAS_FORMS_FILES_ROOT || '/dados/atlas');
+  const imageRoot = path.join(filesRoot, 'atlas-form-images');
   const trustProxy = options.trustProxy ?? process.env.ATLAS_FORMS_TRUST_PROXY === '1';
   const root = options.root || path.resolve(__dirname, '..');
   const counters = new Map();
@@ -37,50 +37,46 @@ function createFormsServer(options = {}) {
     'form-core.js': ['public-forms/form-core.js', 'application/javascript; charset=utf-8'],
     'brand.svg': ['assets/brand/atnx-logo-horizontal.svg', 'image/svg+xml'],
   };
+  const Pool = options.rpc ? null : require('pg').Pool;
+  const pool = options.pool || (!options.rpc && new Pool({ connectionString: databaseUrl, max: 8, statement_timeout: 30000, application_name: 'atlas-formularios' }));
   const rpc = options.rpc || (async (name, parameters) => {
-    const response = await fetch(`${backend}/rest/v1/rpc/${name}`, {
-      method: 'POST', signal: AbortSignal.timeout(30000),
-      headers: { apikey: key, Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify(parameters),
-    });
-    const result = await response.json();
-    if (!response.ok) {
-      const publicMessage = String(result.message || '').match(/^FORM:(.+)$/s)?.[1];
+    if (!/^atlas_v2_[a-z0-9_]+$/.test(name)) throw new Error('Operacao invalida.');
+    const entries = Object.entries(parameters || {});
+    const args = entries.map(([entry], index) => `${entry} => $${index + 1}`).join(', ');
+    try {
+      const response = await pool.query(`select * from public.${name}(${args})`, entries.map(([, value]) => value));
+      return response.fields.length === 1 && response.fields[0].name === name
+        ? response.rows[0]?.[name] ?? null
+        : response.rows;
+    } catch (failure) {
+      const publicMessage = String(failure.message || '').match(/^FORM:(.+)$/s)?.[1];
       const error = new Error(publicMessage || 'Nao foi possivel concluir. Tente novamente mais tarde.');
-      error.status = result.code === 'P0002' ? 404 : result.code === 'P0003' ? 429 : publicMessage ? 400 : 503;
+      error.status = failure.code === 'P0002' ? 404 : failure.code === 'P0003' ? 429 : publicMessage ? 400 : 503;
       throw error;
     }
-    return result;
   });
+  function imageLocation(storagePath) {
+    const clean = String(storagePath || '').replace(/\\/g, '/').replace(/^\/+/, '');
+    if (!clean || clean.split('/').some((entry) => !entry || entry === '.' || entry === '..')) throw new Error('Caminho de imagem invalido.');
+    const location = path.resolve(imageRoot, ...clean.split('/'));
+    if (!location.startsWith(`${path.resolve(imageRoot)}${path.sep}`)) throw new Error('Caminho de imagem invalido.');
+    return location;
+  }
   const storage = options.storage || {
     async upload(storagePath, bytes, mimeType) {
-      const encoded = storagePath.split('/').map(encodeURIComponent).join('/');
-      const response = await fetch(`${backend}/storage/v1/object/${encodeURIComponent(imageBucket)}/${encoded}`, {
-        method: 'POST', signal: AbortSignal.timeout(45000),
-        headers: { apikey: key, Authorization: `Bearer ${key}`, 'Content-Type': mimeType, 'x-upsert': 'false' },
-        body: bytes,
-      });
-      if (!response.ok) throw new Error('O armazenamento de imagens nao confirmou o envio.');
+      const location = imageLocation(storagePath);
+      await fs.mkdir(path.dirname(location), { recursive: true });
+      await fs.writeFile(location, bytes, { flag: 'wx' });
     },
     async download(storagePath) {
-      const encoded = storagePath.split('/').map(encodeURIComponent).join('/');
-      const response = await fetch(`${backend}/storage/v1/object/authenticated/${encodeURIComponent(imageBucket)}/${encoded}`, {
-        signal: AbortSignal.timeout(30000), headers: { apikey: key, Authorization: `Bearer ${key}` },
-      });
-      if (!response.ok) { const error = new Error('Imagem nao encontrada.'); error.status = 404; throw error; }
-      return Buffer.from(await response.arrayBuffer());
+      try { return await fs.readFile(imageLocation(storagePath)); }
+      catch (failure) { const error = new Error('Imagem nao encontrada.'); error.status = failure.code === 'ENOENT' ? 404 : 503; throw error; }
     },
     async remove(paths) {
-      if (!paths.length) return;
-      const response = await fetch(`${backend}/storage/v1/object/${encodeURIComponent(imageBucket)}`, {
-        method: 'DELETE', signal: AbortSignal.timeout(30000),
-        headers: { apikey: key, Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prefixes: paths }),
-      });
-      if (!response.ok) throw new Error('O armazenamento nao confirmou a limpeza.');
+      for (const storagePath of paths) await fs.rm(imageLocation(storagePath), { force: true });
     },
   };
-  if (!options.rpc && (!backend || !key || !publicOrigin)) throw new Error('Configure o backend, a origem publica e a chave somente no servidor.');
+  if (!options.rpc && (!databaseUrl || !publicOrigin)) throw new Error('Configure o PostgreSQL e a origem publica somente no servidor.');
 
   function headers(res) {
     res.setHeader('Cache-Control', 'no-store');
@@ -172,7 +168,7 @@ function createFormsServer(options = {}) {
     headers(res);
     try {
       const url = new URL(req.url, 'http://localhost');
-      if (req.method === 'GET' && url.pathname === '/formularios/saude') return json(res, 200, { success: true, service: 'atlas-formularios', version: '2.4.6', images: true });
+      if (req.method === 'GET' && url.pathname === '/formularios/saude') return json(res, 200, { success: true, service: 'atlas-formularios', version: '2.5.0', images: true });
       const imageToken = url.pathname.match(/^\/formularios\/imagens\/([a-f0-9]{64})$/)?.[1];
       if (req.method === 'GET' && imageToken) {
         if (!rate(req, 'image', 240, 60000)) return json(res, 429, { error: 'Muitas tentativas. Aguarde um minuto.' });
@@ -250,11 +246,12 @@ function createFormsServer(options = {}) {
     setTimeout(cleanupImages, 5000).unref();
     setInterval(cleanupImages, 10 * 60 * 1000).unref();
   }
+  server.atlasClose = () => pool?.end?.();
   return server;
 }
 module.exports = { createFormsServer, imageType, MAX_IMAGE_BYTES, MAX_REQUEST_BYTES, MAX_IMAGES };
 if (require.main === module) {
   const server = createFormsServer();
-  server.listen(Number(process.env.ATLAS_FORMS_PORT || 8788), '0.0.0.0', () => console.log('atlas-formularios 2.4.6 pronto'));
-  for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => { server.close(() => process.exit(0)); setTimeout(() => process.exit(1), 10000).unref(); });
+  server.listen(Number(process.env.ATLAS_FORMS_PORT || 8788), '0.0.0.0', () => console.log('atlas-formularios 2.5.0 pronto'));
+  for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => { server.close(() => Promise.resolve(server.atlasClose?.()).finally(() => process.exit(0))); setTimeout(() => process.exit(1), 10000).unref(); });
 }

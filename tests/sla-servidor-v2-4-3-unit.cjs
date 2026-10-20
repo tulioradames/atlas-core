@@ -17,8 +17,8 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const root = path.resolve(__dirname, '..');
-const app = fs.readFileSync(path.join(root, 'js', 'v2.js'), 'utf8');
-const sql = fs.readFileSync(path.join(root, 'supabase', 'ATLAS_V2_4_3_SLA_NO_SERVIDOR.sql'), 'utf8');
+const app = fs.readFileSync(path.join(root, 'js', 'v2.js'), 'utf8').replace(/\r\n?/g, '\n');
+const sql = fs.readFileSync(path.join(root, 'supabase', 'ATLAS_V2_4_3_SLA_NO_SERVIDOR.sql'), 'utf8').replace(/\r\n?/g, '\n');
 const assert = (condition, message) => {
   if (!condition) throw new Error(message);
 };

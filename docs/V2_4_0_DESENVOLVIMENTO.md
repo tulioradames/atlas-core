@@ -189,7 +189,7 @@ O frontend novo manda parâmetros que só existem depois da migração. Inverter
 - smoke visual aprovado em desktop e mobile;
 - sincronizacao atomica e guarda de hierarquia exercitadas no Supabase de
   homologacao dentro de uma transacao revertida ao final;
-- build `2.4.0-audit2` publicado e confirmado no Worker `test-atlas`;
+- build `2.4.0-audit2` publicado e confirmado no Worker `SEU-WORKER-HOMOLOG`;
 - producao e GitHub permaneceram intocados.
 
 ### Verificado ao vivo em homologação
@@ -218,7 +218,7 @@ edição no Drive, detecção de V2, download da V1 e selo de conferência.
   `DELETE` diretos; envio exclusivamente pela RPC;
 - RPCs `atlas_v2_versioned_documents`, `atlas_v2_register_attachment` e
   `atlas_v2_set_attachment_revision` confirmadas em homologação;
-- Worker `test-atlas` publicado com deployment
+- Worker `SEU-WORKER-HOMOLOG` publicado com deployment
   `7a29b95b9b774098bf4b54cbc663c49e`;
 - tela pública aberta no navegador em V2.4.0 Homologação, sem erro de console;
 - teste interno autenticado pendente porque o navegador de automação não possui

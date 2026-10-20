@@ -27,7 +27,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 
 const root = path.resolve(__dirname, '..');
-const app = fs.readFileSync(path.join(root, 'js', 'v2.js'), 'utf8');
+const app = fs.readFileSync(path.join(root, 'js', 'v2.js'), 'utf8').replace(/\r\n?/g, '\n');
 const css = fs.readFileSync(path.join(root, 'css', 'v2.css'), 'utf8');
 const assert = (condition, message) => { if (!condition) throw new Error(message); };
 
@@ -125,9 +125,13 @@ function testMigrationTrackingTable() {
   sqlFiles.forEach((file) => {
     const registrado = (sql.match(new RegExp(`'${file.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&')}', '[a-z]+', '([a-f0-9]{64})'`)) || [])[1];
     if (!registrado) return;
-    const real = require('node:crypto').createHash('sha256').update(fs.readFileSync(path.join(root, 'supabase', file))).digest('hex');
+    const arquivo = fs.readFileSync(path.join(root, 'supabase', file));
+    const real = require('node:crypto').createHash('sha256').update(arquivo).digest('hex');
+    const normalizado = require('node:crypto').createHash('sha256')
+      .update(arquivo.toString('utf8').replace(/\r\n?/g, '\n'))
+      .digest('hex');
     assert(
-      registrado === real,
+      registrado === real || registrado === normalizado,
       `sha256 de ${file} no backfill nao bate com o arquivo (backfill ${registrado.slice(0, 12)}..., arquivo ${real.slice(0, 12)}...). Se a migration foi editada, atualize o hash.`,
     );
   });

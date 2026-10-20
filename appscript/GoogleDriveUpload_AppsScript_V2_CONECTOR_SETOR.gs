@@ -2,34 +2,28 @@
  * Atlas V2.4.1 - Conector seguro de Google Drive por setor.
  *
  * Instale uma copia na conta Google de cada setor. O token de sessao recebido
- * do Atlas e validado no Supabase antes de testar, enviar, organizar, restaurar
+ * do Atlas e validado na API propria antes de testar, enviar, organizar, restaurar
  * ou excluir arquivos.
  *
  * Multi-ambiente: o mesmo conector/URL/pasta do Drive atende tanto o Atlas de
  * producao quanto o Atlas de homologacao. O ambiente correto e identificado a
- * partir do proprio token de sessao (claim "iss"/"ref" do JWT emitido pelo
- * Supabase), sem exigir nenhum parametro extra do chamador. A rota so e usada
- * para decidir ONDE validar a permissao — a validacao em si continua exigindo
- * um token realmente valido para aquele projeto, entao um token de um
- * ambiente nao consegue ser aceito como se fosse do outro.
+ * tentando os enderecos internos configurados abaixo. O token opaco nunca e
+ * interpretado pelo Apps Script; somente a API Atlas sabe valida-lo.
  */
 const ATLAS_CONNECTOR_VERSION = '2.5.0-versoes-drive';
-const ATLAS_SUPABASE_ENVIRONMENTS = {
-  'SEU_PROJECT_REF_PRODUCAO': {
+const ATLAS_API_ENVIRONMENTS = [
+  {
     nome: 'producao',
-    url: 'https://SEU-PROJETO-PRODUCAO.supabase.co',
-    key: 'SUA_CHAVE_PUBLICAVEL_PRODUCAO'
+    url: 'https://SEU-SERVIDOR-PRODUCAO.exemplo.com.br'
   },
-  'SEU_PROJECT_REF_HOMOLOGACAO': {
+  {
     nome: 'homologacao',
-    url: 'https://SEU-PROJETO-HOMOLOGACAO.supabase.co',
-    key: 'SUA_CHAVE_PUBLICAVEL_HOMOLOGACAO'
+    url: 'https://SEU-SERVIDOR-HOMOLOGACAO.exemplo.com.br'
   }
-};
+];
 // Usado apenas pela autorizacao manual (autorizarConectorAtlas), que so faz
 // um ping simples — nao participa da validacao de cada requisicao.
-const ATLAS_SUPABASE_URL = ATLAS_SUPABASE_ENVIRONMENTS['SEU_PROJECT_REF_PRODUCAO'].url;
-const ATLAS_SUPABASE_PUBLISHABLE_KEY = ATLAS_SUPABASE_ENVIRONMENTS['SEU_PROJECT_REF_PRODUCAO'].key;
+const ATLAS_API_URL = ATLAS_API_ENVIRONMENTS[0].url;
 const ATLAS_MAX_FILE_MB = 30;
 const ALLOWED_ROOT_FOLDER_IDS = [
   'COLE_AQUI_O_ID_DA_PASTA_RAIZ_DO_SETOR'
@@ -55,12 +49,9 @@ function autorizarConectorAtlas() {
 
   const folder = DriveApp.getFolderById(rootFolderId);
   const response = UrlFetchApp.fetch(
-    ATLAS_SUPABASE_URL + '/rest/v1/',
+    ATLAS_API_URL + '/atlas-api/v1/health',
     {
       method: 'get',
-      headers: {
-        apikey: ATLAS_SUPABASE_PUBLISHABLE_KEY
-      },
       muteHttpExceptions: true
     }
   );
@@ -69,7 +60,7 @@ function autorizarConectorAtlas() {
     success: true,
     folderId: folder.getId(),
     folderName: folder.getName(),
-    supabaseStatus: response.getResponseCode(),
+    apiStatus: response.getResponseCode(),
     connectorVersion: ATLAS_CONNECTOR_VERSION
   };
   console.log(JSON.stringify(result));
@@ -174,65 +165,36 @@ function atlasPreview_(body, rootFolder) {
   });
 }
 
-function atlasResolveEnvironment_(token) {
-  const parts = String(token || '').split('.');
-  if (parts.length < 2) throw new Error('Token de sessao invalido.');
-  let payload;
-  try {
-    payload = JSON.parse(Utilities.newBlob(Utilities.base64DecodeWebSafe(parts[1])).getDataAsString());
-  } catch (_) {
-    throw new Error('Nao foi possivel interpretar o token de sessao.');
-  }
-  const iss = String(payload.iss || '');
-  const issMatch = iss.match(/^https:\/\/([a-z0-9]+)\.supabase\.co/i);
-  const ref = issMatch ? issMatch[1] : String(payload.ref || '');
-  const environment = ATLAS_SUPABASE_ENVIRONMENTS[ref];
-  if (!environment) throw new Error('Ambiente do Atlas nao reconhecido para este token.');
-  return environment;
-}
-
 function atlasAuthorize_(body, action) {
   const token = String(body.authToken || '').trim();
   if (!token) throw new Error('Sessao do Atlas ausente. Entre novamente no sistema.');
-  const environment = atlasResolveEnvironment_(token);
-
-  const response = UrlFetchApp.fetch(
-    environment.url + '/rest/v1/rpc/atlas_v2_can_storage_action',
-    {
+  let lastCode = 401;
+  for (let index = 0; index < ATLAS_API_ENVIRONMENTS.length; index += 1) {
+    const environment = ATLAS_API_ENVIRONMENTS[index];
+    const response = UrlFetchApp.fetch(environment.url + '/atlas-api/v1/connectors/authorize', {
       method: 'post',
       contentType: 'application/json',
-      headers: {
-        apikey: environment.key,
-        Authorization: 'Bearer ' + token
-      },
+      headers: { Authorization: 'Bearer ' + token },
       payload: JSON.stringify({
-        p_board_id: body.boardId || null,
-        p_connection_id: body.connectionId || null,
-        p_action: action
+        boardId: body.boardId || null,
+        connectionId: body.connectionId || null,
+        action: action
       }),
       muteHttpExceptions: true
-    }
-  );
-
-  const responseCode = response.getResponseCode();
-  if (responseCode < 200 || responseCode >= 300) {
-    // O detalhe fica apenas no log de execucao do Apps Script (visivel somente
-    // ao dono do script). O Web App e ANYONE_ANONYMOUS, entao a resposta ao
-    // chamador nao pode conter o corpo retornado pelo Supabase/PostgREST.
-    const responseDetail = String(response.getContentText() || '')
-      .replace(/\s+/g, ' ')
-      .slice(0, 300);
-    console.error(
-      'atlasAuthorize_ falhou: HTTP ' + responseCode
-      + ' acao=' + action
-      + ' ambiente=' + environment.nome
-      + ' detalhe=' + responseDetail
-    );
+    });
+    const responseCode = response.getResponseCode();
+    lastCode = responseCode;
+    if (responseCode === 401) continue;
+    let result = null;
+    try { result = JSON.parse(response.getContentText()); } catch (_) {}
+    if (responseCode >= 200 && responseCode < 300 && result && result.allowed === true) return;
+    const responseDetail = String(response.getContentText() || '').replace(/\s+/g, ' ').slice(0, 300);
+    console.error('atlasAuthorize_ falhou: HTTP ' + responseCode + ' acao=' + action
+      + ' ambiente=' + environment.nome + ' detalhe=' + responseDetail);
+    if (responseCode === 403) throw new Error('Seu usuario nao possui permissao para esta operacao.');
     throw new Error('Nao foi possivel validar a permissao no Atlas (HTTP ' + responseCode + ').');
   }
-  let allowed = false;
-  try { allowed = JSON.parse(response.getContentText()) === true; } catch (_) { allowed = false; }
-  if (!allowed) throw new Error('Seu usuario nao possui permissao para esta operacao.');
+  throw new Error('Nao foi possivel validar a permissao no Atlas (HTTP ' + lastCode + ').');
 }
 
 function atlasTestConnection_(folder) {

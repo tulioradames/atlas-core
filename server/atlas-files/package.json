@@ -1,0 +1,13 @@
+{
+  "name": "@atlas/files",
+  "version": "2.5.0",
+  "private": true,
+  "main": "server.cjs",
+  "scripts": {
+    "start": "node server.cjs",
+    "check": "node --check server.cjs"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  }
+}

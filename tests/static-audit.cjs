@@ -28,12 +28,14 @@ const formImagesMigration = read('supabase/ATLAS_V2_4_6_FORMULARIOS_IMAGENS.sql'
 const formExistingItemsMigration = read('supabase/ATLAS_V2_4_6_FORMULARIOS_REGISTROS_EXISTENTES.sql');
 const manual = read('manual.html');
 
-assert(app.includes("window.__ATLAS_VERSION__ = '2.4.6 OFICIAL'"), 'Versao interna divergente.');
-assert(config.includes('V2.4.6 Oficial'), 'Config sem a versao do pacote.');
+const releaseLabel = (config.match(/V2_VERSION:\s*"([^"]+)"/) || [])[1];
+assert(/^V2\.5\.0 (Homologação|Oficial)$/.test(releaseLabel || ''), 'Config sem a versao do pacote.');
+const internalLabel = releaseLabel.endsWith('Oficial') ? '2.5.0 OFICIAL' : '2.5.0 HOMOLOGACAO';
+assert(app.includes(`window.__ATLAS_VERSION__ = '${internalLabel}'`), 'Versao interna divergente.');
 assert(index.includes('id="atlas-v2-footer-version"'), 'Rodape sem o elemento de versao (agora preenchido via JS a partir do config.js).');
-assert(index.includes('V2.4.6 Oficial</span>'), 'Rodape HTML ainda exibe uma versao antiga antes do JavaScript carregar.');
-assert(index.includes('name="robots" content="index, follow"'), 'Edicao oficial ainda bloqueia indexacao como homologacao.');
-assert(manifest.includes('2.4.6'), 'Manifest sem a versao do pacote.');
+assert(index.includes(`${releaseLabel}</span>`), 'Rodape HTML ainda exibe uma versao antiga antes do JavaScript carregar.');
+assert(index.includes('name="robots" content="noindex, nofollow, noarchive"'), 'Edicao de homologacao sem bloqueio de indexacao.');
+assert(manifest.includes('2.5.0'), 'Manifest sem a versao do pacote.');
 // O manual ficou uma versao inteira para tras (dizia V2.4.2 com a 2.4.3 no ar)
 // e nada acusou: nenhuma trava conferia isso, e a unica conferencia que existia
 // vivia no browser-smoke, que o script de publicacao nao roda. Agora a defasagem
@@ -170,7 +172,7 @@ assert(
   connector.includes('allowedExtensions'),
   'Conector deve validar anexos por lista de extensoes permitidas.',
 );
-// O corpo do erro do Supabase vai para o log de execucao do Apps Script
+// O corpo do erro da API Atlas vai para o log de execucao do Apps Script
 // (visivel apenas ao dono do script) e nao para a resposta HTTP, porque o Web
 // App e ANYONE_ANONYMOUS.
 assert(
@@ -179,10 +181,10 @@ assert(
 );
 assert(
   !/throw new Error\([^)]*responseDetail/.test(connector),
-  'Conector nao deve devolver o corpo do erro do Supabase ao chamador.',
+  'Conector nao deve devolver o corpo do erro da API ao chamador.',
 );
 assert(
-  connector.includes('ATLAS_SUPABASE_ENVIRONMENTS'),
+  connector.includes('ATLAS_API_ENVIRONMENTS'),
   'Conector sem suporte a producao e homologacao no mesmo endpoint.',
 );
 
@@ -220,7 +222,7 @@ assert(!/<script[^>]+src=["']https?:\/\//i.test(index), 'Dependencia JavaScript 
 assert(!/\bservice_role\b\s*[:=]\s*["'][^"']+/i.test(`${app}\n${config}\n${connector}`), 'Chave service_role encontrada.');
 
 [
-  ['assets/vendor/supabase.min.js', 100000],
+  ['assets/vendor/atlas-client.js', 5000],
   ['assets/vendor/lucide.min.js', 100000],
   ['assets/vendor/xlsx.full.min.js', 500000],
 ].forEach(([file, minimum]) => {
@@ -263,8 +265,12 @@ assert(/async function ensureBoardViewData[\s\S]*?classList\.remove\('atlas-v2-b
 assert(/function applyPermissionUi[\s\S]*?if \(canCreate && canEdit && canDelete && canConfigure && canShare\) return;/.test(app), 'Administradores ainda varrem todos os controles a cada troca de area.');
 assert(app.includes('function renderBoardRoute(context, options = {})'), 'Renderizacao segmentada de rotas ausente.');
 assert(app.includes("rpc('atlas_admin_update_profile_access'"), 'Liberacao administrativa nao usa a RPC segura.');
-assert(!app.includes('options.emailRedirectTo'), 'Cadastro ainda configura confirmacao por e-mail.');
-assert(app.includes('Não é necessário confirmar o e-mail.'), 'Tela de cadastro ainda exige confirmacao por e-mail.');
+assert(!app.includes('options.emailRedirectTo'), 'Cadastro voltou a usar link de confirmacao; a decisao foi codigo digitado.');
+assert(
+  !app.includes("verifyOtp({ email, token, type: 'signup' })") && !app.includes('submitAuthSignupCode'),
+  'O cadastro voltou a exigir confirmacao de e-mail; a liberacao deve ser somente administrativa.',
+);
+assert(app.includes('liberação de um administrador'), 'A tela de cadastro nao informa a liberacao administrativa.');
 assert(/function postJsonWithUploadProgress[\s\S]*?request\.open\('POST', endpoint, true\)/.test(app), 'Upload nao usa o POST XHR compativel com o Apps Script.');
 assert(/function postJsonWithUploadProgress[\s\S]*?searchParams\.set\('atlasRequest'/.test(app), 'Upload nao evita resposta GET armazenada pelo conector.');
 assert(!/request\.upload\.onprogress/.test(app), 'Monitoramento XHR ainda dispara preflight incompatível com o Apps Script.');
@@ -292,9 +298,9 @@ assert(app.includes('const visibleColumns = (boardEntry.columns || []).filter'),
 assert(!app.includes("['status', 'select', 'person', 'date', 'image', 'file', 'location'].includes(entry.type)).slice(0, 6)"), 'Mobile ainda mostra somente seis campos prioritarios.');
 assert(app.includes('isRemoteBootstrapSnapshot'), 'Validacao do cache autenticado ausente.');
 assert(app.includes('authenticatedShellData'), 'Fallback autenticado ainda pode exibir dados demonstrativos.');
-assert(app.includes("if (!remoteData) throw new Error('O Supabase não retornou a estrutura operacional do Atlas.')"), 'Falha de leitura remota ainda pode ser tratada como sucesso.');
+assert(app.includes("if (!remoteData) throw new Error('O banco não retornou a estrutura operacional do Atlas.')"), 'Falha de leitura remota ainda pode ser tratada como sucesso.');
 
-assert(connector.includes('atlas_v2_can_storage_action'), 'Conector sem validacao no Supabase.');
+assert(connector.includes('/atlas-api/v1/connectors/authorize'), 'Conector sem validacao na API Atlas.');
 assert(connector.includes('authToken'), 'Conector sem token de sessao.');
 assert(connector.includes('function autorizarConectorAtlas()'), 'Conector sem assistente de autorizacao.');
 assert(!/ANYONE_WITH_LINK/.test(connector), 'Compartilhamento publico automatico ainda ativo.');
@@ -383,6 +389,13 @@ assert(
     'ATLAS_V2_4_5_FORMULARIOS.sql',
     'ATLAS_V2_4_6_FORMULARIOS_IMAGENS.sql',
     'ATLAS_V2_4_6_FORMULARIOS_REGISTROS_EXISTENTES.sql',
+    'ATLAS_V2_5_0_CADASTRO_CONFIRMADO.sql',
+    'ATLAS_V2_5_0_FOTO_GUARD_SEM_DONO.sql',
+    'ATLAS_V2_5_0_FOTO_PERFIL.sql',
+    'ATLAS_V2_5_0_PAPEIS.sql',
+    'ATLAS_V2_5_0_PERFIL.sql',
+    'ATLAS_V2_5_0_TROCA_EMAIL.sql',
+    'ATLAS_V2_5_0_VISAO_SEM_PODER.sql',
     // Nao e migracao: e o retrato do esquema em producao, e a unica fonte
     // confiavel sobre o estado do banco. Ver supabase/README.md.
     'BASELINE_PRODUCAO.sql',
@@ -403,4 +416,36 @@ localReferences.forEach((entry) => {
   assert(fs.existsSync(path.join(root, entry)), `Referencia local ausente: ${entry}`);
 });
 
-console.log('Atlas V2.4.0: auditoria estatica aprovada.');
+// ---------------------------------------------------------------------------
+// Todo data-lucide escrito a mao tem de existir no pacote de icones
+// ---------------------------------------------------------------------------
+// Um nome inexistente nao quebra nada: o lucide simplesmente nao desenha, e
+// sobra um buraco do tamanho do icone. Foi assim que `funnel-x` entrou na
+// V2.5.0 e passou pelo teste, pelo navegador e por uma captura de tela antes de
+// alguem reparar. O pacote e a fonte da verdade - nao a memoria de quem escreve.
+const lucideBundle = read('assets/vendor/lucide.min.js');
+const nomesDoPacote = new Set();
+for (const achado of lucideBundle.matchAll(/([A-Z][A-Za-z0-9]*):[A-Za-z$_][A-Za-z0-9$_]{0,3}[,}]/g)) {
+  nomesDoPacote.add(achado[1]);
+}
+assert(nomesDoPacote.size > 1500, `So extrai ${nomesDoPacote.size} nomes do pacote lucide; a leitura do pacote quebrou.`);
+
+const paraPascal = (nome) => nome.split('-').map((parte) => parte[0].toUpperCase() + parte.slice(1)).join('');
+const iconesUsados = new Set();
+['js/v2.js', 'index.html', 'manual.html', 'v2.html'].forEach((arquivo) => {
+  let fonteDoArquivo;
+  try {
+    fonteDoArquivo = read(arquivo);
+  } catch {
+    return;
+  }
+  for (const achado of fonteDoArquivo.matchAll(/data-lucide="([a-z0-9-]+)"/g)) iconesUsados.add(achado[1]);
+});
+assert(iconesUsados.size > 50, 'Quase nenhum data-lucide literal encontrado; a varredura quebrou.');
+const iconesInexistentes = [...iconesUsados].filter((nome) => !nomesDoPacote.has(paraPascal(nome)));
+assert(
+  iconesInexistentes.length === 0,
+  `Icone que nao existe no pacote lucide (desenha um buraco, sem erro): ${iconesInexistentes.join(', ')}`,
+);
+
+console.log('Atlas V2.5.0 Homologacao: auditoria estatica aprovada.');

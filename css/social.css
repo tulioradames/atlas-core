@@ -1,0 +1,58 @@
+#atlas-social-toggle{position:relative;display:inline-flex}
+.atlas-social-badge{position:absolute;right:0;top:0;min-width:15px;height:15px;padding:0 3px;border-radius:8px;background:var(--v2-atlas);color:var(--v2-surface);font-size:10px;line-height:15px}
+#atlas-social{position:fixed;z-index:150;right:16px;top:64px;bottom:42px;width:min(780px,calc(100vw - 32px));display:flex;flex-direction:column;background:var(--v2-surface);color:var(--v2-text);border:1px solid var(--v2-line);border-radius:8px;box-shadow:var(--v2-shadow);font:13px 'Segoe UI',Arial,sans-serif;overflow:hidden}
+#atlas-social[hidden]{display:none}
+#atlas-social button,#atlas-social input,#atlas-social textarea,#atlas-social select{font:inherit;color:inherit}
+#atlas-social button{cursor:pointer}
+#atlas-social button:disabled{opacity:.5;cursor:wait}
+#atlas-social svg{width:18px;height:18px;flex:none;stroke-width:1.7}
+#atlas-social button:focus-visible,#atlas-social input:focus-visible,#atlas-social textarea:focus-visible,#atlas-social select:focus-visible{outline:2px solid var(--v2-atlas);outline-offset:1px}
+.atlas-social-head{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--v2-line)}
+.atlas-social-head button,.atlas-social-peer>button{display:grid;place-items:center;width:30px;height:30px;border:0;background:transparent;border-radius:4px}
+.atlas-social-body{display:grid;grid-template-columns:240px minmax(0,1fr);flex:1;min-height:0}
+.atlas-social-directory{border-right:1px solid var(--v2-line);display:flex;flex-direction:column;min-height:0}
+.atlas-social-settings{padding:12px;border-bottom:1px solid var(--v2-line);display:grid;gap:10px}
+.atlas-social-settings>label:first-child{display:flex;align-items:center;justify-content:space-between;font-size:11px;color:var(--v2-muted)}
+.atlas-social-settings select{max-width:110px;border:1px solid var(--v2-line);border-radius:4px;background:var(--v2-surface);padding:5px}
+.atlas-social-search{display:flex;align-items:center;gap:7px;padding:7px;background:var(--v2-bg);border:1px solid var(--v2-line);border-radius:5px}
+.atlas-social-search input{width:100%;min-width:0;border:0;background:transparent;outline:0}
+.atlas-social-online{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--v2-muted)}
+.atlas-social-online input{accent-color:var(--v2-atlas)}
+.atlas-social-people{overflow:auto;flex:1}
+.atlas-social-people>button{width:100%;display:flex;align-items:center;gap:10px;border:0;border-bottom:1px solid var(--v2-line);padding:12px;background:transparent;text-align:left;min-height:66px}
+.atlas-social-people>button:hover,.atlas-social-people>button.is-active{background:var(--v2-surface-alt)}
+.atlas-social-avatar{position:relative;display:grid;place-items:center;flex:none;width:32px;height:32px;border-radius:50%;background:var(--v2-surface-alt);color:var(--v2-atlas);font-weight:600;font-size:11px}
+.atlas-social-dot{position:absolute;bottom:-1px;right:-1px;width:9px;height:9px;border:2px solid var(--v2-surface);border-radius:50%;background:var(--v2-muted)}
+.atlas-social-dot.is-online{background:var(--v2-green)}
+.atlas-social-dot.is-away{background:var(--v2-amber)}
+.atlas-social-people>button>span:nth-child(2){min-width:0;flex:1}
+.atlas-social-people strong,.atlas-social-people small{display:block;overflow-wrap:anywhere}
+.atlas-social-people strong{font-size:12px;font-weight:600}
+.atlas-social-people small{font-size:11px;margin-top:4px;color:var(--v2-muted)}
+.atlas-social-people b{font-size:10px;color:var(--v2-atlas)}
+.atlas-social-chat{display:flex;flex-direction:column;min-width:0;min-height:0}
+.atlas-social-peer{display:flex;align-items:center;gap:8px;padding:12px 16px;min-height:54px;border-bottom:1px solid var(--v2-line);flex-wrap:wrap}
+.atlas-social-peer>button{display:none}
+.atlas-social-peer small{font-size:10px;color:var(--v2-muted)}
+.atlas-social-transcript{flex:1;overflow:auto;padding:16px;background:var(--v2-bg);min-height:0;display:flex;flex-direction:column;gap:10px}
+.atlas-social-empty{padding:18px 12px;font-size:12px;color:var(--v2-muted);line-height:1.5}
+.atlas-social-message{align-self:flex-start;max-width:88%;border:1px solid var(--v2-line);border-radius:6px;padding:10px 12px;background:var(--v2-surface);flex:none}
+.atlas-social-message.is-own{align-self:flex-end;background:color-mix(in srgb,var(--v2-atlas) 9%,var(--v2-surface));border-color:color-mix(in srgb,var(--v2-atlas) 25%,var(--v2-line))}
+.atlas-social-message p{white-space:pre-wrap;overflow-wrap:anywhere;margin:0;font-size:13px;line-height:1.5}
+.atlas-social-message time{display:block;font-size:9px;color:var(--v2-muted);margin-top:6px;text-align:right}
+.atlas-social-file{display:flex;align-items:center;gap:8px;padding:8px 0;border:0;background:transparent;text-align:left;max-width:100%}
+.atlas-social-file span{min-width:0;overflow-wrap:anywhere;font-size:12px}
+.atlas-social-file small{display:block;font-size:10px;color:var(--v2-muted);margin-top:3px}
+.atlas-social-older{align-self:center;font-size:11px!important;border:0;background:transparent;color:var(--v2-atlas)!important;padding:8px}
+.atlas-social-error{padding:0 12px;color:var(--v2-red);font-size:11px;overflow-wrap:anywhere}
+.atlas-social-error:empty{display:none}
+.atlas-social-compose{padding:12px;border-top:1px solid var(--v2-line)}
+.atlas-social-compose textarea{display:block;width:100%;min-height:54px;max-height:140px;resize:vertical;border:1px solid var(--v2-line-strong);border-radius:5px;background:var(--v2-surface);padding:8px}
+.atlas-social-compose footer{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:8px}
+.atlas-social-compose footer button,.atlas-social-attach{display:grid;place-items:center;width:32px;height:32px;background:transparent;border:0;border-radius:4px;cursor:pointer}
+.atlas-social-compose footer button{background:#087f75;color:white!important}
+.atlas-social-attach input{position:absolute;width:1px;height:1px;opacity:0}
+.atlas-social-pending>span{display:flex;align-items:center;gap:4px;font-size:11px;padding:4px 0;overflow-wrap:anywhere}
+.atlas-social-pending button{border:0;background:transparent;display:grid;place-items:center;margin-left:auto}
+.atlas-social-progress{font-size:11px;color:var(--v2-muted)}
+@media(max-width:640px){#atlas-social{inset:0;width:100%;border-radius:0}.atlas-social-body{grid-template-columns:minmax(0,1fr)}.atlas-social-chat{display:none}#atlas-social.has-peer .atlas-social-directory{display:none}#atlas-social.has-peer .atlas-social-chat{display:flex}.atlas-social-peer>button{display:grid}.atlas-social-compose textarea{font-size:16px!important}}

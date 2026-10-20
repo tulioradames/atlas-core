@@ -96,9 +96,11 @@ assert.ok(/<mark>@Ana<\/mark>/.test(propria) || /<mark>@Ana Paula<\/mark>/.test(
 
 const alheia = chatMessageMarkup({ id: 'm2', autorId: 'u-ana', mensagem: 'oi', anexos: [], createdAt: '2026-01-01' });
 assert.ok(!/data-action="chat-delete"/.test(alheia), 'membro nao pode apagar mensagem dos outros');
-runtime.authProfile.role = 'admin';
+// V2.5.0: quem modera a conversa passou a ser o Root. 'admin' nao existe
+// mais como papel - virou o nome de uma CAPACIDADE.
+runtime.authProfile.role = 'root';
 assert.ok(/data-action="chat-delete"/.test(chatMessageMarkup({ id: 'm2', autorId: 'u-ana', mensagem: 'oi', anexos: [], createdAt: '2026-01-01' })),
-  'admin modera a conversa');
+  'Root modera a conversa');
 runtime.authProfile.role = 'membro';
 
 // XSS: o texto da mensagem nunca pode virar HTML.

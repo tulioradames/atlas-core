@@ -1,0 +1,46 @@
+<!--
+  Atlas - recuperacao de senha.
+
+  Mesma escolha do cadastro: codigo digitado, nao link. Alem de nao depender
+  de configuracao de servidor, o codigo funciona quando a pessoa pede a
+  recuperacao no computador e abre o e-mail no celular.
+
+  Campos: {{ .Email }} = endereco da conta, {{ .Token }} = codigo.
+-->
+<!-- MODELO-ATLAS-RECUPERA-SENHA -->
+<!doctype html>
+<html lang="pt-BR">
+<body style="margin:0;padding:24px;background:#f4f5f7;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#1f2937;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;margin:0 auto;background:#ffffff;border-radius:12px;border:1px solid #e5e7eb;">
+    <tr>
+      <td style="padding:28px 28px 8px;">
+        <p style="margin:0 0 4px;font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:#6b7280;">Atlas</p>
+        <h1 style="margin:0;font-size:20px;line-height:1.3;color:#111827;">Redefinição de senha do Atlas</h1>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding:12px 28px 0;font-size:15px;line-height:1.6;">
+        <p style="margin:0 0 20px;">Foi pedida a redefinição da senha da conta <strong>{{ .Email }}</strong> no Atlas.</p>
+
+        <p style="margin:0 0 8px;">Este é o seu código:</p>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding:0 28px;">
+        <div style="margin:0 0 20px;padding:16px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:10px;text-align:center;">
+          <span style="font-size:30px;font-weight:700;letter-spacing:.22em;color:#111827;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;">{{ .Token }}</span>
+        </div>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding:0 28px 28px;font-size:15px;line-height:1.6;">
+        <p style="margin:0 0 16px;">Informe este código na tela do Atlas e escolha a nova senha. O código vale por tempo limitado.</p>
+        <p style="margin:0;padding:12px 14px;background:#fff7ed;border-left:3px solid #f59e0b;border-radius:6px;font-size:14px;line-height:1.55;color:#7c2d12;"><strong>Se não foi você que pediu</strong>, ignore esta mensagem e avise a equipe. Sua senha atual continua valendo e ninguém consegue trocá-la sem este código.</p>
+      </td>
+    </tr>
+  </table>
+  <p style="max-width:520px;margin:16px auto 0;font-size:12px;line-height:1.5;color:#9ca3af;text-align:center;">
+    Mensagem automática do Atlas. Não responda a este e-mail.
+  </p>
+</body>
+</html>

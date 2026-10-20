@@ -1,0 +1,23 @@
+#atlas-help{position:fixed;z-index:180;right:16px;top:64px;bottom:42px;width:min(420px,calc(100vw - 32px));display:flex;flex-direction:column;background:var(--v2-surface);color:var(--v2-text);border:1px solid var(--v2-line);border-radius:8px;box-shadow:var(--v2-shadow);font:14px 'Segoe UI',Arial,sans-serif}
+#atlas-help[hidden]{display:none}
+#atlas-help header{display:flex;justify-content:space-between;align-items:center;padding:14px 16px;border-bottom:1px solid var(--v2-line)}
+#atlas-help button{width:36px;height:36px;flex:none;border:1px solid var(--v2-line);border-radius:4px;background:var(--v2-surface);color:var(--v2-text);font-size:23px;cursor:pointer}
+#atlas-help button:disabled{opacity:.5}
+.atlas-help-messages{flex:1;min-height:0;overflow:auto;padding:16px;overflow-wrap:anywhere}
+.atlas-help-messages p{margin:0;white-space:pre-wrap;line-height:1.6}
+.atlas-help-answer{padding:12px 0;border-bottom:1px solid var(--v2-line)}
+.atlas-help-user{margin:14px 0 0;padding:10px 12px;background:color-mix(in srgb,var(--v2-atlas) 12%,var(--v2-surface));border-radius:6px}
+#atlas-help a{color:var(--v2-atlas);display:inline-block;margin-top:8px;font-size:12px}
+#atlas-help form{padding:12px 16px;border-top:1px solid var(--v2-line)}
+#atlas-help label{display:block;font-size:12px;margin-bottom:6px}
+#atlas-help form>div{display:flex;gap:8px}
+#atlas-help input:not([type=checkbox]){min-width:0;width:100%;background:var(--v2-surface);color:var(--v2-text);border:1px solid var(--v2-line);border-radius:4px;padding:8px;font:inherit}
+#atlas-help .atlas-help-consent{display:flex;align-items:flex-start;gap:8px;line-height:1.5;margin-bottom:14px;color:var(--v2-muted)}
+#atlas-help [type=checkbox]{width:16px;height:16px;flex:none;accent-color:var(--v2-atlas)}
+#atlas-help svg{width:18px;height:18px;vertical-align:middle}
+#atlas-help [role=status]{display:block;margin-top:8px;line-height:1.5}
+#atlas-help footer{display:flex;justify-content:space-between;align-items:center}
+#atlas-help .atlas-help-clear{border:0}
+#atlas-help :focus-visible{outline:2px solid var(--v2-atlas);outline-offset:2px}
+#atlas-help footer{padding:0 16px 14px}
+@media(max-width:600px){#atlas-help{inset:0;width:100%;border-radius:0;padding-bottom:env(safe-area-inset-bottom)}}

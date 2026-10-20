@@ -1,0 +1,16 @@
+{
+  "name": "@atlas/formularios",
+  "version": "2.5.0",
+  "private": true,
+  "main": "server.cjs",
+  "scripts": {
+    "start": "node server.cjs",
+    "check": "node --check server.cjs"
+  },
+  "dependencies": {
+    "pg": "8.23.1"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  }
+}

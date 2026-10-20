@@ -1,0 +1,72 @@
+<!--
+  Atlas - modelo da mensagem de troca de e-mail.
+
+  POR QUE EXISTE
+  O modelo de fabrica do GoTrue tem tres defeitos para o nosso caso:
+    1. esta em ingles, num sistema usado inteiramente em portugues;
+    2. so traz link - e voce pediu codigo;
+    3. as duas mensagens sao IDENTICAS. Quem esta no endereco ANTIGO recebe
+       "confirme NOVO@x como seu novo e-mail", sem nenhum aviso de que esta
+       prestes a perder o acesso. Era exatamente a pessoa que precisava
+       entender o que esta acontecendo.
+
+  UM MODELO SO, PARA OS DOIS LADOS
+  Medido na homologacao: o GoTrue entrega os mesmos campos nas duas mensagens
+  ({{ .Email }} sempre o antigo, {{ .NewEmail }} sempre o novo) e muda apenas o
+  {{ .Token }}. Nao ha campo que diga qual dos dois lados esta lendo - entao o
+  texto abaixo e escrito para servir aos dois sem ambiguidade: ele nomeia os
+  dois enderecos e diz que o codigo vale para a caixa onde foi recebido.
+
+  CAMPOS DISPONIVEIS (conferidos com envio real)
+    {{ .Email }}            endereco atual
+    {{ .NewEmail }}         endereco novo
+    {{ .Token }}            codigo de 6 digitos, DIFERENTE em cada mensagem
+    {{ .ConfirmationURL }}  link equivalente (nao usamos: depende de redirect)
+-->
+<!-- MODELO-ATLAS-TROCA-EMAIL -->
+<!doctype html>
+<html lang="pt-BR">
+<body style="margin:0;padding:24px;background:#f4f5f7;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#1f2937;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;margin:0 auto;background:#ffffff;border-radius:12px;border:1px solid #e5e7eb;">
+    <tr>
+      <td style="padding:28px 28px 8px;">
+        <p style="margin:0 0 4px;font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:#6b7280;">Atlas</p>
+        <h1 style="margin:0;font-size:20px;line-height:1.3;color:#111827;">Confirmação de troca de e-mail</h1>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding:12px 28px 0;font-size:15px;line-height:1.6;">
+        <p style="margin:0 0 16px;">Foi pedida a troca do e-mail de acesso ao Atlas:</p>
+        <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 20px;font-size:15px;">
+          <tr><td style="padding:2px 12px 2px 0;color:#6b7280;">Endereço atual</td><td style="padding:2px 0;"><strong>{{ .Email }}</strong></td></tr>
+          <tr><td style="padding:2px 12px 2px 0;color:#6b7280;">Endereço novo</td><td style="padding:2px 0;"><strong>{{ .NewEmail }}</strong></td></tr>
+        </table>
+
+        <p style="margin:0 0 8px;">Este é o código desta caixa de entrada:</p>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding:0 28px;">
+        <div style="margin:0 0 20px;padding:16px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:10px;text-align:center;">
+          <span style="font-size:30px;font-weight:700;letter-spacing:.22em;color:#111827;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;">{{ .Token }}</span>
+        </div>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding:0 28px 28px;font-size:15px;line-height:1.6;">
+        <p style="margin:0 0 16px;">
+          A troca só acontece quando <strong>os dois endereços</strong> confirmarem.
+          Cada um recebeu um código diferente, e os dois precisam ser digitados no Atlas.
+        </p>
+        <p style="margin:0;padding:12px 14px;background:#fff7ed;border-left:3px solid #f59e0b;border-radius:6px;font-size:14px;line-height:1.55;color:#7c2d12;">
+          <strong>Se não foi você que pediu</strong>, não informe este código a ninguém e avise a equipe
+          imediatamente. Sem o código deste endereço a troca não se completa — e o acesso continua como está.
+        </p>
+      </td>
+    </tr>
+  </table>
+  <p style="max-width:520px;margin:16px auto 0;font-size:12px;line-height:1.5;color:#9ca3af;text-align:center;">
+    Mensagem automática do Atlas. Não responda a este e-mail.
+  </p>
+</body>
+</html>

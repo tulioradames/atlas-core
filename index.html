@@ -10,13 +10,16 @@
   <meta name="description" content="Atlas — plataforma configurável de gestão operacional, campo e arquivos.">
   <meta name="author" content="Túlio Radamés">
   <meta name="application-name" content="Atlas">
-  <meta name="robots" content="index, follow">
+  <meta name="robots" content="noindex, nofollow, noarchive">
   <link rel="manifest" href="manifest.webmanifest">
-  <link rel="icon" href="assets/icons/favicon.ico">
+  <link rel="icon" type="image/svg+xml" href="assets/brand/atlas-mark-green.svg">
   <!-- A querystring ?v= abaixo deve ser sempre igual a ATLAS_BUILD em js/v2.js.
        tests/static-audit.cjs falha se divergirem. -->
-  <link rel="stylesheet" href="css/v2.css?v=2.4.6-formularios-registros-oficial-r1">
-  <link rel="stylesheet" href="css/public-forms-manager.css?v=2.4.6-formularios-registros-oficial-r1">
+  <link rel="stylesheet" href="css/v2.css?v=2.5.0-oficial-r1">
+  <link rel="stylesheet" href="css/public-forms-manager.css?v=2.5.0-oficial-r1">
+  <link rel="stylesheet" href="css/atlas-design.css?v=2.5.0-oficial-r1">
+  <link rel="stylesheet" href="css/social.css?v=2.5.0-oficial-r1">
+  <link rel="stylesheet" href="css/help-assistant.css?v=2.5.0-oficial-r1">
 </head>
 <body class="atlas-v2-auth-locked">
   <div class="atlas-v2-auth-root" id="atlas-v2-auth-root" aria-live="polite"></div>
@@ -25,7 +28,7 @@
     <aside class="atlas-v2-sidebar" id="atlas-v2-sidebar" aria-label="Navegação principal">
       <header class="atlas-v2-sidebar-head">
         <a class="atlas-v2-brand" href="index.html" aria-label="Atlas" data-action="go-home" title="Ir para o início">
-          <img src="assets/brand/atnx-logo-horizontal.svg" alt="Atlas">
+          <img src="assets/brand/atlas-logo-green.svg" alt="Atlas">
         </a>
         <button class="atlas-v2-icon-button atlas-v2-sidebar-toggle" type="button" data-action="toggle-sidebar" title="Recolher menu" aria-label="Recolher menu">
           <i data-lucide="panel-left-close"></i>
@@ -38,6 +41,7 @@
           <span><small>Núcleo operacional</small><strong id="atlas-v2-workspace-name">Operações</strong></span>
           <i data-lucide="chevrons-up-down"></i>
         </button>
+        <button id="atlas-v2-workspace-edit" class="atlas-v2-icon-button" type="button" data-action="edit-workspace" title="Editar núcleo" aria-label="Editar núcleo" hidden><i data-lucide="more-horizontal"></i></button>
       </div>
 
       <div class="atlas-v2-sidebar-tools">
@@ -45,7 +49,7 @@
           <i data-lucide="search"></i>
           <input id="atlas-v2-nav-search" type="search" placeholder="Localizar rota" autocomplete="off">
         </label>
-        <button class="atlas-v2-icon-button atlas-v2-primary-icon" type="button" data-action="open-create" title="Criar" aria-label="Criar área, módulo ou quadro">
+        <button class="atlas-v2-icon-button atlas-v2-primary-icon" type="button" data-action="open-create" title="Criar" aria-label="Criar núcleo, módulo ou quadro">
           <i data-lucide="plus"></i>
         </button>
       </div>
@@ -75,9 +79,9 @@
           <button class="atlas-v2-command" type="button" data-action="global-search" title="Busca global">
             <i data-lucide="search"></i><span>Buscar</span><kbd>Ctrl K</kbd>
           </button>
-          <a class="atlas-v2-icon-button" href="manual.html" target="_blank" rel="noopener" title="Manual de utilização" aria-label="Abrir manual de utilização">
+          <button id="atlas-help-toggle" class="atlas-v2-icon-button" type="button" title="Ajuda do Atlas" aria-label="Abrir assistente de ajuda" aria-expanded="false" aria-controls="atlas-help">
             <i data-lucide="circle-help"></i>
-          </a>
+          </button>
           <button class="atlas-v2-icon-button" type="button" data-action="notifications" title="Notificações" aria-label="Notificações">
             <i data-lucide="bell"></i><span class="atlas-v2-notification-dot"></span>
           </button>
@@ -121,7 +125,10 @@
             <i data-lucide="search"></i>
             <input id="atlas-v2-board-search" type="search" placeholder="Filtrar itens" autocomplete="off">
           </label>
-          <button class="atlas-v2-icon-button atlas-v2-toolbar-icon-command" type="button" data-action="filter" title="Filtrar registros" aria-label="Filtrar registros"><i data-lucide="list-filter"></i></button>
+          <!-- Aparece SO quando ha filtro de coluna ligado em algum setor. Um
+               botao de limpar sempre visivel nao diria nada; este, aceso, e o
+               aviso de que a tabela esta escondendo linhas. -->
+          <button class="atlas-v2-icon-button atlas-v2-toolbar-icon-command atlas-v2-filter-indicator" type="button" id="atlas-v2-clear-filters" data-action="clear-board-filters" title="Limpar os filtros das colunas" aria-label="Limpar os filtros das colunas" hidden><i data-lucide="filter-x"></i><b></b></button>
           <button class="atlas-v2-icon-button atlas-v2-toolbar-icon-command" type="button" data-action="sort" title="Ordenar registros" aria-label="Ordenar registros"><i data-lucide="arrow-up-down"></i></button>
         </div>
         <div class="atlas-v2-toolbar-secondary">
@@ -144,7 +151,7 @@
       <footer class="atlas-v2-footer">
         <span>Atlas · Smart Field Management · Criado por Túlio Radamés</span>
         <span id="atlas-v2-save-state"><i data-lucide="circle-check-big"></i>Alterações salvas</span>
-          <span id="atlas-v2-footer-version">V2.4.6 Oficial</span>
+          <span id="atlas-v2-footer-version">V2.5.0 Oficial</span>
       </footer>
     </main>
   </div>
@@ -157,11 +164,15 @@
   </div>
   <div class="atlas-v2-toast-region" id="atlas-v2-toast-region" aria-live="polite"></div>
 
-  <script src="config/config.js?v=2.4.6-formularios-registros-oficial-r1"></script>
-  <script src="assets/vendor/supabase.min.js"></script>
+  <script src="config/config.js?v=2.5.0-oficial-r1"></script>
+  <script src="assets/vendor/atlas-client.js?v=2.5.0-oficial-r1"></script>
   <script src="assets/vendor/lucide.min.js"></script>
-  <script src="public-forms/form-core.js?v=2.4.6-formularios-registros-oficial-r1"></script>
-  <script src="js/public-forms-manager.js?v=2.4.6-formularios-registros-oficial-r1"></script>
-  <script src="js/v2.js?v=2.4.6-formularios-registros-oficial-r1"></script>
+  <script src="public-forms/form-core.js?v=2.5.0-oficial-r1"></script>
+  <script src="js/public-forms-manager.js?v=2.5.0-oficial-r1"></script>
+  <script src="js/recent-files.js?v=2.5.0-oficial-r1"></script>
+  <script src="js/icon-gallery.js?v=2.5.0-oficial-r1"></script>
+  <script src="js/social.js?v=2.5.0-oficial-r1"></script>
+  <script src="js/help-assistant.js?v=2.5.0-oficial-r1"></script>
+  <script src="js/v2.js?v=2.5.0-oficial-r1"></script>
 </body>
 </html>

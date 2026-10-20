@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="240" height="64" viewBox="0 0 240 64" fill="none">
+  <title>Atlas</title>
+  <g fill="#087f75">
+    <path d="M8 49 27 10h10l19 39H44L32 23 20 49H8Z"/>
+    <path d="m25 40 7-7 7 7-7 7-7-7Z"/>
+    <text x="72" y="47" font-family="Segoe UI,Arial,sans-serif" font-size="43" font-weight="650">Atlas</text>
+  </g>
+</svg>

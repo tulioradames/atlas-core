@@ -39,7 +39,8 @@ connectors.forEach((source, index) => {
 
 const vendor = JSON.parse(read('assets/vendor/VENDOR_MANIFEST.json'));
 vendor.dependencies.forEach((entry) => {
-  const actual = crypto.createHash('sha256').update(fs.readFileSync(path.join(root, 'assets', 'vendor', entry.file))).digest('hex');
+  const normalized = fs.readFileSync(path.join(root, 'assets', 'vendor', entry.file), 'utf8').replace(/\r\n?/g, '\n');
+  const actual = crypto.createHash('sha256').update(normalized).digest('hex');
   assert(actual === entry.sha256, `Dependencia vendorizada alterada sem atualizar o manifesto: ${entry.file}.`);
 });
 

@@ -1,5 +1,5 @@
 {
-  "generatedFor": "Atlas V2.4.1 Oficial",
+  "generatedFor": "Atlas V2.5.0 Homologação",
   "dependencies": [
     {
       "file": "lucide.min.js",
@@ -8,14 +8,6 @@
       "license": "ISC",
       "source": "https://www.npmjs.com/package/lucide",
       "sha256": "3411692820cb8d47543f69496aa25fd603a358f4498046f41c508a5a3342210e"
-    },
-    {
-      "file": "supabase.min.js",
-      "package": "@supabase/supabase-js",
-      "version": "2.110.8",
-      "license": "MIT",
-      "source": "https://www.npmjs.com/package/@supabase/supabase-js",
-      "sha256": "555ef3dd00ec94b41bfbda2f4323dc84bbc0206ed0d0c500afade08c065c37f7"
     },
     {
       "file": "xlsx.full.min.js",

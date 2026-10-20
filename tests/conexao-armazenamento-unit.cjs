@@ -196,7 +196,10 @@ const comUso = () => [{ id: 'ws1', name: 'A', storageConnectionId: 'c1', modules
 // ---------------------------------------------------------------------------
 console.log('\nBotoes na lista de conexoes');
 
-const LINHA = extrair('      return `<div class="atlas-v2-admin-storage-row">', '`;\n    }).join(\'\')', 'linha da lista de conexoes');
+const linhaInicio = app.indexOf('      return `<div class="atlas-v2-admin-storage-row">');
+const linhaFim = app.indexOf("    }).join('');", linhaInicio);
+if (linhaInicio < 0 || linhaFim < 0) throw new Error('Nao consegui delimitar linha da lista de conexoes.');
+const LINHA = app.slice(linhaInicio, linhaFim);
 conferir('tem botao de desativar/reativar', /data-action="admin-toggle-storage"/.test(LINHA));
 conferir('o botao de excluir so aparece com uso zero', /usage === 0 \? `<button[^`]*data-action="admin-delete-storage"/.test(LINHA), LINHA.slice(-400));
 

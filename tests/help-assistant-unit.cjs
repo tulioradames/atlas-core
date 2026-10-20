@@ -1,0 +1,11 @@
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const source = fs.readFileSync(path.join(__dirname, '../js/help-assistant.js'), 'utf8');
+assert(source.includes('/atlas-api/v1/help/ask'));
+assert(source.includes('consent: true'));
+assert(source.includes('p.textContent = text'));
+assert(!source.includes('api.groq.com'));
+assert(!source.includes('localStorage'));
+assert(source.includes('turn !== generation'));
+console.log('Ajuda: proxy proprio, consentimento, texto seguro e isolamento de sessao OK');
