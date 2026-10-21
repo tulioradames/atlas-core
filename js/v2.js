@@ -15,7 +15,7 @@ window.__ATLAS_VERSION__ = '2.5.0 OFICIAL';
   // pre-cache. tests/static-audit.cjs falha se index.html e ATLAS_BUILD
   // divergirem, que era a causa dos casos de "publiquei mas continua igual".
   // ---------------------------------------------------------------------------
-  const ATLAS_BUILD = '2.5.0-oficial-r1';
+  const ATLAS_BUILD = '2.5.0-colunas-setor-oficial-r1';
   window.__ATLAS_BUILD__ = ATLAS_BUILD;
 
   // Changelog exibido na tela de Inicio. Toda alteracao funcional ou correcao
@@ -137,6 +137,7 @@ window.__ATLAS_VERSION__ = '2.5.0 OFICIAL';
         'Correção: o redirecionamento de v2.html (URL antiga do Atlas) deixou de ser bloqueado silenciosamente pela política de segurança do navegador.',
         'Manual: limite de importação corrigido para refletir o valor real (15 MB) e rótulo de versão do manual alinhado ao rodapé do aplicativo.',
         'Prévia privada de imagens: fotos do Drive passam a abrir dentro do Atlas sem depender de cookies do Google no navegador; a leitura continua restrita às pessoas com acesso ao quadro.',
+        'Colunas por setor: ao criar ou editar uma coluna, escolha um setor específico ou todos os setores do quadro.',
         'Campos de arquivo podem controlar versões: ao editar a coluna, marque "Controlar versões" e cada envio novo passa a virar V1, V2, V3 em vez de outro anexo solto.',
         'O visualizador ganhou um painel de Histórico, com as versões do documento, download de qualquer uma delas e o botão "Adicionar versão".',
         'Cada versão aceita um rótulo livre (ex.: "revisão do cliente"), e a célula do quadro passa a mostrar a versão vigente.',
@@ -968,6 +969,7 @@ window.__ATLAS_VERSION__ = '2.5.0 OFICIAL';
       format: type === 'formula' ? String(extra.format || 'number') : '',
       decimals: type === 'formula' ? Number(extra.decimals ?? 2) : 0,
       versioned: type === 'file' && extra.versioned === true,
+      settings: deepClone(extra.settings || {}),
     };
   }
 
@@ -8133,16 +8135,17 @@ window.__ATLAS_VERSION__ = '2.5.0 OFICIAL';
   function renderWorkSectorTable(boardEntry, workItem, sectorName, sectorIndex) {
     const escopo = sectorFilterScope(boardEntry, workItem, sectorName);
     const items = sectorizedWorkItems(boardEntry, workItem, sectorName);
+    const columns = columnsForGroup(boardEntry, workItem.groupId);
     const totalSemFiltro = sectorizedWorkItems(boardEntry, workItem, sectorName, false).length;
     const permitidos = allowedRowIds(boardEntry, escopo, items);
     const subitemCount = items.reduce((total, entry) => total
       + visibleSubitems(boardEntry, entry).filter((filho) => !permitidos || permitidos.has(filho.id)).length, 0);
-    const columnsWidth = boardEntry.columns.reduce((total, entry) => total + Number(entry.width || 160), 0);
+    const columnsWidth = columns.reduce((total, entry) => total + Number(entry.width || 160), 0);
     const tableWidth = 40 + 500 + columnsWidth + 42;
     const tableHead = `<thead><tr>
       <th class="atlas-v2-select-cell"></th>
       <th class="atlas-v2-item-cell"><div class="atlas-v2-column-head"><i data-lucide="scan-line"></i><span>Registro</span></div></th>
-      ${boardEntry.columns.map((columnEntry) => renderColumnHead(boardEntry, columnEntry, escopo, false)).join('')}
+      ${columns.map((columnEntry) => renderColumnHead(boardEntry, columnEntry, escopo, false)).join('')}
       <th class="atlas-v2-end-spacer" aria-hidden="true"></th>
     </tr></thead>`;
     const sectorColors = boardEntry.settings?.works_sector_colors || {};
@@ -8161,7 +8164,7 @@ window.__ATLAS_VERSION__ = '2.5.0 OFICIAL';
         <table class="atlas-v2-table" style="width:${tableWidth}px;min-width:${tableWidth}px">${tableHead}</table>
       </div><div class="atlas-v2-table-wrap">
         <table class="atlas-v2-table" style="width:${tableWidth}px;min-width:${tableWidth}px">
-          <tbody>${items.map((itemEntry) => renderItemRows(boardEntry, itemEntry, null, 0, permitidos)).join('') || `<tr><td colspan="${boardEntry.columns.length + 3}" class="atlas-v2-empty-cell">${scopeFilterCount(escopo) ? `Nenhum registro em ${escapeHtml(sectorName)} passa no filtro desta tabela.` : `Nenhum registro em ${escapeHtml(sectorName)}.`}</td></tr>`}</tbody>
+          <tbody>${items.map((itemEntry) => renderItemRows(boardEntry, itemEntry, null, 0, permitidos)).join('') || `<tr><td colspan="${columns.length + 3}" class="atlas-v2-empty-cell">${scopeFilterCount(escopo) ? `Nenhum registro em ${escapeHtml(sectorName)} passa no filtro desta tabela.` : `Nenhum registro em ${escapeHtml(sectorName)}.`}</td></tr>`}</tbody>
         </table>
         <button class="atlas-v2-add-row" type="button" data-action="add-work-element" data-item-id="${attr(workItem.id)}" data-work-sector="${attr(sectorName)}"><i data-lucide="plus"></i><span>Adicionar elemento em ${escapeHtml(sectorName)}</span></button>
       </div>` : ''}
@@ -8379,7 +8382,17 @@ window.__ATLAS_VERSION__ = '2.5.0 OFICIAL';
     return `<div class="atlas-v2-empty-view"><div><i data-lucide="table-properties"></i><strong>O quadro ainda não possui grupos</strong><span>Crie o primeiro grupo para começar a adicionar itens.</span><button class="atlas-v2-button atlas-v2-button-primary" type="button" data-action="add-group"><i data-lucide="plus"></i>Criar grupo</button></div></div>`;
   }
 
+  function columnAppliesToGroup(columnEntry, groupId) {
+    const scope = columnEntry.settings?.group_id;
+    return !scope || scope === groupId;
+  }
+
+  function columnsForGroup(boardEntry, groupId) {
+    return boardEntry.columns.filter((entry) => columnAppliesToGroup(entry, groupId));
+  }
+
   function renderGroupTable(boardEntry, groupEntry, groupIndex = 0) {
+    const columns = columnsForGroup(boardEntry, groupEntry.id);
     const escopo = groupFilterScope(boardEntry, groupEntry);
     const items = filteredItems(boardEntry, groupEntry);
     const totalSemFiltro = filteredItems(boardEntry, groupEntry, false).length;
@@ -8390,12 +8403,12 @@ window.__ATLAS_VERSION__ = '2.5.0 OFICIAL';
     const allSelected = selectableIds.length > 0 && selectableIds.every((itemId) => runtime.selectedItems.has(itemId));
     const subitemCount = items.reduce((total, entry) => total
       + visibleSubitems(boardEntry, entry).filter((filho) => !permitidos || permitidos.has(filho.id)).length, 0);
-    const columnsWidth = boardEntry.columns.reduce((total, entry) => total + Number(entry.width || 160), 0);
+    const columnsWidth = columns.reduce((total, entry) => total + Number(entry.width || 160), 0);
     const tableWidth = 40 + 500 + columnsWidth + 42;
     const tableHead = `<thead><tr>
       <th class="atlas-v2-select-cell"><input class="atlas-v2-checkbox" type="checkbox" data-action="select-group" data-group-id="${attr(groupEntry.id)}" ${allSelected ? 'checked' : ''} aria-label="Selecionar grupo"></th>
       <th class="atlas-v2-item-cell"><div class="atlas-v2-column-head"><i data-lucide="scan-line"></i><span>Registro</span></div></th>
-      ${boardEntry.columns.map((columnEntry) => renderColumnHead(boardEntry, columnEntry, escopo, true)).join('')}
+      ${columns.map((columnEntry) => renderColumnHead(boardEntry, columnEntry, escopo, true)).join('')}
       <th class="atlas-v2-end-spacer" aria-hidden="true"></th>
     </tr></thead>`;
     return `<section class="atlas-v2-group" style="--group-color:${attr(groupEntry.color || '#0f6cbd')}" data-group-id="${attr(groupEntry.id)}" draggable="true">
@@ -8412,7 +8425,7 @@ window.__ATLAS_VERSION__ = '2.5.0 OFICIAL';
         <table class="atlas-v2-table" style="width:${tableWidth}px;min-width:${tableWidth}px">
           <tbody>
             ${items.map((itemEntry) => renderItemRows(boardEntry, itemEntry, null, 0, permitidos)).join('')}
-            ${!items.length && scopeFilterCount(escopo) ? `<tr><td colspan="${boardEntry.columns.length + 3}" class="atlas-v2-empty-cell">Nenhum registro deste grupo passa no filtro das colunas.</td></tr>` : ''}
+            ${!items.length && scopeFilterCount(escopo) ? `<tr><td colspan="${columns.length + 3}" class="atlas-v2-empty-cell">Nenhum registro deste grupo passa no filtro das colunas.</td></tr>` : ''}
           </tbody>
         </table>
         <button class="atlas-v2-add-row" type="button" data-action="add-item-to-group" data-group-id="${attr(groupEntry.id)}"><i data-lucide="plus"></i><span>Adicionar item</span></button>
@@ -8440,7 +8453,7 @@ window.__ATLAS_VERSION__ = '2.5.0 OFICIAL';
       <td class="atlas-v2-item-cell"><div class="atlas-v2-item-name-wrap ${isSubitem ? 'is-subitem' : ''}">
         ${isSubitem ? '<span class="atlas-v2-subitem-branch" aria-hidden="true"></span>' : `<button class="atlas-v2-subitem-toggle" type="button" data-action="toggle-subitems" data-item-id="${attr(itemEntry.id)}" title="${expanded ? 'Recolher subitens' : 'Expandir subitens'}"><i data-lucide="${expanded ? 'chevron-down' : 'chevron-right'}"></i><span>${visibleSubitems(boardEntry, itemEntry).length}</span></button>`}
         <span class="atlas-v2-drag-handle"><i data-lucide="grip-vertical"></i></span><input class="atlas-v2-cell-input" data-item-name="${attr(itemEntry.id)}" value="${attr(itemEntry.name)}" aria-label="Nome do ${isSubitem ? 'subitem' : 'item'}"><span class="atlas-v2-row-actions atlas-v2-row-actions-inline">${isSubitem ? '' : `<button type="button" data-action="add-subitem" data-item-id="${attr(itemEntry.id)}" title="Adicionar subitem"><i data-lucide="list-tree"></i></button>`}<button type="button" data-action="item-chat" data-item-id="${attr(itemEntry.id)}" title="Conversa" aria-label="Conversa"><i data-lucide="message-square"></i>${itemChatCount(itemEntry.id) ? `<b>${itemChatCount(itemEntry.id)}</b>` : ''}</button><button type="button" data-action="item-history" data-item-id="${attr(itemEntry.id)}" title="Histórico"><i data-lucide="history"></i></button><button type="button" data-action="item-move-board" data-item-id="${attr(itemEntry.id)}" title="Mover para outro módulo" aria-label="Mover para outro módulo"><i data-lucide="arrow-right-left"></i></button><button type="button" data-action="duplicate-item" data-item-id="${attr(itemEntry.id)}" title="Duplicar"><i data-lucide="copy"></i></button><button class="is-danger" type="button" data-action="delete-item" data-item-id="${attr(itemEntry.id)}" title="Excluir"><i data-lucide="trash-2"></i></button></span>${sla ? `<span class="atlas-v2-sla-chip is-${sla.level}" title="SLA por ${attr(sla.dateColumn.name)}">${escapeHtml(sla.label)}</span>` : ''}</div></td>
-      ${boardEntry.columns.map((columnEntry) => `<td style="width:${Number(columnEntry.width || 160)}px;min-width:${Number(columnEntry.width || 160)}px">${renderCell(columnEntry, itemEntry)}</td>`).join('')}
+      ${columnsForGroup(boardEntry, parentItem?.groupId || itemEntry.groupId).map((columnEntry) => `<td style="width:${Number(columnEntry.width || 160)}px;min-width:${Number(columnEntry.width || 160)}px">${renderCell(columnEntry, itemEntry)}</td>`).join('')}
       <td class="atlas-v2-end-spacer" aria-hidden="true"></td>
     </tr>`;
   }
@@ -8941,6 +8954,7 @@ window.__ATLAS_VERSION__ = '2.5.0 OFICIAL';
   }
 
   function renderCell(columnEntry, itemEntry) {
+    if (!columnAppliesToGroup(columnEntry, itemEntry.groupId)) return '';
     const value = itemEntry.values?.[columnEntry.id] ?? '';
     const common = `data-item-value="${attr(itemEntry.id)}" data-column-id="${attr(columnEntry.id)}"`;
     if (columnEntry.type === 'formula') {
@@ -11148,7 +11162,7 @@ window.__ATLAS_VERSION__ = '2.5.0 OFICIAL';
     const visibleColumns = (boardEntry.columns || []).filter((entry) => entry?.id);
     return `<section class="atlas-v2-field-mode"><header><span><i data-lucide="${attr(options.icon || 'smartphone')}"></i></span><div><small>${escapeHtml(options.kicker || 'MODO DE CAMPO')}</small><strong>${rows.length} registro(s)</strong></div></header><div class="atlas-v2-field-list">${rows.map(({ item: itemEntry, group }) => {
       const sla = boardSlaState(boardEntry, itemEntry);
-      return `<article class="atlas-v2-field-card" data-item-id="${attr(itemEntry.id)}"><header><span style="--field-color:${attr(group.color || '#20d6f2')}"></span><div><small>${escapeHtml(group.name)}</small><strong>${escapeHtml(itemEntry.name)}</strong></div>${sla ? `<b class="is-${sla.level}">${escapeHtml(sla.label)}</b>` : ''}<button class="atlas-v2-icon-button atlas-v2-field-chat" type="button" data-action="item-chat" data-item-id="${attr(itemEntry.id)}" title="Conversa" aria-label="Conversa"><i data-lucide="message-square"></i>${itemChatCount(itemEntry.id) ? `<b>${itemChatCount(itemEntry.id)}</b>` : ''}</button></header><div class="atlas-v2-field-card-fields">${visibleColumns.map((columnEntry) => `<label class="is-${attr(columnEntry.type)}"><span>${escapeHtml(columnEntry.name)}</span>${renderCell(columnEntry, itemEntry)}</label>`).join('')}</div></article>`;
+      return `<article class="atlas-v2-field-card" data-item-id="${attr(itemEntry.id)}"><header><span style="--field-color:${attr(group.color || '#20d6f2')}"></span><div><small>${escapeHtml(group.name)}</small><strong>${escapeHtml(itemEntry.name)}</strong></div>${sla ? `<b class="is-${sla.level}">${escapeHtml(sla.label)}</b>` : ''}<button class="atlas-v2-icon-button atlas-v2-field-chat" type="button" data-action="item-chat" data-item-id="${attr(itemEntry.id)}" title="Conversa" aria-label="Conversa"><i data-lucide="message-square"></i>${itemChatCount(itemEntry.id) ? `<b>${itemChatCount(itemEntry.id)}</b>` : ''}</button></header><div class="atlas-v2-field-card-fields">${visibleColumns.filter((entry) => columnAppliesToGroup(entry, group.id)).map((columnEntry) => `<label class="is-${attr(columnEntry.type)}"><span>${escapeHtml(columnEntry.name)}</span>${renderCell(columnEntry, itemEntry)}</label>`).join('')}</div></article>`;
     }).join('') || '<div class="atlas-v2-empty-view"><div><i data-lucide="search-x"></i><strong>Nenhum registro encontrado</strong></div></div>'}</div><nav class="atlas-v2-field-actions"><button type="button" data-action="add-item"><i data-lucide="plus"></i><span>Novo</span></button><button type="button" data-action="import"><i data-lucide="file-up"></i><span>Importar</span></button><button type="button" data-action="filter"><i data-lucide="search"></i><span>Buscar</span></button><button type="button" data-action="notifications"><i data-lucide="bell"></i><span>Avisos</span></button></nav></section>`;
   }
 
@@ -11653,7 +11667,7 @@ window.__ATLAS_VERSION__ = '2.5.0 OFICIAL';
     const operation = String(data.get('operation') || 'set');
     const rawValue = operation === 'clear' ? '' : data.get('value');
     const columnEntry = context.board.columns.find((entry) => entry.id === fieldId);
-    const selected = flatBoardItems(context.board).filter((entry) => runtime.selectedItems.has(entry.item.id));
+    const selected = flatBoardItems(context.board).filter((entry) => runtime.selectedItems.has(entry.item.id) && (!columnEntry || columnAppliesToGroup(columnEntry, entry.group.id)));
     if (!selected.length) return;
     if (fieldId !== '__name__' && !columnEntry) return toast('O campo selecionado não está mais disponível.', true);
 
@@ -12052,10 +12066,12 @@ window.__ATLAS_VERSION__ = '2.5.0 OFICIAL';
     const usedTargets = new Set();
     sourceContext.board.columns.forEach((sourceColumn) => {
       let targetColumn = targetContext.board.columns.find((candidate) => !usedTargets.has(candidate.id)
+        && columnAppliesToGroup(candidate, targetGroup.id)
         && candidate.type === sourceColumn.type
         && normalizedStatusLabel(candidate.name) === normalizedStatusLabel(sourceColumn.name));
       if (!targetColumn && createMissingColumns && hasPermission('configure', targetContext)) {
         targetColumn = { ...deepClone(sourceColumn), id: id('column'), order: targetContext.board.columns.length, required: false };
+        if (targetColumn.settings?.group_id) targetColumn.settings.group_id = targetGroup.id;
         targetContext.board.columns.push(targetColumn);
       }
       if (targetColumn) {
@@ -12443,6 +12459,7 @@ window.__ATLAS_VERSION__ = '2.5.0 OFICIAL';
           groupIds.set(entry.id, nextId);
           return group(nextId, entry.name, entry.color || '#0f6cbd', []);
         });
+        columns.forEach((entry) => { if (entry.settings?.group_id) entry.settings.group_id = groupIds.get(entry.settings.group_id) || entry.settings.group_id; });
         const created = board({ id: boardId, name, description, access, icon: saved.icon || 'layout-template', views: deepClone(saved.views || ['table']), settings: deepClone(saved.settings || {}), columns, groups, storageConnectionId });
         created.settings.slaDateColumnId = columnIds.get(created.settings.slaDateColumnId) || created.settings.slaDateColumnId || '';
         created.settings.dashboardWidgets = (created.settings.dashboardWidgets || []).map((entry) => ({ ...entry, id: id('widget'), columnId: columnIds.get(entry.columnId) || entry.columnId || '' }));
@@ -12581,6 +12598,8 @@ window.__ATLAS_VERSION__ = '2.5.0 OFICIAL';
   function openColumnModal(columnId = '') {
     const context = findBoard();
     const existing = context?.board.columns.find((entry) => entry.id === columnId);
+    if (!context) return;
+    const scopeOptions = context.board.groups.map((entry) => `<option value="${attr(entry.id)}" ${existing?.settings?.group_id === entry.id ? 'selected' : ''}>${escapeHtml(entry.name)}</option>`).join('');
     const formulaHelp = context?.board.columns
       .filter((entry) => entry.id !== columnId && ['number', 'percentage', 'currency'].includes(entry.type))
       .map((entry) => `{${entry.name}}`)
@@ -12588,7 +12607,7 @@ window.__ATLAS_VERSION__ = '2.5.0 OFICIAL';
     openModal({
       title: existing ? 'Editar coluna' : 'Nova coluna',
       subtitle: 'Escolha como o dado será preenchido e exibido.',
-      body: `<form id="atlas-v2-column-form" class="atlas-v2-form-grid"><input type="hidden" name="columnId" value="${attr(columnId)}"><label class="atlas-v2-field is-wide"><span>Nome</span><input name="name" maxlength="70" required autofocus value="${attr(existing?.name || '')}" placeholder="Ex.: Responsável"></label><label class="atlas-v2-field"><span>Tipo</span><select name="type">${Object.entries(COLUMN_TYPES).map(([key, value]) => `<option value="${key}" ${existing?.type === key ? 'selected' : ''}>${escapeHtml(value.label)}</option>`).join('')}</select></label><label class="atlas-v2-field"><span>Largura</span><input name="width" type="number" min="90" max="420" step="10" value="${Number(existing?.width || 160)}"></label><label class="atlas-v2-field is-wide" data-column-options><span>Opções separadas por vírgula</span><input name="options" value="${attr((existing?.options || []).map((entry) => typeof entry === 'string' ? entry : entry.label).join(', '))}" placeholder="Ex.: Pendente, Em andamento, Concluído"></label><label class="atlas-v2-field is-wide" data-column-formula><span>Fórmula</span><input name="formula" value="${attr(existing?.formula || '')}" placeholder="Ex.: SOMA_COLUNA({Total lançado})"><small>Utilize os nomes das colunas entre chaves. Disponíveis: ${escapeHtml(formulaHelp || 'crie primeiro uma coluna numérica')}. Também aceita <strong>SE(condição;então;senão)</strong> (comparadores &gt; &lt; &gt;= &lt;= = &lt;&gt;), agregações dos subitens com <strong>SOMA</strong>, <strong>MEDIA</strong>, <strong>MINIMO</strong>, <strong>MAXIMO</strong>, <strong>CONT</strong> e da coluna inteira com <strong>SOMA_COLUNA</strong>, <strong>MEDIA_COLUNA</strong>, <strong>MINIMO_COLUNA</strong>, <strong>MAXIMO_COLUNA</strong>, <strong>CONT_COLUNA</strong>.</small></label><label class="atlas-v2-field" data-column-formula><span>Formato do resultado</span><select name="format"><option value="number" ${existing?.format === 'number' || !existing?.format ? 'selected' : ''}>Número</option><option value="percentage" ${existing?.format === 'percentage' ? 'selected' : ''}>Porcentagem</option><option value="currency" ${existing?.format === 'currency' ? 'selected' : ''}>Moeda</option></select></label><label class="atlas-v2-field" data-column-formula><span>Casas decimais</span><input name="decimals" type="number" min="0" max="6" value="${Number(existing?.decimals ?? 2)}"></label><label class="atlas-v2-field is-wide atlas-v2-field-check" data-column-versioned><input name="versioned" type="checkbox" ${existing?.versioned ? 'checked' : ''}><span>Controlar versões</span><small>Ao enviar um arquivo novo por cima de um existente, o anterior vira histórico (V1, V2, V3...) em vez de virar outro anexo. Indicado para documentos que são revisados, como planilhas e projetos.</small></label></form>`,
+      body: `<form id="atlas-v2-column-form" class="atlas-v2-form-grid"><input type="hidden" name="columnId" value="${attr(columnId)}"><label class="atlas-v2-field is-wide"><span>Setor da coluna</span><select name="groupId"><option value="">Todos os setores</option>${scopeOptions}</select></label><label class="atlas-v2-field is-wide"><span>Nome</span><input name="name" maxlength="70" required autofocus value="${attr(existing?.name || '')}" placeholder="Ex.: Responsável"></label><label class="atlas-v2-field"><span>Tipo</span><select name="type">${Object.entries(COLUMN_TYPES).map(([key, value]) => `<option value="${key}" ${existing?.type === key ? 'selected' : ''}>${escapeHtml(value.label)}</option>`).join('')}</select></label><label class="atlas-v2-field"><span>Largura</span><input name="width" type="number" min="90" max="420" step="10" value="${Number(existing?.width || 160)}"></label><label class="atlas-v2-field is-wide" data-column-options><span>Opções separadas por vírgula</span><input name="options" value="${attr((existing?.options || []).map((entry) => typeof entry === 'string' ? entry : entry.label).join(', '))}" placeholder="Ex.: Pendente, Em andamento, Concluído"></label><label class="atlas-v2-field is-wide" data-column-formula><span>Fórmula</span><input name="formula" value="${attr(existing?.formula || '')}" placeholder="Ex.: SOMA_COLUNA({Total lançado})"><small>Utilize os nomes das colunas entre chaves. Disponíveis: ${escapeHtml(formulaHelp || 'crie primeiro uma coluna numérica')}. Também aceita <strong>SE(condição;então;senão)</strong> (comparadores &gt; &lt; &gt;= &lt;= = &lt;&gt;), agregações dos subitens com <strong>SOMA</strong>, <strong>MEDIA</strong>, <strong>MINIMO</strong>, <strong>MAXIMO</strong>, <strong>CONT</strong> e da coluna inteira com <strong>SOMA_COLUNA</strong>, <strong>MEDIA_COLUNA</strong>, <strong>MINIMO_COLUNA</strong>, <strong>MAXIMO_COLUNA</strong>, <strong>CONT_COLUNA</strong>.</small></label><label class="atlas-v2-field" data-column-formula><span>Formato do resultado</span><select name="format"><option value="number" ${existing?.format === 'number' || !existing?.format ? 'selected' : ''}>Número</option><option value="percentage" ${existing?.format === 'percentage' ? 'selected' : ''}>Porcentagem</option><option value="currency" ${existing?.format === 'currency' ? 'selected' : ''}>Moeda</option></select></label><label class="atlas-v2-field" data-column-formula><span>Casas decimais</span><input name="decimals" type="number" min="0" max="6" value="${Number(existing?.decimals ?? 2)}"></label><label class="atlas-v2-field is-wide atlas-v2-field-check" data-column-versioned><input name="versioned" type="checkbox" ${existing?.versioned ? 'checked' : ''}><span>Controlar versões</span><small>Ao enviar um arquivo novo por cima de um existente, o anterior vira histórico (V1, V2, V3...) em vez de virar outro anexo. Indicado para documentos que são revisados, como planilhas e projetos.</small></label></form>`,
       actions: `<button class="atlas-v2-button atlas-v2-button-quiet" type="button" data-action="close-overlay">Cancelar</button><button class="atlas-v2-button atlas-v2-button-primary" type="submit" form="atlas-v2-column-form">Salvar</button>`,
     });
     requestAnimationFrame(updateColumnEditorVisibility);
@@ -12608,6 +12627,8 @@ window.__ATLAS_VERSION__ = '2.5.0 OFICIAL';
     if (!context) return;
     const data = new FormData(form);
     const columnId = String(data.get('columnId') || '');
+    const groupId = String(data.get('groupId') || '');
+    if (groupId && !context.board.groups.some((entry) => entry.id === groupId)) return toast('O setor selecionado não está mais disponível.', true);
     const type = String(data.get('type') || 'text');
     const labels = String(data.get('options') || '').split(',').map((entry) => entry.trim()).filter(Boolean);
     const colors = ['#0f6cbd', '#7554a3', '#d68a1f', '#168a5b', '#c33d4b'];
@@ -12622,6 +12643,7 @@ window.__ATLAS_VERSION__ = '2.5.0 OFICIAL';
       format: type === 'formula' ? String(data.get('format') || 'number') : '',
       decimals: type === 'formula' ? Math.min(6, Math.max(0, Number(data.get('decimals') || 0))) : 0,
       versioned: type === 'file' && data.get('versioned') === 'on',
+      settings: { ...(context.board.columns.find((entry) => entry.id === columnId)?.settings || {}), group_id: groupId || null },
     };
     if (columnId) {
       const existing = context.board.columns.find((entry) => entry.id === columnId);
@@ -12629,7 +12651,7 @@ window.__ATLAS_VERSION__ = '2.5.0 OFICIAL';
     } else {
       const newColumn = column(id('col'), payload.name, payload.type, payload);
       context.board.columns.push(newColumn);
-      context.board.groups.forEach((groupEntry) => groupEntry.items.forEach((itemEntry) => { itemEntry.values[newColumn.id] = type === 'checkbox' ? false : ''; }));
+      context.board.groups.filter((entry) => columnAppliesToGroup(newColumn, entry.id)).forEach((groupEntry) => groupEntry.items.forEach((itemEntry) => { itemEntry.values[newColumn.id] = type === 'checkbox' ? false : ''; }));
     }
     closeOverlay();
     saveData(columnId ? 'Coluna atualizada' : 'Coluna criada');
@@ -12856,6 +12878,12 @@ window.__ATLAS_VERSION__ = '2.5.0 OFICIAL';
     const copy = deepClone(source);
     copy.id = id('group');
     copy.name = `${copy.name} - cópia`;
+    const columnIds = new Map();
+    context.board.columns.filter((entry) => entry.settings?.group_id === groupId).forEach((entry) => {
+      const cloned = { ...deepClone(entry), id: id('col'), settings: { ...deepClone(entry.settings), group_id: copy.id } };
+      columnIds.set(entry.id, cloned.id);
+      context.board.columns.push(cloned);
+    });
     // Regenerar o ID de toda a arvore, nao apenas dos itens de primeiro nivel.
     // Trocar so o pai deixava os subitens da copia com o MESMO id dos subitens
     // originais, o que fazia findItem devolver o item errado e provocava
@@ -12864,6 +12892,12 @@ window.__ATLAS_VERSION__ = '2.5.0 OFICIAL';
       const itemCopy = duplicateItemTree(entry, null, false);
       const setGroup = (node) => {
         node.groupId = copy.id;
+        columnIds.forEach((newId, oldId) => {
+          if (Object.hasOwn(node.values || {}, oldId)) {
+            node.values[newId] = node.values[oldId];
+            delete node.values[oldId];
+          }
+        });
         (node.subitems || []).forEach(setGroup);
       };
       setGroup(itemCopy);

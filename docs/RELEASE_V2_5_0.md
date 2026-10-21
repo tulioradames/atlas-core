@@ -2,6 +2,7 @@
 
 ## Destaques
 
+- Colunas exclusivas por setor, com escolha ao criar ou editar, mantendo as colunas compartilhadas existentes.
 - API propria para contas, sessoes e acesso ao PostgreSQL.
 - Papeis Root, Gestor, Analista e Visitante, com Root unico.
 - Armazenamento central de anexos no servidor e referencias legadas preservadas.
