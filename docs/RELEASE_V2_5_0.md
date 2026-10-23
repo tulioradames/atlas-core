@@ -2,6 +2,7 @@
 
 ## Destaques
 
+- Gantt: indicador Hoje posicionado no final do dia atual.
 - Colunas exclusivas por setor, com escolha ao criar ou editar, mantendo as colunas compartilhadas existentes.
 - API propria para contas, sessoes e acesso ao PostgreSQL.
 - Papeis Root, Gestor, Analista e Visitante, com Root unico.

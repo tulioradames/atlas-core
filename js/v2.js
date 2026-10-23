@@ -15,7 +15,7 @@ window.__ATLAS_VERSION__ = '2.5.0 OFICIAL';
   // pre-cache. tests/static-audit.cjs falha se index.html e ATLAS_BUILD
   // divergirem, que era a causa dos casos de "publiquei mas continua igual".
   // ---------------------------------------------------------------------------
-  const ATLAS_BUILD = '2.5.0-colunas-setor-oficial-r1';
+  const ATLAS_BUILD = '2.5.0-gantt-hoje-final-oficial-r1';
   window.__ATLAS_BUILD__ = ATLAS_BUILD;
 
   // Changelog exibido na tela de Inicio. Toda alteracao funcional ou correcao
@@ -26,6 +26,7 @@ window.__ATLAS_VERSION__ = '2.5.0 OFICIAL';
       version: 'V2.5.0 Oficial',
       date: '2026-10-20',
       notes: [
+        'Gantt: a linha Hoje fica no final do dia atual, na divisao com o dia seguinte.',
         'Arquivos: corrigido o registro de anexos no cliente da API; chamadas RPC agora suportam single/maybeSingle sem repetir o envio ao aguardar a mesma operacao.',
         'Arquivos: armazenamento central no servidor para todos os núcleos, módulos e quadros, sem configuração individual; referências de anexos antigos preservadas.',
         'Interface: assistente de IA com Groq no lugar do manual, com consentimento para envio das perguntas, contexto da documentacao, fontes e limites de uso; sem acesso aos dados dos quadros.',
@@ -11532,7 +11533,7 @@ window.__ATLAS_VERSION__ = '2.5.0 OFICIAL';
     const timelineWidth = Math.ceil(Math.max(availableTimelineWidth, totalDays * dayWidth));
     const scaleDefinition = timelineScaleDefinition(scale, timelineStart, timelineEnd, dayWidth);
     const todayLeft = today.getTime() >= timelineStart.getTime() && today.getTime() <= timelineEnd.getTime()
-      ? timelineDayDiff(timelineStart, today) * dayWidth
+      ? (timelineDayDiff(timelineStart, today) + 1) * dayWidth
       : null;
     const dateColumns = boardEntry.columns.filter((entry) => entry.type === 'date' || entry.type === 'period');
     const childCount = blocks.reduce((total, block) => total + block.children.length, 0);
