@@ -37,14 +37,16 @@ function createFormsServer(options = {}) {
     'form-core.js': ['public-forms/form-core.js', 'application/javascript; charset=utf-8'],
     'brand.svg': ['assets/brand/atnx-logo-horizontal.svg', 'image/svg+xml'],
   };
-  const Pool = options.rpc ? null : require('pg').Pool;
+  const Pool = options.rpc || options.pool ? null : require('pg').Pool;
   const pool = options.pool || (!options.rpc && new Pool({ connectionString: databaseUrl, max: 8, statement_timeout: 30000, application_name: 'atlas-formularios' }));
   const rpc = options.rpc || (async (name, parameters) => {
     if (!/^atlas_v2_[a-z0-9_]+$/.test(name)) throw new Error('Operacao invalida.');
     const entries = Object.entries(parameters || {});
     const args = entries.map(([entry], index) => `${entry} => $${index + 1}`).join(', ');
     try {
-      const response = await pool.query(`select * from public.${name}(${args})`, entries.map(([, value]) => value));
+      const values = entries.map(([key, value]) =>
+        key === 'p_uploads' || key === 'p_answers' ? JSON.stringify(value) : value);
+      const response = await pool.query(`select * from public.${name}(${args})`, values);
       return response.fields.length === 1 && response.fields[0].name === name
         ? response.rows[0]?.[name] ?? null
         : response.rows;
