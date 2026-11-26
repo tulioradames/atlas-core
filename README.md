@@ -1,4 +1,16 @@
-# Atlas V2.5.0 Oficial
+# Atlas V2.5.2 Oficial
+
+## Novidades da V2.5.2
+
+- tela de conexao bloqueia os controles enquanto o servidor estiver indisponivel;
+- novos itens e subitens aparecem somente apos confirmacao da gravacao no banco;
+- reconexao automatica, com verificacao de disponibilidade antes das acoes protegidas;
+- movimentacao verifica a existencia de itens e setor no servidor;
+- falhas de sincronizacao tentam preservar uma copia local dos registros e referencias de anexos;
+- testes de indisponibilidade, reconexao, recusa de gravacao e clique duplicado.
+
+Sem migracao de banco nesta versao. Importacao e duplicacao mantem seus fluxos
+de persistencia; a confirmacao antes da insercao local cobre a criacao direta.
 
 ## Novidades da V2.5.0
 
@@ -17,7 +29,7 @@
 - localização com mapa, identidade visual renovada e abertos recentemente;
 - cliente da API com suporte a RPC single/maybeSingle, sem registros duplicados.
 
-Esta edição é a V2.5.0 Oficial. Alterações futuras devem ser validadas primeiro
+Esta edição é a V2.5.2 Oficial. Alterações futuras devem ser validadas primeiro
 em homologação e promovidas somente após autorização explícita.
 
 ## Arquitetura

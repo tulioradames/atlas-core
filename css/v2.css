@@ -9458,3 +9458,31 @@ body.atlas-v2-right-dragging * {
     margin-bottom: 10px;
   }
 }
+/* Connection gate stays outside the application so cached controls remain inert. */
+.atlas-server-connection {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 24px;
+  text-align: center;
+  background: var(--v2-bg, #f4f7f6);
+  color: var(--v2-text, #18302b);
+}
+.atlas-server-connection[hidden] { display: none; }
+.atlas-server-spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: atlas-server-spin 1s linear infinite;
+}
+@keyframes atlas-server-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .atlas-server-spinner { animation: none; }
+}

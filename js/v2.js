@@ -1,7 +1,7 @@
 (function atlasV2Official() {
   'use strict';
 
-window.__ATLAS_VERSION__ = '2.5.0 OFICIAL';
+window.__ATLAS_VERSION__ = '2.5.2 OFICIAL';
 
   // ---------------------------------------------------------------------------
   // VERSAO DOS ARQUIVOS WEB - fonte unica.
@@ -15,13 +15,29 @@ window.__ATLAS_VERSION__ = '2.5.0 OFICIAL';
   // pre-cache. tests/static-audit.cjs falha se index.html e ATLAS_BUILD
   // divergirem, que era a causa dos casos de "publiquei mas continua igual".
   // ---------------------------------------------------------------------------
-  const ATLAS_BUILD = '2.5.0-gantt-hoje-final-oficial-r1';
+  const ATLAS_BUILD = '2.5.2-server-required-oficial-r1';
   window.__ATLAS_BUILD__ = ATLAS_BUILD;
 
   // Changelog exibido na tela de Inicio. Toda alteracao funcional ou correcao
   // publicada precisa ser registrada aqui antes do deploy.
   // Ordem: mais recente primeiro.
   const CHANGELOG = [
+    {
+      version: 'V2.5.2 Oficial',
+      date: '2026-11-26',
+      notes: [
+        'Conexão: o Atlas aguarda o servidor antes de liberar o cache e bloqueia a interface durante indisponibilidade, com reconexão automática.',
+        'Elementos: novos itens e subitens só aparecem após confirmação da gravação no servidor; falhas não criam registros locais.',
+      ],
+    },
+    {
+      version: 'V2.5.0 Oficial',
+      date: '2026-11-25',
+      notes: [
+        'Movimentação: valida elementos e setor no servidor antes de mover; gravações pendentes recusadas impedem a movimentação.',
+        'Sincronização: falhas tentam preservar uma cópia local dos registros e referências de anexos; falta de espaço gera aviso para manter a página aberta.',
+      ],
+    },
     {
       version: 'V2.5.0 Oficial',
       date: '2026-10-20',
@@ -564,6 +580,8 @@ window.__ATLAS_VERSION__ = '2.5.0 OFICIAL';
     realtimeBroadcastBusy: false,
     realtimeBroadcastQueue: [],
     itemPersistQueues: new Map(),
+    serverConnectionCheck: null,
+    itemCreationPending: false,
     loadedBoardData: new Set(),
     loadedItemValues: new Set(),
     // Quadros cujos subitens ja foram buscados para alimentar formulas de
@@ -793,6 +811,21 @@ window.__ATLAS_VERSION__ = '2.5.0 OFICIAL';
       serialized = JSON.stringify(snapshot);
     }
     return serialized;
+  }
+
+  function preserveUnsyncedRecovery() {
+    try {
+      const snapshot = localBackupSnapshot(runtime.data, false);
+      localStorage.setItem(`${STORAGE_KEY}-recuperacao`, JSON.stringify({
+        savedAt: new Date().toISOString(),
+        userId: runtime.authSession?.user?.id || null,
+        data: snapshot,
+      }));
+      return true;
+    } catch (error) {
+      console.warn('Atlas: copia de recuperacao local indisponivel.');
+      return false;
+    }
   }
 
   function persistLocalBackup(data) {
@@ -3659,6 +3692,8 @@ window.__ATLAS_VERSION__ = '2.5.0 OFICIAL';
       return true;
     } catch (error) {
       console.error('Atlas V2: falha ao sincronizar dados operacionais.', error);
+      const recoverySaved = preserveUnsyncedRecovery();
+      if (!recoverySaved) toast('Não foi possível guardar a recuperação local. Mantenha esta página aberta para preservar as alterações pendentes.', true);
       if (indicator) indicator.innerHTML = '<i data-lucide="cloud-alert"></i>Falha ao sincronizar';
       const explicacao = mensagemDeFalhaNaSincronizacao(error);
       setOperationProgress('Falha na sincronização', 100, explicacao);
@@ -4470,7 +4505,7 @@ window.__ATLAS_VERSION__ = '2.5.0 OFICIAL';
   }
 
   function authVersion() {
-    return window.ATNX_CONFIG?.V2_VERSION || 'V2.5.0 Oficial';
+    return window.ATNX_CONFIG?.V2_VERSION || 'V2.5.2 Oficial';
   }
 
   function authFeatureList() {
@@ -4848,13 +4883,21 @@ window.__ATLAS_VERSION__ = '2.5.0 OFICIAL';
       window.addEventListener('beforeunload', handleBeforeUnload);
       window.addEventListener('online', () => {
         updateOnlineState();
+        void confirmServerConnection();
         if (runtime.authSession?.user) {
           startRealtime();
           void pollGlobalRealtimeChanges();
           if (runtime.remoteSyncQueued) scheduleRemoteSync();
         }
       });
-      window.addEventListener('offline', updateOnlineState);
+      window.addEventListener('offline', () => {
+        updateOnlineState();
+        if (runtime.authSession?.user) setServerConnectionBlocked(true);
+      });
+      setInterval(() => {
+        if (runtime.authSession?.user) void confirmServerConnection();
+        else setServerConnectionBlocked(false);
+      }, 5000);
       document.addEventListener('visibilitychange', () => {
         if (!document.hidden && runtime.authSession?.user) void pollGlobalRealtimeChanges();
       });
@@ -4865,6 +4908,7 @@ window.__ATLAS_VERSION__ = '2.5.0 OFICIAL';
     if (profile) upsertAuthenticatedUser(profile, authUser);
 
     if (profile && runtime.authClient && runtime.authSession?.user) {
+      setServerConnectionBlocked(true);
       runtime.remoteBootstrapError = null;
       const cached = await readBootstrapCache(runtime.authSession.user.id);
       if (cached) {
@@ -11733,7 +11777,86 @@ window.__ATLAS_VERSION__ = '2.5.0 OFICIAL';
     closeSidebar();
   }
 
-  function addItem(groupId) {
+  function setServerConnectionBlocked(blocked) {
+    let screen = document.getElementById('atlas-server-connection');
+    if (!screen) {
+      screen = document.createElement('div');
+      screen.id = 'atlas-server-connection';
+      screen.className = 'atlas-server-connection';
+      screen.setAttribute('role', 'status');
+      screen.setAttribute('aria-live', 'polite');
+      screen.innerHTML = '<span class="atlas-server-spinner" aria-hidden="true"></span><strong>Conectando ao servidor</strong><span>Aguardando conexão para liberar o Atlas.</span>';
+      document.body.appendChild(screen);
+    }
+    screen.hidden = !blocked;
+    const app = document.getElementById('atlas-v2-app');
+    if (app) app.inert = blocked;
+  }
+
+  async function confirmServerConnection() {
+    if (authTestMode()) return true;
+    if (!runtime.authSession?.user) return false;
+    if (runtime.serverConnectionCheck) return runtime.serverConnectionCheck;
+    const userId = runtime.authSession.user.id;
+    const client = runtime.authClient;
+    const task = (async () => {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 8000);
+      try {
+        if (navigator.onLine === false) throw new Error('offline');
+        const base = String(window.ATNX_CONFIG.API_URL || '').replace(/\/$/, '');
+        const response = await fetch(`${base}/atlas-api/v1/health`, { cache: 'no-store', signal: controller.signal });
+        if (!response.ok || (await response.json()).ok !== true) throw new Error('Servidor indisponível');
+        if (runtime.authSession?.user?.id !== userId || runtime.authClient !== client) return false;
+        if (!runtime.remoteReady || !runtime.remoteMode) {
+          await refreshRemoteApplication(runtime.authProfile, runtime.authSession.user, { silent: true });
+        }
+        const ready = runtime.remoteReady && runtime.remoteMode;
+        setServerConnectionBlocked(!ready);
+        return ready;
+      } catch (_) {
+        if (runtime.authSession?.user?.id === userId && runtime.authClient === client) setServerConnectionBlocked(true);
+        return false;
+      } finally {
+        clearTimeout(timeout);
+      }
+    })();
+    runtime.serverConnectionCheck = task;
+    try { return await task; }
+    finally { if (runtime.serverConnectionCheck === task) runtime.serverConnectionCheck = null; }
+  }
+
+  async function confirmNewItem(context, group, entry, parent = null) {
+    if (authTestMode()) return true;
+    if (runtime.itemCreationPending) return false;
+    runtime.itemCreationPending = true;
+    const userId = runtime.authSession?.user?.id;
+    const client = runtime.authClient;
+    try {
+      if (!await confirmServerConnection()) return false;
+      const row = remoteItemRowForAttachment(context, { item: entry, group, parent });
+      row.ordem = entry.order;
+      const values = Object.entries(entry.values).filter(([, value]) => value !== '' && value !== false && value != null)
+        .map(([column_id, valor]) => ({ item_id: entry.id, column_id, valor }));
+      const { data, error } = await client.rpc('atlas_v2_apply_sync_batch', {
+        p_changes: { atlas_v2_items: [row], atlas_v2_item_values: values }, p_removals: {},
+      });
+      if (error) throw error;
+      if (!data?.success || Number(data.applied) !== 1 + values.length) throw new Error('O servidor não confirmou a criação.');
+      if (runtime.authSession?.user?.id !== userId || runtime.authClient !== client) return false;
+      replaceRemoteBaselineRow('atlas_v2_items', row);
+      values.forEach((value) => replaceRemoteBaselineRow('atlas_v2_item_values', projectRealtimeValueRow(value)));
+      return true;
+    } catch (error) {
+      toast('Não foi possível confirmar a criação no servidor. Nenhum registro local foi criado.', true);
+      void confirmServerConnection();
+      return false;
+    } finally {
+      runtime.itemCreationPending = false;
+    }
+  }
+
+  async function addItem(groupId) {
     const context = findBoard();
     const groupEntry = context?.board.groups.find((entry) => entry.id === groupId) || context?.board.groups[0];
     if (!groupEntry) {
@@ -11745,7 +11868,8 @@ window.__ATLAS_VERSION__ = '2.5.0 OFICIAL';
     context.board.columns.forEach((columnEntry) => {
       newItem.values[columnEntry.id] = columnEntry.type === 'checkbox' ? false : '';
     });
-    groupEntry.items.push(newItem);
+    if (!await confirmNewItem(context, groupEntry, newItem)) return;
+    if (!groupEntry.items.some((entry) => entry.id === newItem.id)) groupEntry.items.push(newItem);
     runtime.loadedItemValues.add(String(newItem.id));
     runLocalAutomations('item_created', context.board, newItem);
     if (context.board.activeView === 'works') runtime.workFilter = newItem.id;
@@ -11839,7 +11963,7 @@ window.__ATLAS_VERSION__ = '2.5.0 OFICIAL';
     }
   }
 
-  function addSubitem(parentItemId, workSector = '', options = {}) {
+  async function addSubitem(parentItemId, workSector = '', options = {}) {
     const context = findBoard();
     const found = context && findItem(context.board, parentItemId);
     if (!found) return;
@@ -11852,7 +11976,8 @@ window.__ATLAS_VERSION__ = '2.5.0 OFICIAL';
     if (workSector && sectorColumnId) newSubitem.values[sectorColumnId] = workSector;
     found.item.subitems = found.item.subitems || [];
     newSubitem.order = nextItemOrder(found.item.subitems);
-    found.item.subitems.push(newSubitem);
+    if (!await confirmNewItem(context, found.group, newSubitem, found.item)) return;
+    if (!found.item.subitems.some((entry) => entry.id === newSubitem.id)) found.item.subitems.push(newSubitem);
     runtime.loadedItemValues.add(String(newSubitem.id));
     runLocalAutomations('item_created', context.board, newSubitem);
     found.item.subitemsExpanded = true;
@@ -12126,6 +12251,23 @@ window.__ATLAS_VERSION__ = '2.5.0 OFICIAL';
     });
   }
 
+  async function assertMoveRecordsPersisted(itemIds, boardId, groupId) {
+    const pending = await Promise.allSettled([...runtime.itemPersistQueues.values()]);
+    if (pending.some((entry) => entry.status === 'rejected' || entry.value === false)) {
+      throw new Error('Há alterações que não foram salvas. Resolva a falha de sincronização antes de mover.');
+    }
+    const { data: groups, error: groupError } = await runtime.authClient.from('atlas_v2_groups')
+      .select('id').eq('id', groupId).eq('board_id', boardId);
+    if (groupError) throw groupError;
+    if (!groups?.length) throw new Error('O setor de destino ainda não foi sincronizado, foi removido ou não está acessível. A movimentação foi cancelada; os dados locais foram mantidos.');
+    const ids = [...new Set(itemIds)];
+    const { data: items, error: itemError } = await runtime.authClient.from('atlas_v2_items')
+      .select('id').in('id', ids);
+    if (itemError) throw itemError;
+    const stored = new Set((items || []).map((entry) => entry.id));
+    if (ids.some((itemId) => !stored.has(itemId))) throw new Error('Há elementos ainda não sincronizados ou não acessíveis no servidor. A movimentação foi cancelada; os dados locais foram mantidos.');
+  }
+
   async function submitCrossBoardMove(form) {
     const sourceContext = findBoard();
     const data = new FormData(form);
@@ -12145,7 +12287,7 @@ window.__ATLAS_VERSION__ = '2.5.0 OFICIAL';
     setOperationProgress('Movendo elementos', 8, 'Validando quadros e permissões');
     try {
       if (runtime.remoteMode && runtime.authClient) {
-        await Promise.allSettled([...runtime.itemPersistQueues.values()]);
+        await assertMoveRecordsPersisted(itemIds, targetBoardId, targetGroupId);
         setOperationProgress('Movendo elementos', 35, 'Associando campos e subelementos');
         const { data: result, error } = await runtime.authClient.rpc('atlas_v2_move_items_between_boards', {
           p_item_ids: itemIds,
@@ -12249,7 +12391,7 @@ window.__ATLAS_VERSION__ = '2.5.0 OFICIAL';
     if (!validateMoveSelection(context.board, allowed)) return;
     setOperationProgress('Movendo elementos', 20, `Destino: ${target.name}`);
     try {
-      await Promise.allSettled([...runtime.itemPersistQueues.values()]);
+      await assertMoveRecordsPersisted(allowed, context.board.id, targetGroupId);
       const { error } = await runtime.authClient.rpc('atlas_v2_move_items_between_boards', {
         p_item_ids: allowed,
         p_target_board_id: context.board.id,
@@ -14310,7 +14452,7 @@ window.__ATLAS_VERSION__ = '2.5.0 OFICIAL';
   }
 
 
-  function handleClick(event) {
+  async function handleClick(event) {
     // O menu da coluna fecha em qualquer clique que nao seja nele nem no funil
     // que o abriu. Vem antes do `return` de quem nao tem data-action: clicar no
     // meio da tabela tambem tem de fechar.
@@ -14332,6 +14474,7 @@ window.__ATLAS_VERSION__ = '2.5.0 OFICIAL';
       'board-settings': 'configure', 'board-config': 'configure', 'edit-column': 'configure', 'edit-status-colors': 'configure', 'move-column': 'configure', 'delete-column': 'configure', automations: 'configure', 'automation-new': 'configure', 'automation-edit': 'configure', 'automation-toggle': 'configure', 'automation-delete': 'configure', 'automation-confirm-delete': 'configure', 'automation-templates': 'configure', 'automation-use-template': 'configure', 'automation-run': 'configure', 'automation-history': 'configure',
     };
     if (protectedActions[action] && !requirePermission(protectedActions[action], context, 'executar esta ação')) return;
+    if (protectedActions[action] && !await confirmServerConnection()) return;
 
     const actions = {
       'go-home': () => { event.preventDefault(); openHome(); },
